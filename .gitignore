@@ -208,6 +208,7 @@ __marimo__/
 
 # Data
 data_small.pkl
+data_small.parquet
 
 # Debugging purpose
 full_project_source.txt
