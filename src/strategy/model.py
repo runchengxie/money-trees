@@ -53,11 +53,12 @@ def signal_profit(
 
     weights = predictions.astype(float) / active_count
     gross_return = float(np.dot(weights, realized_returns))
-    turnover_value = (
-        active_count / max(len(predictions), 1)
-        if turnover is None
-        else max(float(turnover), 0.0)
-    )
+    if turnover is None:
+        # If turnover is not provided, assume this period opens the current
+        # equal-weight book from flat.
+        turnover_value = float(0.5 * np.abs(weights).sum())
+    else:
+        turnover_value = max(float(turnover), 0.0)
     trading_cost = (cost_bps / 10000.0) * turnover_value
     return gross_return - trading_cost
 
@@ -113,6 +114,25 @@ def estimate_turnover(
     return float(0.5 * (current_aligned - previous_aligned).abs().sum())
 
 
+def profit_with_estimated_turnover(
+    predictions: np.ndarray,
+    realized_returns: np.ndarray,
+    cost_bps: float = 0.0,
+    sample_index: pd.Index | None = None,
+    previous_weights: pd.Series | None = None,
+) -> tuple[float, pd.Series, float]:
+    """Compute period profit using turnover estimated from name-level weights."""
+    current_weights = predictions_to_name_weights(predictions, sample_index=sample_index)
+    turnover = estimate_turnover(current_weights, previous_weights=previous_weights)
+    profit = signal_profit(
+        predictions=predictions,
+        realized_returns=realized_returns,
+        cost_bps=cost_bps,
+        turnover=turnover,
+    )
+    return float(profit), current_weights, float(turnover)
+
+
 def tune_random_forest(
     train_x: pd.DataFrame,
     train_y: np.ndarray,
@@ -137,7 +157,14 @@ def tune_random_forest(
         model = build_random_forest(params=params, random_state=random_state, n_jobs=1)
         model.fit(train_x, train_y)
         preds = model.predict(valid_x)
-        return signal_profit(preds, valid_returns, cost_bps=cost_bps)
+        score, _, _ = profit_with_estimated_turnover(
+            predictions=preds,
+            realized_returns=valid_returns,
+            cost_bps=cost_bps,
+            sample_index=valid_x.index,
+            previous_weights=None,
+        )
+        return score
 
     study.optimize(objective, n_trials=n_trials, n_jobs=1)
     return study.best_params, float(study.best_value)
@@ -188,7 +215,13 @@ def permutation_profit_importance(
         shuffled = valid_x.copy()
         shuffled[col] = rng.permutation(shuffled[col].to_numpy())
         preds = model.predict(shuffled)
-        score = signal_profit(preds, valid_returns, cost_bps=cost_bps)
+        score, _, _ = profit_with_estimated_turnover(
+            predictions=preds,
+            realized_returns=valid_returns,
+            cost_bps=cost_bps,
+            sample_index=valid_x.index,
+            previous_weights=None,
+        )
         scores.append({"cols": col, "pi_imp": float(score)})
 
     return pd.DataFrame(scores).sort_values("pi_imp", ascending=True).reset_index(drop=True)
@@ -230,7 +263,13 @@ def sequential_feature_selection(
             random_state=random_state,
         )
         preds = model.predict(valid_x[current_cols])
-        score = signal_profit(preds, valid_returns, cost_bps=cost_bps)
+        score, _, _ = profit_with_estimated_turnover(
+            predictions=preds,
+            realized_returns=valid_returns,
+            cost_bps=cost_bps,
+            sample_index=valid_x.index,
+            previous_weights=None,
+        )
 
         if score > best_score:
             best_score = score

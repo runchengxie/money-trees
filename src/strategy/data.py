@@ -115,7 +115,11 @@ def fill_missing_with_reference(
     if shared_bool:
         data[shared_bool] = data[shared_bool].fillna(False)
 
-    object_cols = list(ref.select_dtypes(include=["object"]).columns)
+    object_cols = [
+        c
+        for c in ref.columns
+        if pd.api.types.is_object_dtype(ref[c]) or pd.api.types.is_string_dtype(ref[c])
+    ]
     shared_object = [c for c in object_cols if c in data.columns]
     if shared_object:
         data[shared_object] = data[shared_object].fillna("missing")

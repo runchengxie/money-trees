@@ -5,6 +5,7 @@ import pandas as pd
 
 from strategy.backtest import (
     build_rolling_windows,
+    build_spy_benchmark,
     compute_performance_metrics,
     run_rolling_backtest,
 )
@@ -81,3 +82,25 @@ def test_run_rolling_backtest_outputs_stable_series() -> None:
     assert len(result.nav) > 0
     assert not result.nav.isna().any()
     assert not result.period_returns.isna().any()
+
+
+def test_build_spy_benchmark_aligns_and_rebases_target_index() -> None:
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2021-03-31"), "A"),
+            (pd.Timestamp("2021-03-31"), "B"),
+            (pd.Timestamp("2021-06-30"), "A"),
+            (pd.Timestamp("2021-06-30"), "B"),
+            (pd.Timestamp("2021-09-30"), "A"),
+            (pd.Timestamp("2021-09-30"), "B"),
+        ],
+        names=["date", "ticker"],
+    )
+    frame = pd.DataFrame({"spy_cum_ret": [100.0, 100.0, 110.0, 110.0, 121.0, 121.0]}, index=idx)
+    target_index = pd.to_datetime(["2021-06-30", "2021-09-30"])
+
+    spy_nav = build_spy_benchmark(frame=frame, target_index=target_index)
+
+    assert spy_nav.index.equals(target_index)
+    assert np.isclose(float(spy_nav.iloc[0]), 1.0)
+    assert float(spy_nav.iloc[1]) > float(spy_nav.iloc[0])

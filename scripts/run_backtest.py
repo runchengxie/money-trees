@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +35,9 @@ from strategy.data import (  # noqa: E402
 from strategy.model import (  # noqa: E402
     count_active_names,
     fit_random_forest,
+    profit_with_estimated_turnover,
     select_positive_importance_features,
     sequential_feature_selection,
-    signal_profit,
     tune_random_forest,
 )
 
@@ -56,6 +58,7 @@ class SegmentFitResult:
     feature_columns: list[str]
     model_params: dict[str, Any]
     validation_profit: float
+    validation_turnover: float
     validation_active_names: int
     tuning_best_value: float
     selection_history: pd.DataFrame | None
@@ -159,13 +162,20 @@ def fit_segment_model(
     valid_sel = valid_x[selected_features]
     model = fit_random_forest(train_sel, train_y, params=best_params, random_state=seed)
     valid_preds = model.predict(valid_sel)
-    valid_profit = signal_profit(valid_preds, valid_returns, cost_bps=args.cost_bps)
+    valid_profit, _, valid_turnover = profit_with_estimated_turnover(
+        predictions=valid_preds,
+        realized_returns=valid_returns,
+        cost_bps=args.cost_bps,
+        sample_index=valid_sel.index,
+        previous_weights=None,
+    )
     active_names = count_active_names(valid_preds, sample_index=valid_sel.index)
 
     return SegmentFitResult(
         feature_columns=selected_features,
         model_params=best_params,
         validation_profit=valid_profit,
+        validation_turnover=valid_turnover,
         validation_active_names=active_names,
         tuning_best_value=best_value,
         selection_history=selection_history,
@@ -201,6 +211,7 @@ def write_outputs(
     segment_a: SegmentFitResult,
     segment_b: SegmentFitResult,
     metrics: dict[str, float],
+    run_config: dict[str, Any],
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -212,16 +223,19 @@ def write_outputs(
 
     summary = {
         "segment_a_validation_profit": segment_a.validation_profit,
+        "segment_a_validation_turnover": segment_a.validation_turnover,
         "segment_a_validation_active_names": segment_a.validation_active_names,
         "segment_a_tuning_best_value": segment_a.tuning_best_value,
         "segment_a_feature_count": len(segment_a.feature_columns),
         "segment_b_validation_profit": segment_b.validation_profit,
+        "segment_b_validation_turnover": segment_b.validation_turnover,
         "segment_b_validation_active_names": segment_b.validation_active_names,
         "segment_b_tuning_best_value": segment_b.tuning_best_value,
         "segment_b_feature_count": len(segment_b.feature_columns),
     }
     summary.update(metrics)
     (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
 
     (out_dir / "segment_a_features.txt").write_text(
         "\n".join(segment_a.feature_columns), encoding="utf-8"
@@ -234,6 +248,36 @@ def write_outputs(
         segment_a.selection_history.to_csv(out_dir / "segment_a_selection_history.csv", index=False)
     if segment_b.selection_history is not None and not segment_b.selection_history.empty:
         segment_b.selection_history.to_csv(out_dir / "segment_b_selection_history.csv", index=False)
+
+
+def resolve_git_commit(root: Path) -> str | None:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    commit = out.strip()
+    return commit or None
+
+
+def build_run_config(
+    args: argparse.Namespace,
+    segment_a_spec: SegmentSpec,
+    segment_b_spec: SegmentSpec,
+) -> dict[str, Any]:
+    return {
+        "resolved_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git_commit": resolve_git_commit(ROOT),
+        "arguments": vars(args),
+        "segment_specs": {
+            "segment_a": asdict(segment_a_spec),
+            "segment_b": asdict(segment_b_spec),
+        },
+    }
 
 
 def main() -> None:
@@ -330,6 +374,7 @@ def main() -> None:
         strategy_returns=strategy_returns,
         spy_returns=spy_returns,
     )
+    run_config = build_run_config(args, segment_a_spec=segment_a_spec, segment_b_spec=segment_b_spec)
 
     out_dir = Path(args.output_dir)
     write_outputs(
@@ -341,6 +386,7 @@ def main() -> None:
         segment_a=segment_a,
         segment_b=segment_b,
         metrics=metrics,
+        run_config=run_config,
     )
 
     print(f"Output directory: {out_dir}")

@@ -9,10 +9,8 @@ from scipy.stats import linregress
 from .data import build_spy_series, build_xy_returns, fill_missing_with_reference, slice_by_date
 from .model import (
     count_active_names,
-    estimate_turnover,
     fit_random_forest,
-    predictions_to_name_weights,
-    signal_profit,
+    profit_with_estimated_turnover,
 )
 
 
@@ -108,9 +106,13 @@ def run_rolling_backtest(
             random_state=random_state + idx,
         )
         preds = model.predict(test_x)
-        current_weights = predictions_to_name_weights(preds, sample_index=test_x.index)
-        turnover = estimate_turnover(current_weights, previous_weights=previous_weights)
-        period_return = signal_profit(preds, test_returns, cost_bps=cost_bps, turnover=turnover)
+        period_return, current_weights, _ = profit_with_estimated_turnover(
+            predictions=preds,
+            realized_returns=test_returns,
+            cost_bps=cost_bps,
+            sample_index=test_x.index,
+            previous_weights=previous_weights,
+        )
         previous_weights = current_weights
 
         nav_value *= 1.0 + period_return

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from strategy.data import (
     NON_FEATURE_COLUMNS,
     ensure_date_ticker_index,
+    fill_missing_with_reference,
     get_feature_columns,
     make_labels,
 )
@@ -57,3 +59,23 @@ def test_get_feature_columns_excludes_non_feature_columns() -> None:
     assert "feature_text" not in features
     for col in NON_FEATURE_COLUMNS:
         assert col not in features
+
+
+def test_fill_missing_with_reference_uses_reference_statistics_only() -> None:
+    reference = pd.DataFrame(
+        {
+            "f_num": [1.0, 2.0, np.nan, 4.0],
+            "f_text": ["x", None, "y", "z"],
+        }
+    )
+    frame = pd.DataFrame(
+        {
+            "f_num": [np.nan, 1000.0, 2000.0],
+            "f_text": [None, "keep", None],
+        }
+    )
+
+    filled = fill_missing_with_reference(frame=frame, reference=reference)
+    assert filled.loc[0, "f_num"] == 2.0
+    assert filled.loc[0, "f_text"] == "missing"
+    assert filled.loc[1, "f_text"] == "keep"

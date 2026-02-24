@@ -42,6 +42,7 @@ uv sync --dev
   - 换手率（turnover）估算方式为：
     - `0.5 * sum_i |w_t,i - w_(t-1),i|`
   - 每期扣除的成本为 `turnover * cost_bps / 10000`
+  - 调参（Optuna）、特征选择与滚动回测统一使用上述成本口径；单期验证默认按“从空仓建仓”的方式估算换手
 
 ## 数据泄露处理
 
@@ -97,6 +98,7 @@ uv run python scripts/run_backtest.py \
 - `spy_returns.csv`
 - `strategy_vs_spy.csv`
 - `metrics.json`
+- `run_config.json`（记录本次运行参数、分段配置、时间戳与可用的 git commit）
 - `segment_a_features.txt`
 - `segment_b_features.txt`
 - 可选的特征选择历史记录：
@@ -119,6 +121,11 @@ uv run python scripts/run_backtest.py \
 - `active_names`（活跃标的数量）通过统计具有非零信号的不重复股票代码（ticker）得出。
 - 换手率是基于标的层面的权重估算得出的；这是一种实用的近似方法，而不是完整的订单级别执行模型。
 - 脚本目前使用本地 `src` 路径注入的方式来直接执行 (`scripts/*.py`)。
+
+## 与 Notebook 的差异
+
+- 当前模块实现未使用 `MinMaxScaler`；随机森林对特征缩放不敏感，因此默认省略。
+- 当前项目主目标是可复现回测与风险收益指标，不再默认输出 notebook 中的分类指标与绘图结果。
 
 ## 将 pickle 转换为 parquet
 
