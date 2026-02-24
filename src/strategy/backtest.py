@@ -18,7 +18,10 @@ from .model import (
 class BacktestResult:
     nav: pd.Series
     period_returns: pd.Series
+    period_turnover: pd.Series
     active_names: pd.Series
+    period_ic: pd.Series
+    period_rank_ic: pd.Series
 
 
 def build_rolling_windows(
@@ -55,6 +58,55 @@ def _resolve_period_date(test_frame: pd.DataFrame, fallback: str) -> pd.Timestam
     return pd.Timestamp(fallback)
 
 
+def _safe_corr(signal: pd.Series, target: pd.Series, method: str = "pearson") -> float:
+    aligned = pd.concat([signal.rename("signal"), target.rename("target")], axis=1).dropna()
+    if len(aligned) < 2:
+        return float("nan")
+    if aligned["signal"].nunique() < 2 or aligned["target"].nunique() < 2:
+        return float("nan")
+    value = aligned["signal"].corr(aligned["target"], method=method)
+    return float(value) if pd.notna(value) else float("nan")
+
+
+def _compute_period_ic(
+    predictions: np.ndarray,
+    realized_returns: np.ndarray,
+    sample_index: pd.Index,
+) -> tuple[float, float]:
+    signal = pd.Series(predictions, index=sample_index, dtype=float)
+    realized = pd.Series(realized_returns, index=sample_index, dtype=float)
+
+    if isinstance(sample_index, pd.MultiIndex) and "date" in sample_index.names:
+        paired = pd.concat([signal.rename("signal"), realized.rename("realized")], axis=1).dropna()
+        if paired.empty:
+            return float("nan"), float("nan")
+
+        pearson_values: list[float] = []
+        spearman_values: list[float] = []
+        for _, group in paired.groupby(level="date", sort=False):
+            pearson = _safe_corr(group["signal"], group["realized"], method="pearson")
+            spearman = _safe_corr(group["signal"], group["realized"], method="spearman")
+            if not np.isnan(pearson):
+                pearson_values.append(float(pearson))
+            if not np.isnan(spearman):
+                spearman_values.append(float(spearman))
+
+        period_ic = float(np.mean(pearson_values)) if pearson_values else float("nan")
+        period_rank_ic = float(np.mean(spearman_values)) if spearman_values else float("nan")
+        return period_ic, period_rank_ic
+
+    period_ic = _safe_corr(signal, realized, method="pearson")
+    period_rank_ic = _safe_corr(signal, realized, method="spearman")
+    return period_ic, period_rank_ic
+
+
+def _max_drawdown(nav: pd.Series) -> float:
+    if nav.empty:
+        return float("nan")
+    drawdown = nav / nav.cummax() - 1.0
+    return float(drawdown.min())
+
+
 def run_rolling_backtest(
     frame: pd.DataFrame,
     windows: list[tuple[str, str, str, str]],
@@ -68,7 +120,10 @@ def run_rolling_backtest(
     nav_value = float(initial_nav)
     nav_points: list[float] = []
     period_returns: list[float] = []
+    period_turnovers: list[float] = []
     active_names: list[int] = []
+    period_ic_values: list[float] = []
+    period_rank_ic_values: list[float] = []
     period_dates: list[pd.Timestamp] = []
     previous_weights: pd.Series | None = None
 
@@ -106,7 +161,7 @@ def run_rolling_backtest(
             random_state=random_state + idx,
         )
         preds = model.predict(test_x)
-        period_return, current_weights, _ = profit_with_estimated_turnover(
+        period_return, current_weights, turnover = profit_with_estimated_turnover(
             predictions=preds,
             realized_returns=test_returns,
             cost_bps=cost_bps,
@@ -114,17 +169,35 @@ def run_rolling_backtest(
             previous_weights=previous_weights,
         )
         previous_weights = current_weights
+        period_ic, period_rank_ic = _compute_period_ic(
+            predictions=preds,
+            realized_returns=test_returns,
+            sample_index=test_x.index,
+        )
 
         nav_value *= 1.0 + period_return
         nav_points.append(nav_value)
         period_returns.append(period_return)
+        period_turnovers.append(turnover)
         active_names.append(count_active_names(preds, sample_index=test_x.index))
+        period_ic_values.append(period_ic)
+        period_rank_ic_values.append(period_rank_ic)
         period_dates.append(_resolve_period_date(test_frame, fallback=test_end))
 
     nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
     returns = pd.Series(period_returns, index=period_dates, name="strategy_ret")
+    turnover = pd.Series(period_turnovers, index=period_dates, name="strategy_turnover")
     active = pd.Series(active_names, index=period_dates, name="active_names")
-    return BacktestResult(nav=nav, period_returns=returns, active_names=active)
+    period_ic = pd.Series(period_ic_values, index=period_dates, name="period_ic")
+    period_rank_ic = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
+    return BacktestResult(
+        nav=nav,
+        period_returns=returns,
+        period_turnover=turnover,
+        active_names=active,
+        period_ic=period_ic,
+        period_rank_ic=period_rank_ic,
+    )
 
 
 def build_spy_benchmark(
@@ -149,6 +222,12 @@ def compute_performance_metrics(
     spy_nav: pd.Series,
     strategy_returns: pd.Series | None = None,
     spy_returns: pd.Series | None = None,
+    strategy_turnover: pd.Series | None = None,
+    active_names: pd.Series | None = None,
+    period_ic: pd.Series | None = None,
+    period_rank_ic: pd.Series | None = None,
+    periods_per_year: float = 4.0,
+    var_confidence: float = 0.95,
 ) -> dict[str, float]:
     if strategy_nav.empty:
         return {}
@@ -186,41 +265,161 @@ def compute_performance_metrics(
         if np.isfinite(spy_std) and spy_std != 0
         else 0.0
     )
+    strategy_total_return = float(aligned_nav["strategy_nav"].iloc[-1] - 1.0)
+    spy_total_return = float(aligned_nav["spy_nav"].iloc[-1] - 1.0)
 
-    if len(strategy_ret) < 2 or len(spy_ret) < 2:
-        return {
-            "strategy_total_return": float(aligned_nav["strategy_nav"].iloc[-1] - 1.0),
-            "spy_total_return": float(aligned_nav["spy_nav"].iloc[-1] - 1.0),
-            "strategy_sharpe": strategy_sharpe,
-            "spy_sharpe": spy_sharpe,
-            "alpha": float("nan"),
-            "beta": float("nan"),
-            "information_ratio": float("nan"),
-            "hedged_sharpe": float("nan"),
-        }
-
-    reg = linregress(spy_ret.to_numpy(), strategy_ret.to_numpy())
-    beta = float(reg.slope)
-    alpha = float(reg.intercept)
-    residual = strategy_ret.to_numpy() - (alpha + beta * spy_ret.to_numpy())
-    residual_std = float(np.std(residual, ddof=1))
-    info_ratio = float(np.mean(residual) / residual_std) if residual_std != 0 else 0.0
-
-    hedged_ret = strategy_ret - beta * spy_ret
-    hedged_std = float(hedged_ret.std()) if not hedged_ret.empty else 0.0
-    hedged_sharpe = (
-        float(hedged_ret.mean() / hedged_std)
-        if np.isfinite(hedged_std) and hedged_std != 0
-        else 0.0
+    n_nav_periods = len(aligned_nav) - 1
+    strategy_ann_return = (
+        float((aligned_nav["strategy_nav"].iloc[-1] / aligned_nav["strategy_nav"].iloc[0]) ** (periods_per_year / n_nav_periods) - 1.0)
+        if n_nav_periods > 0
+        else float("nan")
+    )
+    spy_ann_return = (
+        float((aligned_nav["spy_nav"].iloc[-1] / aligned_nav["spy_nav"].iloc[0]) ** (periods_per_year / n_nav_periods) - 1.0)
+        if n_nav_periods > 0
+        else float("nan")
+    )
+    strategy_ann_vol = (
+        float(strategy_ret.std(ddof=1) * np.sqrt(periods_per_year))
+        if len(strategy_ret) > 1
+        else float("nan")
+    )
+    spy_ann_vol = (
+        float(spy_ret.std(ddof=1) * np.sqrt(periods_per_year))
+        if len(spy_ret) > 1
+        else float("nan")
     )
 
-    return {
-        "strategy_total_return": float(aligned_nav["strategy_nav"].iloc[-1] - 1.0),
-        "spy_total_return": float(aligned_nav["spy_nav"].iloc[-1] - 1.0),
+    strategy_mdd = _max_drawdown(aligned_nav["strategy_nav"])
+    spy_mdd = _max_drawdown(aligned_nav["spy_nav"])
+
+    downside = np.minimum(strategy_ret.to_numpy(), 0.0)
+    strategy_downside_vol = (
+        float(np.sqrt(np.mean(np.square(downside))) * np.sqrt(periods_per_year))
+        if len(downside) > 0
+        else float("nan")
+    )
+    strategy_sortino = (
+        float(strategy_ret.mean() * periods_per_year / strategy_downside_vol)
+        if np.isfinite(strategy_downside_vol) and strategy_downside_vol > 0
+        else float("nan")
+    )
+    strategy_calmar = (
+        float(strategy_ann_return / abs(strategy_mdd))
+        if np.isfinite(strategy_mdd) and strategy_mdd < 0 and np.isfinite(strategy_ann_return)
+        else float("nan")
+    )
+
+    var_level = 1.0 - var_confidence
+    strategy_var = float(strategy_ret.quantile(var_level))
+    strategy_tail = strategy_ret[strategy_ret <= strategy_var]
+    strategy_cvar = float(strategy_tail.mean()) if not strategy_tail.empty else float("nan")
+    spy_var = float(spy_ret.quantile(var_level))
+    spy_tail = spy_ret[spy_ret <= spy_var]
+    spy_cvar = float(spy_tail.mean()) if not spy_tail.empty else float("nan")
+
+    excess_ret = strategy_ret - spy_ret
+    win_rate_vs_spy = float((excess_ret > 0).mean())
+    avg_excess_return = float(excess_ret.mean())
+    tracking_error = (
+        float(excess_ret.std(ddof=1) * np.sqrt(periods_per_year))
+        if len(excess_ret) > 1
+        else float("nan")
+    )
+
+    alpha = float("nan")
+    beta = float("nan")
+    info_ratio = float("nan")
+    hedged_sharpe = float("nan")
+    if len(strategy_ret) >= 2 and len(spy_ret) >= 2:
+        reg = linregress(spy_ret.to_numpy(), strategy_ret.to_numpy())
+        beta = float(reg.slope)
+        alpha = float(reg.intercept)
+        residual = strategy_ret.to_numpy() - (alpha + beta * spy_ret.to_numpy())
+        residual_std = float(np.std(residual, ddof=1))
+        info_ratio = float(np.mean(residual) / residual_std) if residual_std != 0 else 0.0
+
+        hedged_ret = strategy_ret - beta * spy_ret
+        hedged_std = float(hedged_ret.std()) if not hedged_ret.empty else 0.0
+        hedged_sharpe = (
+            float(hedged_ret.mean() / hedged_std)
+            if np.isfinite(hedged_std) and hedged_std != 0
+            else 0.0
+        )
+    metrics: dict[str, float] = {
+        "strategy_total_return": strategy_total_return,
+        "spy_total_return": spy_total_return,
+        "strategy_annualized_return": strategy_ann_return,
+        "spy_annualized_return": spy_ann_return,
+        "strategy_annualized_volatility": strategy_ann_vol,
+        "spy_annualized_volatility": spy_ann_vol,
+        "strategy_max_drawdown": strategy_mdd,
+        "spy_max_drawdown": spy_mdd,
         "strategy_sharpe": strategy_sharpe,
         "spy_sharpe": spy_sharpe,
+        "strategy_sortino": strategy_sortino,
+        "strategy_calmar": strategy_calmar,
+        "strategy_skew": float(strategy_ret.skew()),
+        "strategy_kurtosis": float(strategy_ret.kurt()),
+        "spy_skew": float(spy_ret.skew()),
+        "spy_kurtosis": float(spy_ret.kurt()),
+        "strategy_var_95": strategy_var,
+        "strategy_cvar_95": strategy_cvar,
+        "spy_var_95": spy_var,
+        "spy_cvar_95": spy_cvar,
+        "win_rate_vs_spy": win_rate_vs_spy,
+        "avg_excess_return_per_period": avg_excess_return,
+        "tracking_error_annualized": tracking_error,
         "alpha": alpha,
         "beta": beta,
         "information_ratio": info_ratio,
         "hedged_sharpe": hedged_sharpe,
     }
+
+    if strategy_turnover is not None:
+        turnover = strategy_turnover.dropna()
+        metrics["avg_turnover_per_period"] = float(turnover.mean()) if not turnover.empty else float(
+            "nan"
+        )
+        metrics["median_turnover_per_period"] = (
+            float(turnover.median()) if not turnover.empty else float("nan")
+        )
+        metrics["max_turnover_per_period"] = float(turnover.max()) if not turnover.empty else float(
+            "nan"
+        )
+        metrics["annualized_turnover"] = (
+            float(turnover.mean() * periods_per_year) if not turnover.empty else float("nan")
+        )
+
+    if active_names is not None:
+        active = active_names.dropna()
+        metrics["avg_active_names"] = float(active.mean()) if not active.empty else float("nan")
+        metrics["median_active_names"] = float(active.median()) if not active.empty else float("nan")
+        metrics["min_active_names"] = float(active.min()) if not active.empty else float("nan")
+        metrics["max_active_names"] = float(active.max()) if not active.empty else float("nan")
+
+    if period_ic is not None:
+        ic = period_ic.dropna()
+        ic_std = float(ic.std(ddof=1)) if len(ic) > 1 else float("nan")
+        metrics["ic_mean"] = float(ic.mean()) if not ic.empty else float("nan")
+        metrics["ic_std"] = ic_std
+        metrics["ic_ir"] = (
+            float(ic.mean() / ic_std) if np.isfinite(ic_std) and ic_std != 0 else float("nan")
+        )
+        metrics["ic_positive_rate"] = float((ic > 0).mean()) if not ic.empty else float("nan")
+
+    if period_rank_ic is not None:
+        rank_ic = period_rank_ic.dropna()
+        rank_ic_std = float(rank_ic.std(ddof=1)) if len(rank_ic) > 1 else float("nan")
+        metrics["rank_ic_mean"] = float(rank_ic.mean()) if not rank_ic.empty else float("nan")
+        metrics["rank_ic_std"] = rank_ic_std
+        metrics["rank_ic_ir"] = (
+            float(rank_ic.mean() / rank_ic_std)
+            if np.isfinite(rank_ic_std) and rank_ic_std != 0
+            else float("nan")
+        )
+        metrics["rank_ic_positive_rate"] = (
+            float((rank_ic > 0).mean()) if not rank_ic.empty else float("nan")
+        )
+
+    return metrics

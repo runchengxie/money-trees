@@ -133,19 +133,124 @@ def profit_with_estimated_turnover(
     return float(profit), current_weights, float(turnover)
 
 
+def score_predictions_over_time(
+    predictions: np.ndarray,
+    realized_returns: np.ndarray,
+    sample_index: pd.Index,
+    cost_bps: float = 0.0,
+) -> float:
+    """
+    Score predictions by averaging period profits across dates.
+
+    If the index is not date-aware, it falls back to a single-period score.
+    """
+    if len(predictions) == 0:
+        return 0.0
+    if len(predictions) != len(realized_returns) or len(predictions) != len(sample_index):
+        raise ValueError("predictions, realized_returns, and sample_index must have equal length.")
+
+    if not (isinstance(sample_index, pd.MultiIndex) and "date" in sample_index.names):
+        score, _, _ = profit_with_estimated_turnover(
+            predictions=predictions,
+            realized_returns=realized_returns,
+            cost_bps=cost_bps,
+            sample_index=sample_index,
+            previous_weights=None,
+        )
+        return float(score)
+
+    date_values = pd.Index(sample_index.get_level_values("date"))
+    unique_dates = pd.Index(date_values.unique()).sort_values()
+    period_scores: list[float] = []
+    previous_weights: pd.Series | None = None
+
+    for dt in unique_dates:
+        mask = np.asarray(date_values == dt)
+        if not np.any(mask):
+            continue
+        period_score, previous_weights, _ = profit_with_estimated_turnover(
+            predictions=predictions[mask],
+            realized_returns=realized_returns[mask],
+            cost_bps=cost_bps,
+            sample_index=sample_index[mask],
+            previous_weights=previous_weights,
+        )
+        period_scores.append(float(period_score))
+
+    if not period_scores:
+        return 0.0
+    return float(np.mean(period_scores))
+
+
+def _build_time_series_cv_splits(
+    sample_index: pd.Index,
+    n_folds: int,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    if n_folds <= 1:
+        return []
+
+    if isinstance(sample_index, pd.MultiIndex) and "date" in sample_index.names:
+        date_values = pd.Index(sample_index.get_level_values("date"))
+        unique_dates = pd.Index(date_values.unique()).sort_values()
+        if len(unique_dates) < n_folds + 1:
+            raise ValueError(
+                f"Not enough unique dates ({len(unique_dates)}) for tuning_cv_folds={n_folds}."
+            )
+
+        date_blocks = [blk for blk in np.array_split(unique_dates.to_numpy(), n_folds + 1) if len(blk)]
+        if len(date_blocks) < 2:
+            raise ValueError("Unable to build non-empty time-series CV date blocks.")
+
+        splits: list[tuple[np.ndarray, np.ndarray]] = []
+        for i in range(1, len(date_blocks)):
+            train_dates = np.concatenate(date_blocks[:i])
+            valid_dates = date_blocks[i]
+            train_idx = np.flatnonzero(date_values.isin(train_dates))
+            valid_idx = np.flatnonzero(date_values.isin(valid_dates))
+            if len(train_idx) == 0 or len(valid_idx) == 0:
+                continue
+            splits.append((train_idx, valid_idx))
+
+        if not splits:
+            raise ValueError("No valid time-series CV split could be constructed.")
+        return splits
+
+    n_samples = len(sample_index)
+    if n_samples < n_folds + 1:
+        raise ValueError(f"Not enough samples ({n_samples}) for tuning_cv_folds={n_folds}.")
+
+    sample_blocks = [blk for blk in np.array_split(np.arange(n_samples), n_folds + 1) if len(blk)]
+    if len(sample_blocks) < 2:
+        raise ValueError("Unable to build non-empty CV sample blocks.")
+
+    splits: list[tuple[np.ndarray, np.ndarray]] = []
+    for i in range(1, len(sample_blocks)):
+        train_idx = np.concatenate(sample_blocks[:i])
+        valid_idx = sample_blocks[i]
+        if len(train_idx) == 0 or len(valid_idx) == 0:
+            continue
+        splits.append((train_idx, valid_idx))
+    if not splits:
+        raise ValueError("No valid CV split could be constructed.")
+    return splits
+
+
 def tune_random_forest(
     train_x: pd.DataFrame,
     train_y: np.ndarray,
+    train_returns: np.ndarray,
     valid_x: pd.DataFrame,
     valid_returns: np.ndarray,
     n_trials: int = 50,
     random_state: int = 123,
     cost_bps: float = 0.0,
+    tuning_cv_folds: int = 1,
 ) -> tuple[dict[str, Any], float]:
     """Tune RF hyperparameters with trading profit as objective."""
 
     sampler = optuna.samplers.TPESampler(seed=random_state)
     study = optuna.create_study(direction="maximize", sampler=sampler)
+    cv_splits = _build_time_series_cv_splits(train_x.index, tuning_cv_folds)
 
     def objective(trial: optuna.trial.Trial) -> float:
         params = {
@@ -154,17 +259,38 @@ def tune_random_forest(
             "n_estimators": trial.suggest_int("n_estimators", 10, 120, step=10),
             "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
         }
+        if tuning_cv_folds > 1:
+            fold_scores: list[float] = []
+            for fold_id, (train_idx, valid_idx) in enumerate(cv_splits):
+                model = build_random_forest(
+                    params=params,
+                    random_state=random_state + fold_id,
+                    n_jobs=1,
+                )
+                train_fold_x = train_x.iloc[train_idx]
+                valid_fold_x = train_x.iloc[valid_idx]
+                train_fold_y = train_y[train_idx]
+                valid_fold_returns = train_returns[valid_idx]
+                model.fit(train_fold_x, train_fold_y)
+                preds = model.predict(valid_fold_x)
+                fold_score = score_predictions_over_time(
+                    predictions=preds,
+                    realized_returns=valid_fold_returns,
+                    sample_index=valid_fold_x.index,
+                    cost_bps=cost_bps,
+                )
+                fold_scores.append(float(fold_score))
+            return float(np.mean(fold_scores)) if fold_scores else 0.0
+
         model = build_random_forest(params=params, random_state=random_state, n_jobs=1)
         model.fit(train_x, train_y)
         preds = model.predict(valid_x)
-        score, _, _ = profit_with_estimated_turnover(
+        return score_predictions_over_time(
             predictions=preds,
             realized_returns=valid_returns,
-            cost_bps=cost_bps,
             sample_index=valid_x.index,
-            previous_weights=None,
+            cost_bps=cost_bps,
         )
-        return score
 
     study.optimize(objective, n_trials=n_trials, n_jobs=1)
     return study.best_params, float(study.best_value)

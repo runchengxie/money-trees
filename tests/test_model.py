@@ -6,8 +6,10 @@ import pandas as pd
 from strategy.model import (
     estimate_turnover,
     profit_with_estimated_turnover,
+    score_predictions_over_time,
     sequential_feature_selection,
     signal_profit,
+    tune_random_forest,
 )
 
 
@@ -99,3 +101,58 @@ def test_sequential_feature_selection_respects_min_features() -> None:
 
     assert len(result.selected_features) >= 2
     assert set(result.selected_features).issubset(set(cols))
+
+
+def test_score_predictions_over_time_uses_date_groups_with_turnover() -> None:
+    preds = np.array([1, -1, 1, -1], dtype=int)
+    realized = np.array([0.02, -0.01, 0.01, -0.02], dtype=float)
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2020-03-31"), "A"),
+            (pd.Timestamp("2020-03-31"), "B"),
+            (pd.Timestamp("2020-06-30"), "A"),
+            (pd.Timestamp("2020-06-30"), "B"),
+        ],
+        names=["date", "ticker"],
+    )
+    score = score_predictions_over_time(
+        predictions=preds,
+        realized_returns=realized,
+        sample_index=idx,
+        cost_bps=10.0,
+    )
+    assert np.isfinite(score)
+
+
+def test_tune_random_forest_supports_time_series_cv() -> None:
+    rng = np.random.default_rng(13)
+    dates = pd.date_range("2018-03-31", periods=12, freq="QE")
+    tickers = ["A", "B", "C"]
+    index = pd.MultiIndex.from_product([dates, tickers], names=["date", "ticker"])
+    train_x = pd.DataFrame(
+        {
+            "f1": rng.normal(size=len(index)),
+            "f2": rng.normal(size=len(index)),
+        },
+        index=index,
+    )
+    train_y = rng.choice([-1, 0, 1], size=len(index))
+    train_returns = rng.normal(loc=0.001, scale=0.02, size=len(index))
+    valid_x = train_x.iloc[:6]
+    valid_returns = train_returns[:6]
+
+    best_params, best_value = tune_random_forest(
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=train_returns,
+        valid_x=valid_x,
+        valid_returns=valid_returns,
+        n_trials=1,
+        random_state=5,
+        tuning_cv_folds=3,
+    )
+
+    assert {"min_samples_leaf", "max_depth", "n_estimators", "max_features"} == set(
+        best_params.keys()
+    )
+    assert np.isfinite(best_value)

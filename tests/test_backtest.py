@@ -35,6 +35,9 @@ def test_compute_performance_metrics_uses_return_rates_not_nav_diff() -> None:
     expected_strategy_ret = strategy_nav.pct_change().dropna()
     expected_sharpe = expected_strategy_ret.mean() / expected_strategy_ret.std()
     assert np.isclose(metrics["strategy_sharpe"], expected_sharpe)
+    assert "strategy_annualized_return" in metrics
+    assert "strategy_max_drawdown" in metrics
+    assert "strategy_var_95" in metrics
 
 
 def test_run_rolling_backtest_outputs_stable_series() -> None:
@@ -79,9 +82,14 @@ def test_run_rolling_backtest_outputs_stable_series() -> None:
     )
 
     assert len(result.nav) == len(result.period_returns)
+    assert len(result.nav) == len(result.period_turnover)
+    assert len(result.nav) == len(result.active_names)
+    assert len(result.nav) == len(result.period_ic)
+    assert len(result.nav) == len(result.period_rank_ic)
     assert len(result.nav) > 0
     assert not result.nav.isna().any()
     assert not result.period_returns.isna().any()
+    assert not result.period_turnover.isna().any()
 
 
 def test_build_spy_benchmark_aligns_and_rebases_target_index() -> None:

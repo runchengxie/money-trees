@@ -1,0 +1,66 @@
+Backtest run summary
+Date span: 2009-09-30 -> 2014-09-30
+NAV points: 2
+Evaluation protocol: walk-forward OOS rolling backtest (segment A + segment B).
+Time-series CV tuning: enabled (3 expanding folds).
+
+Performance vs SPY
+- Strategy total return: 9.13%
+- SPY total return: 78.90%
+- Relative result: Underperformed SPY by 69.78%.
+- Strategy annualized return: -4.83%
+- SPY annualized return: 924.42%
+- Strategy annualized volatility: n/a
+- SPY annualized volatility: n/a
+- Strategy sharpe: 0.000000
+- SPY sharpe: 0.000000
+- Strategy sortino: -2.000000
+- Strategy calmar: -3.926789
+- Alpha: n/a
+- Beta: n/a
+- Information ratio: n/a
+- Hedged sharpe: n/a
+- Max drawdown (strategy): -1.23%
+- Max drawdown (SPY): 0.00%
+- Period win rate vs SPY: 0.00%
+- Average excess return per period: -80.13%
+- Tracking error annualized: n/a
+
+Tail / Distribution
+- Strategy VaR 95%: -1.23%
+- Strategy CVaR 95%: -1.23%
+- SPY VaR 95%: 78.90%
+- SPY CVaR 95%: 78.90%
+- Strategy skew / kurtosis: n/a / n/a
+- SPY skew / kurtosis: n/a / n/a
+
+Turnover / Breadth / IC
+- Avg turnover per period: 0.500000
+- Annualized turnover (approx): 2.000000
+- Avg active names: 817.00
+- IC mean / IR / positive rate: -0.022854 / -0.183341 / 50.00%
+- Rank IC mean / IR / positive rate: -0.039033 / -0.393921 / 50.00%
+- IC data points: 2, Rank IC data points: 2
+- Turnover data points: 2
+
+Segment diagnostics
+- Segment A: features=203, tuning_best=-0.000413, validation_profit=0.124452, validation_turnover=0.500000, active_names=807
+- Segment B: features=376, tuning_best=0.043721, validation_profit=0.054214, validation_turnover=0.500000, active_names=800
+
+Artifacts
+- OOS period-level diagnostics are exported to oos_period_diagnostics.csv.
+
+Final Holdout OOS
+- Holdout date span: 2023-01-01 -> 2024-07-01
+- Holdout training span: 2004-02-04 -> 2022-12-29
+- Holdout model source: segment_b
+- Holdout strategy total return: 5823.57%
+- Holdout SPY total return: 38.31%
+- Holdout strategy annualized return: 4.80%
+- Holdout sharpe / sortino / calmar: 0.166129 / 0.497260 / 0.053666
+- Holdout max drawdown: -89.50%
+- Holdout VaR95 / CVaR95: -15.68% / -26.52%
+- Holdout avg turnover: 0.944024
+- Holdout IC mean / Rank IC mean: 0.027084 / 0.030339
+- Holdout overlap note: no overlap with main backtest window.
+- Holdout artifacts are exported to holdout/*.csv and holdout/metrics.json.
