@@ -40,6 +40,7 @@ def signal_profit(
     predictions: np.ndarray,
     realized_returns: np.ndarray,
     cost_bps: float = 0.0,
+    turnover: float | None = None,
 ) -> float:
     """
     Compute equal-weight long/short period return with transaction cost.
@@ -52,9 +53,64 @@ def signal_profit(
 
     weights = predictions.astype(float) / active_count
     gross_return = float(np.dot(weights, realized_returns))
-    turnover = active_count / max(len(predictions), 1)
-    trading_cost = (cost_bps / 10000.0) * turnover
+    turnover_value = (
+        active_count / max(len(predictions), 1)
+        if turnover is None
+        else max(float(turnover), 0.0)
+    )
+    trading_cost = (cost_bps / 10000.0) * turnover_value
     return gross_return - trading_cost
+
+
+def predictions_to_name_weights(
+    predictions: np.ndarray,
+    sample_index: pd.Index | None = None,
+) -> pd.Series:
+    """Convert raw predictions into equal-weight name-level positions."""
+    if sample_index is None:
+        index = pd.RangeIndex(start=0, stop=len(predictions))
+    else:
+        if len(sample_index) != len(predictions):
+            raise ValueError("sample_index length must match predictions length.")
+        index = sample_index
+
+    signal = pd.Series(predictions, index=index, dtype=float)
+    if isinstance(signal.index, pd.MultiIndex) and "ticker" in signal.index.names:
+        signal = signal.groupby(level="ticker", sort=False).last()
+
+    active = signal[signal != 0]
+    if active.empty:
+        return pd.Series(dtype=float, name="weight")
+
+    weights = active / len(active)
+    weights.name = "weight"
+    return weights
+
+
+def count_active_names(
+    predictions: np.ndarray,
+    sample_index: pd.Index | None = None,
+) -> int:
+    """Count unique active names (ticker-level for MultiIndex inputs)."""
+    weights = predictions_to_name_weights(predictions, sample_index=sample_index)
+    return int(len(weights))
+
+
+def estimate_turnover(
+    current_weights: pd.Series,
+    previous_weights: pd.Series | None = None,
+) -> float:
+    """Estimate one-way turnover as 0.5 * sum(|w_t - w_{t-1}|)."""
+    if current_weights.empty:
+        return 0.0 if previous_weights is None else float(0.5 * previous_weights.abs().sum())
+
+    if previous_weights is None or previous_weights.empty:
+        return float(0.5 * current_weights.abs().sum())
+
+    union_index = current_weights.index.union(previous_weights.index)
+    current_aligned = current_weights.reindex(union_index, fill_value=0.0)
+    previous_aligned = previous_weights.reindex(union_index, fill_value=0.0)
+    return float(0.5 * (current_aligned - previous_aligned).abs().sum())
 
 
 def tune_random_forest(
@@ -201,4 +257,3 @@ def sequential_feature_selection(
 
     history_frame = pd.DataFrame(history)
     return FeatureSelectionResult(selected_features=best_cols, history=history_frame)
-

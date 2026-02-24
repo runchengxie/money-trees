@@ -6,8 +6,14 @@ import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from .data import build_spy_series, build_xy_returns, slice_by_date
-from .model import fit_random_forest, signal_profit
+from .data import build_spy_series, build_xy_returns, fill_missing_with_reference, slice_by_date
+from .model import (
+    count_active_names,
+    estimate_turnover,
+    fit_random_forest,
+    predictions_to_name_weights,
+    signal_profit,
+)
 
 
 @dataclass
@@ -43,6 +49,14 @@ def build_rolling_windows(
     return windows
 
 
+def _resolve_period_date(test_frame: pd.DataFrame, fallback: str) -> pd.Timestamp:
+    if isinstance(test_frame.index, pd.MultiIndex) and "date" in test_frame.index.names:
+        last_date = test_frame.index.get_level_values("date").max()
+        if pd.notna(last_date):
+            return pd.Timestamp(last_date)
+    return pd.Timestamp(fallback)
+
+
 def run_rolling_backtest(
     frame: pd.DataFrame,
     windows: list[tuple[str, str, str, str]],
@@ -51,18 +65,36 @@ def run_rolling_backtest(
     random_state: int = 123,
     cost_bps: float = 0.0,
     initial_nav: float = 1.0,
+    add_missing_indicators: bool = False,
 ) -> BacktestResult:
     nav_value = float(initial_nav)
     nav_points: list[float] = []
     period_returns: list[float] = []
     active_names: list[int] = []
     period_dates: list[pd.Timestamp] = []
+    previous_weights: pd.Series | None = None
 
     for idx, (train_start, train_end, test_start, test_end) in enumerate(windows):
-        train_frame = slice_by_date(frame, train_start, train_end)
-        test_frame = slice_by_date(frame, test_start, test_end)
-        if train_frame.empty or test_frame.empty:
+        train_raw = slice_by_date(frame, train_start, train_end)
+        test_raw = slice_by_date(frame, test_start, test_end)
+        if train_raw.empty or test_raw.empty:
             continue
+
+        train_frame = fill_missing_with_reference(
+            frame=train_raw,
+            reference=train_raw,
+            add_missing_indicators=add_missing_indicators,
+        )
+        test_frame = fill_missing_with_reference(
+            frame=test_raw,
+            reference=train_raw,
+            add_missing_indicators=add_missing_indicators,
+        )
+        for col in feature_columns:
+            if col not in train_frame.columns:
+                train_frame[col] = 0.0
+            if col not in test_frame.columns:
+                test_frame[col] = 0.0
 
         train_x, train_y, _ = build_xy_returns(train_frame, feature_columns)
         test_x, _, test_returns = build_xy_returns(test_frame, feature_columns)
@@ -76,13 +108,16 @@ def run_rolling_backtest(
             random_state=random_state + idx,
         )
         preds = model.predict(test_x)
-        period_return = signal_profit(preds, test_returns, cost_bps=cost_bps)
+        current_weights = predictions_to_name_weights(preds, sample_index=test_x.index)
+        turnover = estimate_turnover(current_weights, previous_weights=previous_weights)
+        period_return = signal_profit(preds, test_returns, cost_bps=cost_bps, turnover=turnover)
+        previous_weights = current_weights
 
         nav_value *= 1.0 + period_return
         nav_points.append(nav_value)
         period_returns.append(period_return)
-        active_names.append(int(np.count_nonzero(preds)))
-        period_dates.append(pd.Timestamp(test_end))
+        active_names.append(count_active_names(preds, sample_index=test_x.index))
+        period_dates.append(_resolve_period_date(test_frame, fallback=test_end))
 
     nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
     returns = pd.Series(period_returns, index=period_dates, name="strategy_ret")
@@ -107,20 +142,36 @@ def build_spy_benchmark(
     return aligned
 
 
-def compute_performance_metrics(strategy_nav: pd.Series, spy_nav: pd.Series) -> dict[str, float]:
+def compute_performance_metrics(
+    strategy_nav: pd.Series,
+    spy_nav: pd.Series,
+    strategy_returns: pd.Series | None = None,
+    spy_returns: pd.Series | None = None,
+) -> dict[str, float]:
     if strategy_nav.empty:
         return {}
 
-    aligned = pd.concat([strategy_nav, spy_nav], axis=1).dropna()
-    aligned.columns = ["strategy_nav", "spy_nav"]
-    if aligned.empty:
+    aligned_nav = pd.concat([strategy_nav, spy_nav], axis=1).dropna()
+    aligned_nav.columns = ["strategy_nav", "spy_nav"]
+    if aligned_nav.empty:
         return {}
 
-    strategy_ret = aligned["strategy_nav"].diff().dropna()
-    spy_ret = aligned["spy_nav"].diff().dropna()
-    if strategy_ret.empty or spy_ret.empty:
+    if strategy_returns is None:
+        strategy_ret = aligned_nav["strategy_nav"].pct_change()
+    else:
+        strategy_ret = strategy_returns.copy()
+    if spy_returns is None:
+        spy_ret = aligned_nav["spy_nav"].pct_change()
+    else:
+        spy_ret = spy_returns.copy()
+
+    aligned_ret = pd.concat([strategy_ret, spy_ret], axis=1).dropna()
+    aligned_ret.columns = ["strategy_ret", "spy_ret"]
+    if aligned_ret.empty:
         return {}
 
+    strategy_ret = aligned_ret["strategy_ret"]
+    spy_ret = aligned_ret["spy_ret"]
     strategy_std = float(strategy_ret.std())
     spy_std = float(spy_ret.std())
     strategy_sharpe = (
@@ -136,8 +187,8 @@ def compute_performance_metrics(strategy_nav: pd.Series, spy_nav: pd.Series) -> 
 
     if len(strategy_ret) < 2 or len(spy_ret) < 2:
         return {
-            "strategy_total_return": float(aligned["strategy_nav"].iloc[-1] - 1.0),
-            "spy_total_return": float(aligned["spy_nav"].iloc[-1] - 1.0),
+            "strategy_total_return": float(aligned_nav["strategy_nav"].iloc[-1] - 1.0),
+            "spy_total_return": float(aligned_nav["spy_nav"].iloc[-1] - 1.0),
             "strategy_sharpe": strategy_sharpe,
             "spy_sharpe": spy_sharpe,
             "alpha": float("nan"),
@@ -150,11 +201,10 @@ def compute_performance_metrics(strategy_nav: pd.Series, spy_nav: pd.Series) -> 
     beta = float(reg.slope)
     alpha = float(reg.intercept)
     residual = strategy_ret.to_numpy() - (alpha + beta * spy_ret.to_numpy())
-    residual_std = float(np.std(residual))
+    residual_std = float(np.std(residual, ddof=1))
     info_ratio = float(np.mean(residual) / residual_std) if residual_std != 0 else 0.0
 
-    hedged_nav = aligned["strategy_nav"] - beta * aligned["spy_nav"] + beta
-    hedged_ret = hedged_nav.diff().dropna()
+    hedged_ret = strategy_ret - beta * spy_ret
     hedged_std = float(hedged_ret.std()) if not hedged_ret.empty else 0.0
     hedged_sharpe = (
         float(hedged_ret.mean() / hedged_std)
@@ -163,8 +213,8 @@ def compute_performance_metrics(strategy_nav: pd.Series, spy_nav: pd.Series) -> 
     )
 
     return {
-        "strategy_total_return": float(aligned["strategy_nav"].iloc[-1] - 1.0),
-        "spy_total_return": float(aligned["spy_nav"].iloc[-1] - 1.0),
+        "strategy_total_return": float(aligned_nav["strategy_nav"].iloc[-1] - 1.0),
+        "spy_total_return": float(aligned_nav["spy_nav"].iloc[-1] - 1.0),
         "strategy_sharpe": strategy_sharpe,
         "spy_sharpe": spy_sharpe,
         "alpha": alpha,

@@ -89,11 +89,51 @@ def make_labels(relative_returns: pd.Series, threshold: float = 0.05) -> pd.Seri
     return pd.Series(labels, index=relative_returns.index, name="rel_performance")
 
 
+def fill_missing_with_reference(
+    frame: pd.DataFrame,
+    reference: pd.DataFrame,
+    add_missing_indicators: bool = False,
+) -> pd.DataFrame:
+    """
+    Fill missing values in `frame` using statistics fit on `reference`.
+
+    Numeric columns are median-filled, bool columns are False-filled, and object columns are
+    filled with "missing". This allows train-window fit / valid-test transform workflows.
+    """
+    data = frame.copy()
+    ref = reference.copy()
+    missing_mask = data.isna()
+
+    numeric_cols = list(ref.select_dtypes(include=[np.number]).columns)
+    shared_numeric = [c for c in numeric_cols if c in data.columns]
+    if shared_numeric:
+        medians = ref[shared_numeric].median()
+        data[shared_numeric] = data[shared_numeric].fillna(medians)
+
+    bool_cols = list(ref.select_dtypes(include=["bool"]).columns)
+    shared_bool = [c for c in bool_cols if c in data.columns]
+    if shared_bool:
+        data[shared_bool] = data[shared_bool].fillna(False)
+
+    object_cols = list(ref.select_dtypes(include=["object"]).columns)
+    shared_object = [c for c in object_cols if c in data.columns]
+    if shared_object:
+        data[shared_object] = data[shared_object].fillna("missing")
+
+    if add_missing_indicators:
+        for col in shared_numeric:
+            if ref[col].isna().any():
+                data[f"{col}__is_missing"] = missing_mask[col].astype(np.int8)
+
+    return data
+
+
 def preprocess_data(
     frame: pd.DataFrame,
     label_source: LabelSource = "actual",
     label_threshold: float = 0.05,
     add_missing_indicators: bool = False,
+    apply_global_fill: bool = True,
 ) -> pd.DataFrame:
     """
     Clean the dataset and build labels.
@@ -101,7 +141,7 @@ def preprocess_data(
     Steps:
     1) inf -> NaN
     2) ticker-level forward fill
-    3) numeric median fill / bool False fill / object "missing" fill
+    3) optional numeric median fill / bool False fill / object "missing" fill
     4) optional missing-indicator columns
     5) rel_return + rel_performance labels
     """
@@ -109,25 +149,12 @@ def preprocess_data(
     data = data.replace([np.inf, -np.inf], np.nan)
 
     data = data.groupby(level="ticker", sort=False).ffill()
-    missing_mask = data.isna()
-
-    numeric_cols = data.select_dtypes(include=[np.number]).columns
-    if len(numeric_cols) > 0:
-        medians = data[numeric_cols].median()
-        data[numeric_cols] = data[numeric_cols].fillna(medians)
-
-    bool_cols = data.select_dtypes(include=["bool"]).columns
-    if len(bool_cols) > 0:
-        data[bool_cols] = data[bool_cols].fillna(False)
-
-    object_cols = data.select_dtypes(include=["object"]).columns
-    if len(object_cols) > 0:
-        data[object_cols] = data[object_cols].fillna("missing")
-
-    if add_missing_indicators:
-        for col in numeric_cols:
-            if missing_mask[col].any():
-                data[f"{col}__is_missing"] = missing_mask[col].astype(np.int8)
+    if apply_global_fill:
+        data = fill_missing_with_reference(
+            frame=data,
+            reference=data,
+            add_missing_indicators=add_missing_indicators,
+        )
 
     rel_return = compute_relative_return(data, label_source=label_source)
     rel_labels = make_labels(rel_return, threshold=label_threshold)

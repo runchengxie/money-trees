@@ -23,6 +23,7 @@ from strategy.backtest import (  # noqa: E402
 )
 from strategy.data import (  # noqa: E402
     build_xy_returns,
+    fill_missing_with_reference,
     get_feature_columns,
     load_market_data,
     preprocess_data,
@@ -30,6 +31,7 @@ from strategy.data import (  # noqa: E402
     slice_by_date,
 )
 from strategy.model import (  # noqa: E402
+    count_active_names,
     fit_random_forest,
     select_positive_importance_features,
     sequential_feature_selection,
@@ -102,10 +104,21 @@ def fit_segment_model(
     args: argparse.Namespace,
     seed_offset: int = 0,
 ) -> SegmentFitResult:
-    train_frame = slice_by_date(frame, spec.train_start, spec.train_end)
-    valid_frame = slice_by_date(frame, spec.valid_start, spec.valid_end)
-    if train_frame.empty or valid_frame.empty:
+    train_raw = slice_by_date(frame, spec.train_start, spec.train_end)
+    valid_raw = slice_by_date(frame, spec.valid_start, spec.valid_end)
+    if train_raw.empty or valid_raw.empty:
         raise ValueError(f"Segment {spec.name} has empty train/valid frame.")
+
+    train_frame = fill_missing_with_reference(
+        frame=train_raw,
+        reference=train_raw,
+        add_missing_indicators=args.add_missing_indicators,
+    )
+    valid_frame = fill_missing_with_reference(
+        frame=valid_raw,
+        reference=train_raw,
+        add_missing_indicators=args.add_missing_indicators,
+    )
 
     feature_columns = get_feature_columns(train_frame)
     train_x, train_y, _ = build_xy_returns(train_frame, feature_columns)
@@ -147,7 +160,7 @@ def fit_segment_model(
     model = fit_random_forest(train_sel, train_y, params=best_params, random_state=seed)
     valid_preds = model.predict(valid_sel)
     valid_profit = signal_profit(valid_preds, valid_returns, cost_bps=args.cost_bps)
-    active_names = int((valid_preds != 0).sum())
+    active_names = count_active_names(valid_preds, sample_index=valid_sel.index)
 
     return SegmentFitResult(
         feature_columns=selected_features,
@@ -160,16 +173,22 @@ def fit_segment_model(
 
 
 def combine_backtest_segments(
-    first_nav: pd.Series,
-    second_nav: pd.Series,
+    first_series: pd.Series,
+    second_series: pd.Series,
+    name: str,
 ) -> pd.Series:
-    if first_nav.empty:
-        return second_nav.copy()
-    if second_nav.empty:
-        return first_nav.copy()
-    combined = pd.concat([first_nav, second_nav]).sort_index()
+    if first_series.empty:
+        out = second_series.copy()
+        out.name = name
+        return out
+    if second_series.empty:
+        out = first_series.copy()
+        out.name = name
+        return out
+
+    combined = pd.concat([first_series, second_series]).sort_index()
     combined = combined[~combined.index.duplicated(keep="last")]
-    combined.name = "strategy_nav"
+    combined.name = name
     return combined
 
 
@@ -177,6 +196,8 @@ def write_outputs(
     out_dir: Path,
     strategy_nav: pd.Series,
     spy_nav: pd.Series,
+    strategy_returns: pd.Series,
+    spy_returns: pd.Series,
     segment_a: SegmentFitResult,
     segment_b: SegmentFitResult,
     metrics: dict[str, float],
@@ -185,6 +206,8 @@ def write_outputs(
 
     strategy_nav.to_frame(name="strategy_nav").to_csv(out_dir / "strategy_nav.csv")
     spy_nav.to_frame(name="spy_nav").to_csv(out_dir / "spy_nav.csv")
+    strategy_returns.to_frame(name="strategy_ret").to_csv(out_dir / "strategy_returns.csv")
+    spy_returns.to_frame(name="spy_ret").to_csv(out_dir / "spy_returns.csv")
     pd.concat([strategy_nav, spy_nav], axis=1).to_csv(out_dir / "strategy_vs_spy.csv")
 
     summary = {
@@ -221,10 +244,18 @@ def main() -> None:
         raw,
         label_source=args.label_source,
         label_threshold=args.label_threshold,
-        add_missing_indicators=args.add_missing_indicators,
+        add_missing_indicators=False,
+        apply_global_fill=False,
     )
     if args.export_parquet:
-        save_market_data(frame, args.export_parquet)
+        export_frame = preprocess_data(
+            raw,
+            label_source=args.label_source,
+            label_threshold=args.label_threshold,
+            add_missing_indicators=args.add_missing_indicators,
+            apply_global_fill=True,
+        )
+        save_market_data(export_frame, args.export_parquet)
 
     segment_a_spec = SegmentSpec(
         name="segment_a",
@@ -263,6 +294,7 @@ def main() -> None:
         random_state=args.random_seed,
         cost_bps=args.cost_bps,
         initial_nav=1.0,
+        add_missing_indicators=args.add_missing_indicators,
     )
 
     initial_nav = float(bt_a.nav.iloc[-1]) if not bt_a.nav.empty else 1.0
@@ -281,14 +313,35 @@ def main() -> None:
         random_state=args.random_seed + 2000,
         cost_bps=args.cost_bps,
         initial_nav=initial_nav,
+        add_missing_indicators=args.add_missing_indicators,
     )
 
-    strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav)
+    strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav, name="strategy_nav")
+    strategy_returns = combine_backtest_segments(
+        bt_a.period_returns,
+        bt_b.period_returns,
+        name="strategy_ret",
+    )
     spy_nav = build_spy_benchmark(frame, strategy_nav.index)
-    metrics = compute_performance_metrics(strategy_nav, spy_nav)
+    spy_returns = spy_nav.pct_change().dropna()
+    metrics = compute_performance_metrics(
+        strategy_nav,
+        spy_nav,
+        strategy_returns=strategy_returns,
+        spy_returns=spy_returns,
+    )
 
     out_dir = Path(args.output_dir)
-    write_outputs(out_dir, strategy_nav, spy_nav, segment_a, segment_b, metrics)
+    write_outputs(
+        out_dir=out_dir,
+        strategy_nav=strategy_nav,
+        spy_nav=spy_nav,
+        strategy_returns=strategy_returns,
+        spy_returns=spy_returns,
+        segment_a=segment_a,
+        segment_b=segment_b,
+        metrics=metrics,
+    )
 
     print(f"Output directory: {out_dir}")
     print(f"Segment A feature count: {len(segment_a.feature_columns)}")
@@ -301,4 +354,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
