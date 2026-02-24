@@ -60,7 +60,7 @@ uv sync --dev
 
 ```bash
 uv run python scripts/run_backtest.py \
-  --data data_small.pkl \
+  --data data_small.parquet \
   --output-dir artifacts/backtest \
   --feature-selection importance \
   --n-trials 50 \
@@ -123,5 +123,5 @@ uv run python scripts/run_backtest.py \
 ## 将 pickle 转换为 parquet
 
 ```bash
-uv run python scripts/convert_pickle_to_parquet.py --input data_small.pkl
+uv run python scripts/convert_pickle_to_parquet.py --input legacy_data.pkl --output legacy_data.parquet
 ```
