@@ -212,3 +212,6 @@ data_small.parquet
 
 # Debugging purpose
 full_project_source.txt
+
+# Backtest runtime outputs
+artifacts/backtest/
