@@ -8,16 +8,18 @@ from pathlib import Path
 import pandas as pd
 
 
-def _build_smoke_dataset() -> pd.DataFrame:
-    dates = pd.date_range("2004-03-31", "2015-12-31", freq="QE")
+def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
+    start = "2004-03-31" if freq == "QE" else "2004-01-31"
+    dates = pd.date_range(start, "2015-12-31", freq=freq)
     tickers = ["AAA", "BBB", "CCC", "DDD"]
     rows: list[dict[str, object]] = []
 
     for dt in dates:
+        month_sign = 1.0 if dt.month % 2 == 1 else -1.0
         quarter_sign = 1.0 if dt.quarter in {1, 3} else -1.0
         for i, ticker in enumerate(tickers):
             ticker_sign = 1.0 if i % 2 == 0 else -1.0
-            rel = 0.08 * ticker_sign + 0.01 * quarter_sign
+            rel = 0.08 * ticker_sign + 0.01 * quarter_sign + 0.005 * month_sign
             rows.append(
                 {
                     "date": dt,
@@ -119,3 +121,48 @@ def test_run_backtest_script_smoke(tmp_path: Path) -> None:
     assert "Tail / Distribution" in run_summary
     assert "Segment diagnostics" in run_summary
     assert "Final Holdout OOS" in run_summary
+
+
+def test_run_backtest_script_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "smoke_monthly.parquet"
+    out_dir = tmp_path / "artifacts_monthly"
+    _build_smoke_dataset(freq="ME").to_parquet(data_path, index=False)
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_backtest.py",
+            "--data",
+            str(data_path),
+            "--output-dir",
+            str(out_dir),
+            "--feature-selection",
+            "none",
+            "--n-trials",
+            "1",
+            "--segment1-windows",
+            "0",
+            "--segment2-windows",
+            "0",
+            "--test-months",
+            "3",
+            "--holdout-start",
+            "2015-01-01",
+            "--holdout-end",
+            "2015-12-31",
+            "--holdout-model-segment",
+            "segment_b",
+            "--cost-bps",
+            "10",
+        ],
+        cwd=root,
+        check=True,
+    )
+
+    config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert config["holdout"]["enabled"] is True
+    assert config["holdout"]["n_periods"] == 4
+
+    holdout_returns = pd.read_csv(out_dir / "holdout/strategy_returns.csv")
+    assert len(holdout_returns) == 4

@@ -178,7 +178,7 @@ uv run python scripts/run_backtest.py \
   - `strategy_skew`, `strategy_kurtosis`, `spy_skew`, `spy_kurtosis`
   - `strategy_var_95`, `strategy_cvar_95`, `spy_var_95`, `spy_cvar_95`
 - `alpha`, `beta`：策略收益率对 SPY 收益率进行 OLS（普通最小二乘法）回归的截距（alpha）和斜率（beta）
-- `information_ratio`：回归残差收益率的均值/标准差（信息比率）
+- `information_ratio`：相对 SPY 的超额收益信息比率（`avg_excess_return_per_period / tracking_error`，按期数年化）
 - `hedged_sharpe`：Beta对冲后收益率的夏普比率（`strategy_ret - beta * spy_ret`）
 - 相对表现：
   - `win_rate_vs_spy`, `avg_excess_return_per_period`, `tracking_error_annualized`
@@ -196,7 +196,7 @@ uv run python scripts/run_backtest.py \
 - 两个 segment 串接时若日期重叠，会按时间排序后对重复日期执行“后者覆盖前者”（`keep="last"`，当前实现中通常是 segment B 覆盖）。
 - `--tuning-cv-folds > 1` 时会在训练窗口上启用 expanding 时间序列 CV 调参；`=1` 则回退为单验证集调参。
 - 启用 holdout 时，脚本会额外输出一套 `holdout/*` 指标；若 holdout 与主回测窗口重叠，会在 `run_summary.txt` 中明确提示。
-- holdout 评估时，训练集使用 `holdout_start` 之前的全部历史数据，模型参数/特征来源由 `--holdout-model-segment` 指定。
+- holdout 评估时，训练集使用 `holdout_start` 之前的全部历史数据，模型参数/特征来源由 `--holdout-model-segment` 指定；评估分期与主回测一致，按 `--test-months` 聚合后再换仓与计分（默认季度）。
 - `active_names`（活跃标的数量）通过统计具有非零信号的不重复股票代码（ticker）得出。
 - 换手率是基于标的层面的权重估算得出的；这是一种实用的近似方法，而不是完整的订单级别执行模型。
 - 脚本目前使用本地 `src` 路径注入的方式来直接执行 (`scripts/*.py`)。

@@ -40,6 +40,28 @@ def test_compute_performance_metrics_uses_return_rates_not_nav_diff() -> None:
     assert "strategy_var_95" in metrics
 
 
+def test_compute_performance_metrics_information_ratio_uses_excess_tracking_error() -> None:
+    idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30", "2021-12-31"])
+    strategy_ret = pd.Series([0.08, -0.02, 0.03, 0.04], index=idx)
+    spy_ret = pd.Series([0.03, -0.01, 0.01, 0.02], index=idx)
+    strategy_nav = (1.0 + strategy_ret).cumprod()
+    spy_nav = (1.0 + spy_ret).cumprod()
+
+    metrics = compute_performance_metrics(
+        strategy_nav=strategy_nav,
+        spy_nav=spy_nav,
+        strategy_returns=strategy_ret,
+        spy_returns=spy_ret,
+        periods_per_year=4.0,
+    )
+
+    excess = strategy_ret - spy_ret
+    expected_tracking_error = float(excess.std(ddof=1) * np.sqrt(4.0))
+    expected_ir = float(excess.mean() * 4.0 / expected_tracking_error)
+    assert np.isclose(metrics["tracking_error_annualized"], expected_tracking_error)
+    assert np.isclose(metrics["information_ratio"], expected_ir)
+
+
 def test_run_rolling_backtest_outputs_stable_series() -> None:
     dates = pd.date_range("2020-01-31", periods=18, freq="ME")
     tickers = ["A", "B", "C"]

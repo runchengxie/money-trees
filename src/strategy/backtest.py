@@ -326,18 +326,19 @@ def compute_performance_metrics(
         if len(excess_ret) > 1
         else float("nan")
     )
+    info_ratio = (
+        float(avg_excess_return * periods_per_year / tracking_error)
+        if np.isfinite(tracking_error) and tracking_error != 0
+        else float("nan")
+    )
 
     alpha = float("nan")
     beta = float("nan")
-    info_ratio = float("nan")
     hedged_sharpe = float("nan")
     if len(strategy_ret) >= 2 and len(spy_ret) >= 2:
         reg = linregress(spy_ret.to_numpy(), strategy_ret.to_numpy())
         beta = float(reg.slope)
         alpha = float(reg.intercept)
-        residual = strategy_ret.to_numpy() - (alpha + beta * spy_ret.to_numpy())
-        residual_std = float(np.std(residual, ddof=1))
-        info_ratio = float(np.mean(residual) / residual_std) if residual_std != 0 else 0.0
 
         hedged_ret = strategy_ret - beta * spy_ret
         hedged_std = float(hedged_ret.std()) if not hedged_ret.empty else 0.0

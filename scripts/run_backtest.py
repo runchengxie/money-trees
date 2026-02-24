@@ -270,6 +270,38 @@ def _period_ic(
     return period_ic, period_rank_ic
 
 
+def _periods_per_year_from_test_months(test_months: int) -> float:
+    if test_months < 1:
+        raise ValueError("--test-months must be >= 1.")
+    return 12.0 / float(test_months)
+
+
+def _build_holdout_period_ranges(
+    holdout_start: pd.Timestamp,
+    holdout_end: pd.Timestamp,
+    test_months: int,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    if test_months < 1:
+        raise ValueError("--test-months must be >= 1.")
+
+    ranges: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    period_start = holdout_start
+    while period_start <= holdout_end:
+        next_start = period_start + pd.DateOffset(months=test_months)
+        period_end = min(next_start - pd.Timedelta(days=1), holdout_end)
+        ranges.append((period_start, period_end))
+        period_start = next_start
+    return ranges
+
+
+def _resolve_period_date_from_index(sample_index: pd.Index, fallback: pd.Timestamp) -> pd.Timestamp:
+    if isinstance(sample_index, pd.MultiIndex) and "date" in sample_index.names:
+        last_date = sample_index.get_level_values("date").max()
+        if pd.notna(last_date):
+            return pd.Timestamp(last_date)
+    return pd.Timestamp(fallback)
+
+
 def _build_holdout_result(
     frame: pd.DataFrame,
     holdout_start: str,
@@ -333,9 +365,15 @@ def _build_holdout_result(
     previous_weights: pd.Series | None = None
 
     holdout_date_values = pd.Index(holdout_x.index.get_level_values("date"))
-    unique_dates = pd.Index(holdout_date_values.unique()).sort_values()
-    for dt in unique_dates:
-        mask = holdout_date_values == dt
+    holdout_periods = _build_holdout_period_ranges(
+        holdout_start=holdout_start_ts,
+        holdout_end=holdout_end_ts,
+        test_months=args.test_months,
+    )
+    for period_start, period_end in holdout_periods:
+        mask = (holdout_date_values >= period_start) & (holdout_date_values <= period_end)
+        if not np.any(mask):
+            continue
         idx = holdout_x.index[mask]
         preds = holdout_preds[mask]
         realized = holdout_returns[mask]
@@ -353,7 +391,7 @@ def _build_holdout_result(
         )
         nav_value *= 1.0 + period_profit
         nav_points.append(nav_value)
-        period_dates.append(pd.Timestamp(dt))
+        period_dates.append(_resolve_period_date_from_index(idx, fallback=period_end))
         period_returns.append(float(period_profit))
         period_turnover.append(float(turnover))
         period_active_names.append(count_active_names(preds, sample_index=idx))
@@ -368,6 +406,7 @@ def _build_holdout_result(
     period_rank_ic_series = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
     spy_nav = build_spy_benchmark(frame, strategy_nav.index)
     spy_returns = spy_nav.pct_change().dropna()
+    periods_per_year = _periods_per_year_from_test_months(args.test_months)
     metrics = compute_performance_metrics(
         strategy_nav=strategy_nav,
         spy_nav=spy_nav,
@@ -377,6 +416,7 @@ def _build_holdout_result(
         active_names=active_names,
         period_ic=period_ic_series,
         period_rank_ic=period_rank_ic_series,
+        periods_per_year=periods_per_year,
     )
 
     train_start = pd.Timestamp(train_raw.index.get_level_values("date").min()).strftime("%Y-%m-%d")
@@ -711,6 +751,8 @@ def main() -> None:
     args = parse_args()
     if args.tuning_cv_folds < 1:
         raise ValueError("--tuning-cv-folds must be >= 1.")
+    if args.test_months < 1:
+        raise ValueError("--test-months must be >= 1.")
     if bool(args.holdout_start) != bool(args.holdout_end):
         raise ValueError("Use --holdout-start and --holdout-end together.")
 
@@ -815,6 +857,7 @@ def main() -> None:
     )
     spy_nav = build_spy_benchmark(frame, strategy_nav.index)
     spy_returns = spy_nav.pct_change().dropna()
+    periods_per_year = _periods_per_year_from_test_months(args.test_months)
     metrics = compute_performance_metrics(
         strategy_nav,
         spy_nav,
@@ -824,6 +867,7 @@ def main() -> None:
         active_names=active_names,
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
+        periods_per_year=periods_per_year,
     )
     holdout_result: HoldoutResult | None = None
     if args.holdout_start and args.holdout_end:
