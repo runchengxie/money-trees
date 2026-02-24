@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "optuna",
     "pandas",
+    "pyarrow",
     "scikit-learn",
     "scipy",
 ]
