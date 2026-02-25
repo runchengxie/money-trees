@@ -331,6 +331,29 @@ def test_run_backtest_script_rejects_test_months_below_one(tmp_path: Path) -> No
     assert "--test-months must be >= 1." in result.stderr
 
 
+def test_run_backtest_script_rejects_negative_feature_lag(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "ignored.parquet"
+    data_path.write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_backtest.py",
+            "--data",
+            str(data_path),
+            "--feature-lag-periods",
+            "-1",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--feature-lag-periods must be >= 0." in result.stderr
+
+
 def test_build_holdout_result_rejects_inverted_holdout_span() -> None:
     with pytest.raises(ValueError, match="--holdout-start must be <= --holdout-end."):
         _build_holdout_result(

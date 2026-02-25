@@ -47,11 +47,19 @@ uv run python scripts/convert_pickle_to_parquet.py --input data_small.pkl
   - `< 负阈值 -> -1`
   - 其他情况 `-> 0`
 - 仓位管理：
+  - `--portfolio-weighting-method` 支持两种模式：
+    - `heuristic`（默认）：原有规则式多空配权
+    - `signal_risk_qp`：信号驱动 + 风险约束二次优化（QP）
   - 先将模型输出映射为连续信号（默认使用 `predict_proba` 的 `P(+1)-P(-1)`）
   - 横截面阈值过滤（`--portfolio-min-score`）+ z-score 截断（`--portfolio-winsor-z`）
   - 可选 train-window 波动率缩放（`--portfolio-vol-scaling` / `--portfolio-vol-power`）
   - 在单票上限（`--portfolio-max-name-weight`）下分配多空权重，并约束总杠杆/净敞口（`--portfolio-gross-target` / `--portfolio-net-target`）
   - 可选粗粒度行业去均值（`--portfolio-sector-neutral`）
+  - 当使用 `signal_risk_qp` 时：
+    - 使用 rank-based 信号映射构建 `mu`
+    - 使用训练窗口收益协方差（可选 Ledoit-Wolf 收缩）
+    - 目标函数同时考虑信号收益、风险惩罚和相对上一期权重的 L2 换手惩罚
+    - 约束包含净敞口、总敞口上限、单票权重上限；求解失败时可回退到 `heuristic`
 - 交易成本：
   - 换手率（turnover）估算方式为：
     - `0.5 * sum_i |w_t,i - w_(t-1),i|`
@@ -70,6 +78,8 @@ uv run python scripts/convert_pickle_to_parquet.py --input data_small.pkl
    - 将训练集计算出的中位数应用到训练/验证/测试数据切片上
 
 这避免了使用全局中位数导致用到未来数据（即数据泄露）。
+
+可选地，你可以使用 `--feature-lag-periods` 对所有模型特征按 ticker 进行额外滞后（lag）来做泄露敏感性测试（例如 `0/1` 对比）。
 
 ## 运行回测
 
@@ -109,16 +119,24 @@ uv run python scripts/run_backtest.py \
 - `--cost-bps`：以基点（bps）为单位的交易成本
 - 组合构建参数：
   - `--portfolio-min-score`, `--portfolio-winsor-z`
+  - `--portfolio-weighting-method`
   - `--portfolio-gross-target`, `--portfolio-net-target`
   - `--portfolio-max-name-weight`, `--portfolio-min-names-per-side`
   - `--portfolio-vol-scaling`, `--portfolio-vol-power`
   - `--portfolio-sector-neutral`, `--portfolio-sector-prefix`
+  - `signal_risk_qp` 相关：
+    - `--portfolio-qp-risk-aversion`, `--portfolio-qp-turnover-penalty`
+    - `--portfolio-qp-cov-lookback`, `--portfolio-qp-cov-shrinkage`, `--portfolio-qp-cov-ridge`
+    - `--portfolio-qp-mu-clip`, `--portfolio-qp-max-names`
+    - `--portfolio-qp-solver-max-iter`, `--portfolio-qp-solver-ftol`
+    - `--portfolio-qp-fallback-to-heuristic`
 - `--n-trials`：用于随机森林调参的 Optuna 试验次数
 - `--tuning-cv-folds`：调参时的时间序列 CV 折数（`1` 表示关闭 CV，使用单验证集）
 - `--feature-selection`：特征选择方式（`none` / `importance` / `sequential`）
 - `--min-features`：序列特征选择（sequential selection）的特征数量下限
 - `--max-selection-steps`：序列特征选择循环的最大步数限制
 - `--random-seed`：随机种子
+- `--feature-lag-periods`：按 ticker 对全部特征额外滞后 N 期（默认 `0`）
 - 滚动窗口控制：
   - `--train-months`（训练期月数）
   - `--gap-months`（间隔期月数）
@@ -186,30 +204,64 @@ uv run python scripts/run_backtest.py \
 
 ## 指标定义 (`metrics.json`)
 
-- `strategy_total_return`：策略净值区间总收益（`NAV_end / NAV_start - 1`）
-- `spy_total_return`：SPY（标普500ETF）净值区间总收益（`NAV_end / NAV_start - 1`）
-- 年化与风险：
-  - `strategy_annualized_return`, `spy_annualized_return`
-  - `strategy_annualized_volatility`, `spy_annualized_volatility`
-  - `strategy_max_drawdown`, `spy_max_drawdown`
-- `strategy_sharpe`：策略每期收益率的均值/标准差（即夏普比率）
-- `spy_sharpe`：SPY每期收益率的均值/标准差
-- `strategy_sortino`：Sortino 比率（基于下行波动）
-- `strategy_calmar`：Calmar 比率（年化收益 / 最大回撤）
-- 分布与尾部风险：
-  - `strategy_skew`, `strategy_kurtosis`, `spy_skew`, `spy_kurtosis`
-  - `strategy_var_95`, `strategy_cvar_95`, `spy_var_95`, `spy_cvar_95`
-- `alpha`, `beta`：策略收益率对 SPY 收益率进行 OLS（普通最小二乘法）回归的截距（alpha）和斜率（beta）
-- `information_ratio`：相对 SPY 的超额收益信息比率（`avg_excess_return_per_period / tracking_error`，按期数年化）
-- `hedged_sharpe`：Beta对冲后收益率的夏普比率（`strategy_ret - beta * spy_ret`）
-- 相对表现：
-  - `win_rate_vs_spy`, `avg_excess_return_per_period`, `tracking_error_annualized`
-- 执行与覆盖度：
-  - `avg_turnover_per_period`, `median_turnover_per_period`, `max_turnover_per_period`, `annualized_turnover`
-  - `avg_active_names`, `median_active_names`, `min_active_names`, `max_active_names`
-- IC：
-  - `ic_mean`, `ic_std`, `ic_ir`, `ic_positive_rate`
-  - `rank_ic_mean`, `rank_ic_std`, `rank_ic_ir`, `rank_ic_positive_rate`
+- `metrics.json` 包含两类字段：`segment_*`（分段拟合诊断）和主回测指标（策略 vs SPY）。
+
+分段拟合诊断（`segment_*`）：
+
+- `segment_a_validation_profit` / `segment_b_validation_profit`：分段验证期组合收益（含成本）；用于看调参后的验证期表现，越高通常越好。
+- `segment_a_validation_turnover` / `segment_b_validation_turnover`：分段验证期换手率；越高代表交易更频繁、对成本更敏感。
+- `segment_a_validation_active_names` / `segment_b_validation_active_names`：分段验证期活跃标的数；越大通常代表覆盖更分散。
+- `segment_a_tuning_best_value` / `segment_b_tuning_best_value`：该分段 Optuna 最优目标值（训练窗口上的调参目标）；用于看调参搜索质量，不等同于最终 OOS 指标。
+- `segment_a_feature_count` / `segment_b_feature_count`：该分段最终特征数量；用于判断模型复杂度与稳定性。
+
+收益与风险（策略 vs SPY）：
+
+- `strategy_total_return` / `spy_total_return`：区间总收益（`NAV_end / NAV_start - 1`）；先看策略是否跑赢基准。
+- `strategy_annualized_return` / `spy_annualized_return`：年化收益；用于横向比较不同区间长度结果。
+- `strategy_annualized_volatility` / `spy_annualized_volatility`：年化波动率；越高代表收益波动越大。
+- `strategy_max_drawdown` / `spy_max_drawdown`：最大回撤；越接近 0 越好（负值绝对值越小越稳）。
+- `strategy_sharpe` / `spy_sharpe`：每单位总波动对应的平均收益；越高越好。
+- `strategy_sortino`：只惩罚下行波动的风险调整收益；越高越好。
+- `strategy_calmar`：年化收益相对最大回撤的效率；越高越好。
+
+分布与尾部风险：
+
+- `strategy_skew` / `spy_skew`：收益分布偏度；负偏度更容易出现大幅负收益尾部。
+- `strategy_kurtosis` / `spy_kurtosis`：收益分布峰度；越高通常表示尾部更厚、极端值更多。
+- `strategy_var_95` / `spy_var_95`：95% VaR（单期在 95% 置信下的损失分位）；数值越负表示潜在损失更大。
+- `strategy_cvar_95` / `spy_cvar_95`：95% CVaR（最差 5% 情况下的平均损失）；更能反映尾部极端风险。
+
+相对基准表现：
+
+- `win_rate_vs_spy`：单期跑赢 SPY 的比例；>50% 代表多数期领先。
+- `avg_excess_return_per_period`：单期平均超额收益（策略减 SPY）；正值代表平均每期有超额。
+- `tracking_error_annualized`：年化跟踪误差（超额收益波动）；越高代表相对基准偏离更大。
+- `information_ratio`：超额收益/跟踪误差（年化口径）；越高表示单位主动风险带来的超额越多。
+- `alpha`：对 SPY 回归后的截距；可理解为剔除 beta 暴露后的平均超额。
+- `beta`：对 SPY 的系统性暴露；`beta>1` 通常表示比 SPY 更“放大”市场波动。
+- `hedged_sharpe`：做 beta 对冲后的夏普；用于看“去市场方向后”的纯策略质量。
+
+交易执行与覆盖度：
+
+- `avg_turnover_per_period`：平均单期换手率；越高成本压力越大。
+- `median_turnover_per_period`：单期换手率中位数；比均值更不受极端换手影响。
+- `max_turnover_per_period`：单期最大换手率；用于识别最激进换仓期。
+- `annualized_turnover`：换手率年化近似；用于与其他策略统一比较交易强度。
+- `avg_active_names`：平均活跃标的数；衡量平均持仓覆盖度。
+- `median_active_names`：活跃标的数中位数；观察典型持仓宽度。
+- `min_active_names`：最少活跃标的数；过低时可能提示组合过度集中。
+- `max_active_names`：最多活跃标的数；用于观察覆盖上界。
+
+信号有效性（IC）：
+
+- `ic_mean`：Pearson IC 均值（信号与未来收益线性相关）；正值越大越好。
+- `ic_std`：IC 波动；越小通常表示信号稳定性更好。
+- `ic_ir`：`ic_mean / ic_std`；可视为 IC 的“夏普”，越高越好。
+- `ic_positive_rate`：IC 为正的期数占比；越高表示信号方向一致性更好。
+- `rank_ic_mean`：Spearman Rank IC 均值（秩相关）；对非线性单调关系更稳健。
+- `rank_ic_std`：Rank IC 波动；越小越稳定。
+- `rank_ic_ir`：`rank_ic_mean / rank_ic_std`；越高越好。
+- `rank_ic_positive_rate`：Rank IC 为正的期数占比；越高越好。
 
 注：当前 `strategy_nav.csv` / `spy_nav.csv` 序列的首个点是“首个 OOS 评估期结束后的净值”，不是显式起点 `1.0` 基线点。
 
@@ -227,7 +279,10 @@ uv run python scripts/run_backtest.py \
 
 ## 与 Notebook 的差异
 
-- 当前模块实现未使用 `MinMaxScaler`；随机森林对特征缩放不敏感，因此默认省略。
-- 脚本支持 `--tuning-cv-folds` 的 expanding 时间序列 CV 调参；Notebook 流程通常是单次切分试验。
-- 脚本支持独立 `holdout` OOS 评估并输出 `holdout/*` 产物；Notebook 默认没有固定的目录化产物约定。
-- 当前项目主目标是可复现回测与风险收益指标输出（`metrics.json` / `run_summary.txt` / OOS 诊断表），不再默认输出 notebook 中的交互绘图与分类报告。
+- 标签口径不同：脚本默认 `--label-source actual`（`next_period_return - spy_next_period_return`）；Notebook 示例使用 `pred_rel_return` 生成 `rel_performance` 标签。
+- 缺失值处理口径不同：脚本按训练窗口拟合填充统计量并应用到验证/测试窗口（降低泄露风险）；Notebook 示例采用全局 `fillna(0)`。
+- 特征缩放口径不同：Notebook 多处使用 `MinMaxScaler`；脚本默认不做 `MinMaxScaler`（随机森林对缩放不敏感）。
+- 调参与验证协议不同：脚本支持 `--tuning-cv-folds` 的 expanding 时间序列 CV；Notebook 主要是固定验证集上的 Optuna 实验。
+- 回测组织方式不同：两者都包含 rolling OOS 评估，但脚本提供标准化、可复现的分段协议与统一产物目录（含 `run_config.json`、`run_summary.txt`）。
+- 脚本支持独立 `holdout` OOS（`holdout/*` 一整套输出）；Notebook 默认没有对应的目录化 holdout 产物约定。
+- 组合与成本口径不同：脚本按权重、换手率与 `cost_bps` 计成本，并支持 `heuristic` / `signal_risk_qp`；Notebook 主要使用 `pred * return` 形式的收益近似。

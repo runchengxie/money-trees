@@ -6,6 +6,7 @@ import pytest
 
 from strategy.data import (
     NON_FEATURE_COLUMNS,
+    apply_feature_lag,
     ensure_date_ticker_index,
     fill_missing_with_reference,
     get_feature_columns,
@@ -105,3 +106,32 @@ def test_load_market_data_unsupported_suffix_raises_value_error(tmp_path) -> Non
 
     with pytest.raises(ValueError, match="Unsupported data format"):
         load_market_data(bad_path)
+
+
+def test_apply_feature_lag_shifts_by_ticker_and_drops_all_missing_rows() -> None:
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2021-01-31"), "A"),
+            (pd.Timestamp("2021-02-28"), "A"),
+            (pd.Timestamp("2021-03-31"), "A"),
+            (pd.Timestamp("2021-01-31"), "B"),
+            (pd.Timestamp("2021-02-28"), "B"),
+            (pd.Timestamp("2021-03-31"), "B"),
+        ],
+        names=["date", "ticker"],
+    )
+    frame = pd.DataFrame(
+        {
+            "f1": [1.0, 2.0, 3.0, 10.0, 20.0, 30.0],
+            "f2": [4.0, 5.0, 6.0, 40.0, 50.0, 60.0],
+            "next_period_return": [0.01, 0.02, 0.03, -0.01, -0.02, -0.03],
+        },
+        index=idx,
+    )
+
+    lagged = apply_feature_lag(frame, feature_columns=["f1", "f2"], lag_periods=1)
+
+    assert len(lagged) == 4
+    assert np.isclose(float(lagged.loc[(pd.Timestamp("2021-02-28"), "A"), "f1"]), 1.0)
+    assert np.isclose(float(lagged.loc[(pd.Timestamp("2021-03-31"), "A"), "f1"]), 2.0)
+    assert np.isclose(float(lagged.loc[(pd.Timestamp("2021-02-28"), "B"), "f2"]), 40.0)

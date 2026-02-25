@@ -25,6 +25,7 @@ from strategy.backtest import (  # noqa: E402
     run_rolling_backtest,
 )
 from strategy.data import (  # noqa: E402
+    apply_feature_lag,
     build_xy_returns,
     fill_missing_with_reference,
     get_feature_columns,
@@ -102,6 +103,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cost-bps", type=float, default=10.0)
     parser.add_argument("--portfolio-min-score", type=float, default=0.05)
     parser.add_argument("--portfolio-winsor-z", type=float, default=3.0)
+    parser.add_argument(
+        "--portfolio-weighting-method",
+        choices=["heuristic", "signal_risk_qp"],
+        default="heuristic",
+        help="Portfolio weighting mode.",
+    )
     parser.add_argument("--portfolio-gross-target", type=float, default=1.0)
     parser.add_argument("--portfolio-net-target", type=float, default=0.0)
     parser.add_argument("--portfolio-max-name-weight", type=float, default=0.02)
@@ -120,6 +127,25 @@ def parse_args() -> argparse.Namespace:
         help="Apply coarse sector de-meaning using one-hot sector columns.",
     )
     parser.add_argument("--portfolio-sector-prefix", default="SP_sector_code_")
+    parser.add_argument("--portfolio-qp-risk-aversion", type=float, default=10.0)
+    parser.add_argument("--portfolio-qp-turnover-penalty", type=float, default=5.0)
+    parser.add_argument("--portfolio-qp-cov-lookback", type=int, default=252)
+    parser.add_argument(
+        "--portfolio-qp-cov-shrinkage",
+        choices=["on", "off"],
+        default="on",
+    )
+    parser.add_argument("--portfolio-qp-cov-ridge", type=float, default=1e-6)
+    parser.add_argument("--portfolio-qp-mu-clip", type=float, default=1.0)
+    parser.add_argument("--portfolio-qp-max-names", type=int, default=300)
+    parser.add_argument("--portfolio-qp-solver-max-iter", type=int, default=300)
+    parser.add_argument("--portfolio-qp-solver-ftol", type=float, default=1e-9)
+    parser.add_argument(
+        "--portfolio-qp-fallback-to-heuristic",
+        choices=["on", "off"],
+        default="on",
+        help="Fallback to heuristic weighting if QP solver fails.",
+    )
     parser.add_argument("--n-trials", type=int, default=50)
     parser.add_argument(
         "--tuning-cv-folds",
@@ -135,6 +161,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-features", type=int, default=2)
     parser.add_argument("--max-selection-steps", type=int, default=200)
     parser.add_argument("--random-seed", type=int, default=123)
+    parser.add_argument(
+        "--feature-lag-periods",
+        type=int,
+        default=0,
+        help="Extra per-ticker lag applied to model features.",
+    )
     parser.add_argument("--train-months", type=int, default=60)
     parser.add_argument("--gap-months", type=int, default=3)
     parser.add_argument("--test-months", type=int, default=3)
@@ -171,12 +203,23 @@ def build_portfolio_config(args: argparse.Namespace) -> PortfolioConfig:
         min_score=float(args.portfolio_min_score),
         winsor_z=float(args.portfolio_winsor_z),
         use_prob_signal=True,
+        weighting_method=str(args.portfolio_weighting_method),
         gross_target=float(args.portfolio_gross_target),
         net_target=float(args.portfolio_net_target),
         max_name_weight=float(args.portfolio_max_name_weight),
         min_names_per_side=int(args.portfolio_min_names_per_side),
         use_vol_scaling=args.portfolio_vol_scaling == "on",
         vol_power=float(args.portfolio_vol_power),
+        qp_risk_aversion=float(args.portfolio_qp_risk_aversion),
+        qp_turnover_penalty=float(args.portfolio_qp_turnover_penalty),
+        qp_cov_lookback=int(args.portfolio_qp_cov_lookback),
+        qp_cov_shrinkage=args.portfolio_qp_cov_shrinkage == "on",
+        qp_cov_ridge=float(args.portfolio_qp_cov_ridge),
+        qp_mu_clip=float(args.portfolio_qp_mu_clip),
+        qp_max_names=int(args.portfolio_qp_max_names),
+        qp_solver_max_iter=int(args.portfolio_qp_solver_max_iter),
+        qp_solver_ftol=float(args.portfolio_qp_solver_ftol),
+        qp_fallback_to_heuristic=args.portfolio_qp_fallback_to_heuristic == "on",
         sector_neutral=args.portfolio_sector_neutral == "on",
         sector_prefix=str(args.portfolio_sector_prefix),
     )
@@ -260,6 +303,7 @@ def fit_segment_model(
         train_frame=train_frame,
         test_frame=valid_frame,
         cfg=portfolio_cfg,
+        previous_weights=None,
     )
     valid_profit, _, valid_turnover = compute_period_return_from_weights(
         weights=valid_weights,
@@ -449,6 +493,7 @@ def _build_holdout_result(
             train_frame=train_frame,
             test_frame=holdout_frame.loc[idx],
             cfg=portfolio_cfg,
+            previous_weights=previous_weights,
         )
         period_profit, current_weights, turnover = compute_period_return_from_weights(
             weights=period_weights,
@@ -833,6 +878,12 @@ def main() -> None:
         raise ValueError("--tuning-cv-folds must be >= 1.")
     if args.test_months < 1:
         raise ValueError("--test-months must be >= 1.")
+    if args.feature_lag_periods < 0:
+        raise ValueError("--feature-lag-periods must be >= 0.")
+    if args.portfolio_qp_cov_lookback < 1:
+        raise ValueError("--portfolio-qp-cov-lookback must be >= 1.")
+    if args.portfolio_qp_max_names < 0:
+        raise ValueError("--portfolio-qp-max-names must be >= 0.")
     if bool(args.holdout_start) != bool(args.holdout_end):
         raise ValueError("Use --holdout-start and --holdout-end together.")
     portfolio_cfg = build_portfolio_config(args)
@@ -845,6 +896,14 @@ def main() -> None:
         add_missing_indicators=False,
         apply_global_fill=False,
     )
+    if args.feature_lag_periods > 0:
+        feature_columns = get_feature_columns(frame)
+        frame = apply_feature_lag(
+            frame,
+            feature_columns=feature_columns,
+            lag_periods=int(args.feature_lag_periods),
+        )
+
     if args.export_parquet:
         export_frame = preprocess_data(
             raw,
@@ -853,6 +912,13 @@ def main() -> None:
             add_missing_indicators=args.add_missing_indicators,
             apply_global_fill=True,
         )
+        if args.feature_lag_periods > 0:
+            export_features = get_feature_columns(export_frame)
+            export_frame = apply_feature_lag(
+                export_frame,
+                feature_columns=export_features,
+                lag_periods=int(args.feature_lag_periods),
+            )
         save_market_data(export_frame, args.export_parquet)
 
     segment_a_spec = SegmentSpec(

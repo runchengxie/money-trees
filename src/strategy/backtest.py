@@ -185,6 +185,7 @@ def run_rolling_backtest(
             train_frame=train_frame,
             test_frame=test_frame,
             cfg=portfolio_cfg,
+            previous_weights=previous_weights,
         )
         period_return, current_weights, turnover = compute_period_return_from_weights(
             weights=current_weights,

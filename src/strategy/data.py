@@ -170,6 +170,37 @@ def preprocess_data(
     return data
 
 
+def apply_feature_lag(
+    frame: pd.DataFrame,
+    feature_columns: Iterable[str],
+    lag_periods: int,
+    drop_all_missing_rows: bool = True,
+) -> pd.DataFrame:
+    """
+    Apply an extra per-ticker lag to model features.
+
+    This is useful for leakage-sensitivity checks (e.g., shift=1/2 style experiments).
+    """
+    if lag_periods <= 0:
+        return frame.copy()
+    if not isinstance(frame.index, pd.MultiIndex) or "ticker" not in frame.index.names:
+        raise ValueError("apply_feature_lag expects a ('date', 'ticker') MultiIndex frame.")
+
+    cols = [col for col in feature_columns if col in frame.columns]
+    if not cols:
+        return frame.copy()
+
+    out = frame.copy()
+    shifted = out[cols].groupby(level="ticker", sort=False).shift(int(lag_periods))
+    out.loc[:, cols] = shifted
+
+    if drop_all_missing_rows:
+        valid_mask = out[cols].notna().any(axis=1)
+        out = out.loc[valid_mask]
+
+    return out
+
+
 def slice_by_date(frame: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     """Inclusive date slice on a ('date', 'ticker') indexed frame."""
     start_ts = pd.Timestamp(start)
