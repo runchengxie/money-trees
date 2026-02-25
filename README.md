@@ -7,6 +7,71 @@
 - 本文档重点覆盖 `scripts/run_backtest.py` 的输入要求、策略假设、参数与产物说明。
 - 项目中的辅助脚本（如 `scripts/convert_pickle_to_parquet.py`）与参考文件（`reference_notebook/notebook.ipynb`）会简要说明，但不作为完整技术规范。
 
+## 策略机制（快速理解）
+
+这是一套截面选股 + 多空组合的随机森林策略。每个评估期（默认季度）都会做一次预测 -> 组合 -> 记账。
+
+核心机制可以概括为 7 步：
+
+1. 数据输入（`date,ticker` 面板）
+   使用股票特征 + 下一期收益（`next_period_return`）+ SPY 基准收益列。
+2. 标签构建（3 分类）
+   先算相对收益 `rel_return = next_period_return - spy_next_period_return`（或读取 `pred_rel_return`），再按阈值映射到 `{-1, 0, +1}`。
+3. 训练/验证分段建模（Segment A/B）
+   两个时间段分别完成：参数调优（Optuna）+ 特征选择（none/importance/sequential），得到各自特征集与模型参数。
+4. 滚动 OOS 回测（Walk-forward）
+   对每个窗口使用 训练期 -> 间隔期 -> 测试期 结构，滚动训练并只在测试期记收益，避免未来信息泄露。
+5. 信号转仓位
+   模型输出先转连续信号（默认 `P(+1)-P(-1)`），再做阈值过滤、z-score 截断，并按配置生成权重：
+   `heuristic`（规则式配权）或 `signal_risk_qp`（信号-风险-换手联合优化）。
+6. 成本与收益计算
+   每期换手率：`0.5 * sum(|w_t - w_(t-1)|)`；
+   交易成本：`turnover * cost_bps / 10000`；
+   净收益 = 组合毛收益 - 成本。
+7. 绩效评估 
+   输出 NAV、超额、Sharpe/Sortino/Calmar、最大回撤、IC/RankIC、换手、活跃标的数，并与 SPY 对比。
+
+一句话
+用随机森林做截面方向预测，把分类信号转成可交易的多空权重，在滚动 OOS 框架下计入换手成本评估真实可执行性。
+
+## 项目工作流（端到端）
+
+推荐按下面流程理解和使用本项目：
+
+1. 准备数据
+   原始 `.pkl/.parquet` -> 标准化为 `('date','ticker')` 索引，并包含必需收益列与特征列。
+2. 预处理标签  
+   `preprocess_data()`：`inf -> NaN`、按 `ticker` 前向填充、构建 `rel_return/rel_performance`；
+   滚动训练时再用 `fill_missing_with_reference()` 做“仅用训练窗统计量”的缺失填充。
+3. 分段拟合（A/B）
+   `fit_segment_model()`：
+   - Optuna 调参（目标函数已含成本/换手口径）
+   - 可选特征筛选
+   - 在各自验证期做一次组合收益诊断
+4. 滚动回测
+   `build_rolling_windows()` + `run_rolling_backtest()`：
+   每个窗口独立训练、预测、构建仓位、扣成本、累计 NAV，分别得到 Segment A 与 Segment B 的 OOS 结果。
+5. 合并结果并评估  
+   `combine_backtest_segments()` 拼接 A/B；
+   `build_spy_benchmark()` 对齐 SPY；
+   `compute_performance_metrics()` 计算策略与基准全套指标。
+6. （可选）最终 Holdout
+   通过 `--holdout-start/--holdout-end` 在完全独立区间做最终 OOS 检验。
+7. 落盘产物
+   `write_outputs()` / `write_holdout_outputs()` 导出 `metrics.json`、`run_summary.txt`、NAV/收益/换手/IC 等 CSV。
+
+对应主入口即：
+
+```bash
+uv run python scripts/run_backtest.py --data data_small.parquet --output-dir artifacts/backtest
+```
+
+执行后可按以下顺序阅读结果：
+
+1. 先看 `run_summary.txt`（整体结论）
+2. 再看 `metrics.json`（关键指标）
+3. 最后看 `strategy_nav.csv`、`oos_period_diagnostics.csv`、`ic_series.csv`（过程诊断）
+
 ## 环境配置
 
 - Python: `>=3.10`
@@ -151,7 +216,7 @@ uv run python scripts/run_backtest.py \
 
 ## 运行时间预估（CPU）
 
-当前实现使用 `sklearn.RandomForestClassifier`，默认在 **CPU** 上运行（不依赖 GPU）。
+当前实现使用 `sklearn.RandomForestClassifier`，默认在 CPU 上运行（不依赖 GPU）。
 
 在 `data_small.parquet`（约 14.1 万行、1231 个特征）上，基于 `Intel Core i5-7500 (4C/4T)` 的实测参考如下：
 
