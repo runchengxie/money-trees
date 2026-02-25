@@ -1,7 +1,7 @@
 [project]
 name = "guan-random-forest-cross-sectional"
 version = "0.1.0"
-description = "Cross-sectional random forest strategy research notebook."
+description = "Cross-sectional random forest strategy backtest scripts and reproducible outputs."
 requires-python = ">=3.10"
 dependencies = [
     "matplotlib",

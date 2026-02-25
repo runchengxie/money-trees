@@ -34,12 +34,16 @@ from strategy.data import (  # noqa: E402
     slice_by_date,
 )
 from strategy.model import (  # noqa: E402
-    count_active_names,
     fit_random_forest,
-    profit_with_estimated_turnover,
     select_positive_importance_features,
     sequential_feature_selection,
     tune_random_forest,
+)
+from strategy.portfolio import (  # noqa: E402
+    PortfolioConfig,
+    build_portfolio_weights,
+    build_signal_scores,
+    compute_period_return_from_weights,
 )
 
 
@@ -96,6 +100,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label-threshold", type=float, default=0.05)
     parser.add_argument("--add-missing-indicators", action="store_true")
     parser.add_argument("--cost-bps", type=float, default=10.0)
+    parser.add_argument("--portfolio-min-score", type=float, default=0.05)
+    parser.add_argument("--portfolio-winsor-z", type=float, default=3.0)
+    parser.add_argument("--portfolio-gross-target", type=float, default=1.0)
+    parser.add_argument("--portfolio-net-target", type=float, default=0.0)
+    parser.add_argument("--portfolio-max-name-weight", type=float, default=0.02)
+    parser.add_argument("--portfolio-min-names-per-side", type=int, default=5)
+    parser.add_argument(
+        "--portfolio-vol-scaling",
+        choices=["on", "off"],
+        default="on",
+        help="Use train-window volatility scaling in portfolio construction.",
+    )
+    parser.add_argument("--portfolio-vol-power", type=float, default=1.0)
+    parser.add_argument(
+        "--portfolio-sector-neutral",
+        choices=["on", "off"],
+        default="off",
+        help="Apply coarse sector de-meaning using one-hot sector columns.",
+    )
+    parser.add_argument("--portfolio-sector-prefix", default="SP_sector_code_")
     parser.add_argument("--n-trials", type=int, default=50)
     parser.add_argument(
         "--tuning-cv-folds",
@@ -142,10 +166,27 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_portfolio_config(args: argparse.Namespace) -> PortfolioConfig:
+    return PortfolioConfig(
+        min_score=float(args.portfolio_min_score),
+        winsor_z=float(args.portfolio_winsor_z),
+        use_prob_signal=True,
+        gross_target=float(args.portfolio_gross_target),
+        net_target=float(args.portfolio_net_target),
+        max_name_weight=float(args.portfolio_max_name_weight),
+        min_names_per_side=int(args.portfolio_min_names_per_side),
+        use_vol_scaling=args.portfolio_vol_scaling == "on",
+        vol_power=float(args.portfolio_vol_power),
+        sector_neutral=args.portfolio_sector_neutral == "on",
+        sector_prefix=str(args.portfolio_sector_prefix),
+    )
+
+
 def fit_segment_model(
     frame: pd.DataFrame,
     spec: SegmentSpec,
     args: argparse.Namespace,
+    portfolio_cfg: PortfolioConfig,
     seed_offset: int = 0,
 ) -> SegmentFitResult:
     train_raw = slice_by_date(frame, spec.train_start, spec.train_end)
@@ -205,14 +246,29 @@ def fit_segment_model(
     valid_sel = valid_x[selected_features]
     model = fit_random_forest(train_sel, train_y, params=best_params, random_state=seed)
     valid_preds = model.predict(valid_sel)
-    valid_profit, _, valid_turnover = profit_with_estimated_turnover(
+    valid_probs: np.ndarray | None = None
+    valid_classes: np.ndarray | None = None
+    if portfolio_cfg.use_prob_signal and hasattr(model, "predict_proba"):
+        valid_probs = model.predict_proba(valid_sel)
+        valid_classes = getattr(model, "classes_", None)
+
+    valid_weights = build_portfolio_weights(
         predictions=valid_preds,
-        realized_returns=valid_returns,
-        cost_bps=args.cost_bps,
+        probs=valid_probs,
+        classes_=valid_classes,
         sample_index=valid_sel.index,
+        train_frame=train_frame,
+        test_frame=valid_frame,
+        cfg=portfolio_cfg,
+    )
+    valid_profit, _, valid_turnover = compute_period_return_from_weights(
+        weights=valid_weights,
+        realized_returns=valid_returns,
+        sample_index=valid_sel.index,
+        cost_bps=args.cost_bps,
         previous_weights=None,
     )
-    active_names = count_active_names(valid_preds, sample_index=valid_sel.index)
+    active_names = int(len(valid_weights))
 
     return SegmentFitResult(
         feature_columns=selected_features,
@@ -309,6 +365,7 @@ def _build_holdout_result(
     model_segment: str,
     segment_fit: SegmentFitResult,
     args: argparse.Namespace,
+    portfolio_cfg: PortfolioConfig,
 ) -> HoldoutResult:
     holdout_start_ts = pd.Timestamp(holdout_start)
     holdout_end_ts = pd.Timestamp(holdout_end)
@@ -353,6 +410,11 @@ def _build_holdout_result(
         random_state=args.random_seed + 4000,
     )
     holdout_preds = model.predict(holdout_x)
+    holdout_probs: np.ndarray | None = None
+    holdout_classes: np.ndarray | None = None
+    if portfolio_cfg.use_prob_signal and hasattr(model, "predict_proba"):
+        holdout_probs = model.predict_proba(holdout_x)
+        holdout_classes = getattr(model, "classes_", None)
 
     period_dates: list[pd.Timestamp] = []
     period_returns: list[float] = []
@@ -376,16 +438,34 @@ def _build_holdout_result(
             continue
         idx = holdout_x.index[mask]
         preds = holdout_preds[mask]
+        probs = holdout_probs[mask] if holdout_probs is not None else None
         realized = holdout_returns[mask]
-        period_profit, previous_weights, turnover = profit_with_estimated_turnover(
+
+        period_weights = build_portfolio_weights(
             predictions=preds,
-            realized_returns=realized,
-            cost_bps=args.cost_bps,
+            probs=probs,
+            classes_=holdout_classes,
             sample_index=idx,
+            train_frame=train_frame,
+            test_frame=holdout_frame.loc[idx],
+            cfg=portfolio_cfg,
+        )
+        period_profit, current_weights, turnover = compute_period_return_from_weights(
+            weights=period_weights,
+            realized_returns=realized,
+            sample_index=idx,
+            cost_bps=args.cost_bps,
             previous_weights=previous_weights,
         )
-        ic_value, rank_ic_value = _period_ic(
+        previous_weights = current_weights
+        period_signal = build_signal_scores(
             predictions=preds,
+            probs=probs,
+            classes_=holdout_classes,
+            use_prob_signal=portfolio_cfg.use_prob_signal,
+        )
+        ic_value, rank_ic_value = _period_ic(
+            predictions=period_signal,
             realized_returns=realized,
             sample_index=idx,
         )
@@ -394,7 +474,7 @@ def _build_holdout_result(
         period_dates.append(_resolve_period_date_from_index(idx, fallback=period_end))
         period_returns.append(float(period_profit))
         period_turnover.append(float(turnover))
-        period_active_names.append(count_active_names(preds, sample_index=idx))
+        period_active_names.append(int(len(current_weights)))
         period_ic_values.append(float(ic_value))
         period_rank_ic_values.append(float(rank_ic_value))
 
@@ -755,6 +835,7 @@ def main() -> None:
         raise ValueError("--test-months must be >= 1.")
     if bool(args.holdout_start) != bool(args.holdout_end):
         raise ValueError("Use --holdout-start and --holdout-end together.")
+    portfolio_cfg = build_portfolio_config(args)
 
     raw = load_market_data(args.data)
     frame = preprocess_data(
@@ -793,8 +874,20 @@ def main() -> None:
         rolling_windows=args.segment2_windows,
     )
 
-    segment_a = fit_segment_model(frame=frame, spec=segment_a_spec, args=args, seed_offset=0)
-    segment_b = fit_segment_model(frame=frame, spec=segment_b_spec, args=args, seed_offset=1000)
+    segment_a = fit_segment_model(
+        frame=frame,
+        spec=segment_a_spec,
+        args=args,
+        portfolio_cfg=portfolio_cfg,
+        seed_offset=0,
+    )
+    segment_b = fit_segment_model(
+        frame=frame,
+        spec=segment_b_spec,
+        args=args,
+        portfolio_cfg=portfolio_cfg,
+        seed_offset=1000,
+    )
 
     windows_a = build_rolling_windows(
         start_date=segment_a_spec.rolling_start,
@@ -812,6 +905,7 @@ def main() -> None:
         cost_bps=args.cost_bps,
         initial_nav=1.0,
         add_missing_indicators=args.add_missing_indicators,
+        portfolio_config=portfolio_cfg,
     )
 
     initial_nav = float(bt_a.nav.iloc[-1]) if not bt_a.nav.empty else 1.0
@@ -831,6 +925,7 @@ def main() -> None:
         cost_bps=args.cost_bps,
         initial_nav=initial_nav,
         add_missing_indicators=args.add_missing_indicators,
+        portfolio_config=portfolio_cfg,
     )
 
     strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav, name="strategy_nav")
@@ -879,6 +974,7 @@ def main() -> None:
             model_segment=args.holdout_model_segment,
             segment_fit=holdout_segment_fit,
             args=args,
+            portfolio_cfg=portfolio_cfg,
         )
 
     run_config = build_run_config(

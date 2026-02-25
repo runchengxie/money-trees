@@ -7,10 +7,12 @@ import pandas as pd
 from scipy.stats import linregress
 
 from .data import build_spy_series, build_xy_returns, fill_missing_with_reference, slice_by_date
-from .model import (
-    count_active_names,
-    fit_random_forest,
-    profit_with_estimated_turnover,
+from .model import fit_random_forest
+from .portfolio import (
+    PortfolioConfig,
+    build_portfolio_weights,
+    build_signal_scores,
+    compute_period_return_from_weights,
 )
 
 
@@ -116,7 +118,9 @@ def run_rolling_backtest(
     cost_bps: float = 0.0,
     initial_nav: float = 1.0,
     add_missing_indicators: bool = False,
+    portfolio_config: PortfolioConfig | None = None,
 ) -> BacktestResult:
+    portfolio_cfg = PortfolioConfig() if portfolio_config is None else portfolio_config
     nav_value = float(initial_nav)
     nav_points: list[float] = []
     period_returns: list[float] = []
@@ -161,16 +165,37 @@ def run_rolling_backtest(
             random_state=random_state + idx,
         )
         preds = model.predict(test_x)
-        period_return, current_weights, turnover = profit_with_estimated_turnover(
+        probs: np.ndarray | None = None
+        classes_: np.ndarray | None = None
+        if portfolio_cfg.use_prob_signal and hasattr(model, "predict_proba"):
+            probs = model.predict_proba(test_x)
+            classes_ = getattr(model, "classes_", None)
+
+        signal_scores = build_signal_scores(
             predictions=preds,
-            realized_returns=test_returns,
-            cost_bps=cost_bps,
+            probs=probs,
+            classes_=classes_,
+            use_prob_signal=portfolio_cfg.use_prob_signal,
+        )
+        current_weights = build_portfolio_weights(
+            predictions=preds,
+            probs=probs,
+            classes_=classes_,
             sample_index=test_x.index,
+            train_frame=train_frame,
+            test_frame=test_frame,
+            cfg=portfolio_cfg,
+        )
+        period_return, current_weights, turnover = compute_period_return_from_weights(
+            weights=current_weights,
+            realized_returns=test_returns,
+            sample_index=test_x.index,
+            cost_bps=cost_bps,
             previous_weights=previous_weights,
         )
         previous_weights = current_weights
         period_ic, period_rank_ic = _compute_period_ic(
-            predictions=preds,
+            predictions=signal_scores,
             realized_returns=test_returns,
             sample_index=test_x.index,
         )
@@ -179,7 +204,7 @@ def run_rolling_backtest(
         nav_points.append(nav_value)
         period_returns.append(period_return)
         period_turnovers.append(turnover)
-        active_names.append(count_active_names(preds, sample_index=test_x.index))
+        active_names.append(int(len(current_weights)))
         period_ic_values.append(period_ic)
         period_rank_ic_values.append(period_rank_ic)
         period_dates.append(_resolve_period_date(test_frame, fallback=test_end))
@@ -265,17 +290,29 @@ def compute_performance_metrics(
         if np.isfinite(spy_std) and spy_std != 0
         else 0.0
     )
-    strategy_total_return = float(aligned_nav["strategy_nav"].iloc[-1] - 1.0)
-    spy_total_return = float(aligned_nav["spy_nav"].iloc[-1] - 1.0)
+    strategy_start_nav = float(aligned_nav["strategy_nav"].iloc[0])
+    strategy_end_nav = float(aligned_nav["strategy_nav"].iloc[-1])
+    spy_start_nav = float(aligned_nav["spy_nav"].iloc[0])
+    spy_end_nav = float(aligned_nav["spy_nav"].iloc[-1])
+    strategy_total_return = (
+        float(strategy_end_nav / strategy_start_nav - 1.0)
+        if np.isfinite(strategy_start_nav) and strategy_start_nav != 0
+        else float("nan")
+    )
+    spy_total_return = (
+        float(spy_end_nav / spy_start_nav - 1.0)
+        if np.isfinite(spy_start_nav) and spy_start_nav != 0
+        else float("nan")
+    )
 
     n_nav_periods = len(aligned_nav) - 1
     strategy_ann_return = (
-        float((aligned_nav["strategy_nav"].iloc[-1] / aligned_nav["strategy_nav"].iloc[0]) ** (periods_per_year / n_nav_periods) - 1.0)
+        float((strategy_end_nav / strategy_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
         if n_nav_periods > 0
         else float("nan")
     )
     spy_ann_return = (
-        float((aligned_nav["spy_nav"].iloc[-1] / aligned_nav["spy_nav"].iloc[0]) ** (periods_per_year / n_nav_periods) - 1.0)
+        float((spy_end_nav / spy_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
         if n_nav_periods > 0
         else float("nan")
     )

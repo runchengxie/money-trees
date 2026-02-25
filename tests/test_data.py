@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from strategy.data import (
     NON_FEATURE_COLUMNS,
     ensure_date_ticker_index,
     fill_missing_with_reference,
     get_feature_columns,
+    load_market_data,
     make_labels,
+    preprocess_data,
 )
 
 
@@ -79,3 +82,26 @@ def test_fill_missing_with_reference_uses_reference_statistics_only() -> None:
     assert filled.loc[0, "f_num"] == 2.0
     assert filled.loc[0, "f_text"] == "missing"
     assert filled.loc[1, "f_text"] == "keep"
+
+
+def test_preprocess_data_pred_rel_return_missing_column_raises_key_error() -> None:
+    raw = pd.DataFrame(
+        {
+            "date": ["2021-03-31", "2021-03-31"],
+            "ticker": ["A", "B"],
+            "next_period_return": [0.01, -0.02],
+            "spy_next_period_return": [0.005, 0.005],
+            "spy_cum_ret": [100.0, 100.0],
+        }
+    )
+
+    with pytest.raises(KeyError, match="pred_rel_return"):
+        preprocess_data(raw, label_source="pred_rel_return", apply_global_fill=False)
+
+
+def test_load_market_data_unsupported_suffix_raises_value_error(tmp_path) -> None:
+    bad_path = tmp_path / "sample.csv"
+    bad_path.write_text("date,ticker\n2021-01-01,A\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported data format"):
+        load_market_data(bad_path)

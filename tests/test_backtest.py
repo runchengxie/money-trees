@@ -62,6 +62,38 @@ def test_compute_performance_metrics_information_ratio_uses_excess_tracking_erro
     assert np.isclose(metrics["information_ratio"], expected_ir)
 
 
+def test_compute_performance_metrics_total_return_is_interval_consistent() -> None:
+    idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30"])
+    strategy_nav = pd.Series([1.10, 1.21, 1.331], index=idx)
+    spy_nav = pd.Series([1.00, 1.02, 1.03], index=idx)
+
+    metrics = compute_performance_metrics(
+        strategy_nav=strategy_nav,
+        spy_nav=spy_nav,
+        periods_per_year=4.0,
+    )
+
+    expected_total = float(strategy_nav.iloc[-1] / strategy_nav.iloc[0] - 1.0)
+    expected_ann = float((1.0 + expected_total) ** (4.0 / (len(idx) - 1)) - 1.0)
+    assert np.isclose(metrics["strategy_total_return"], expected_total)
+    assert np.isclose(metrics["strategy_annualized_return"], expected_ann)
+
+
+def test_compute_performance_metrics_returns_empty_when_nav_has_no_overlap() -> None:
+    strategy_nav = pd.Series(
+        [1.0, 1.1],
+        index=pd.to_datetime(["2021-03-31", "2021-06-30"]),
+    )
+    spy_nav = pd.Series(
+        [1.0, 1.1],
+        index=pd.to_datetime(["2022-03-31", "2022-06-30"]),
+    )
+
+    metrics = compute_performance_metrics(strategy_nav=strategy_nav, spy_nav=spy_nav)
+
+    assert metrics == {}
+
+
 def test_run_rolling_backtest_outputs_stable_series() -> None:
     dates = pd.date_range("2020-01-31", periods=18, freq="ME")
     tickers = ["A", "B", "C"]

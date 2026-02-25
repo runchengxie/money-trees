@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import pytest
+
+from scripts.run_backtest import (
+    HoldoutResult,
+    _build_holdout_result,
+    SegmentFitResult,
+    build_run_summary_text,
+    combine_backtest_segments,
+)
+from strategy.portfolio import PortfolioConfig
 
 
 def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
@@ -115,6 +127,23 @@ def test_run_backtest_script_smoke(tmp_path: Path) -> None:
     assert "strategy_annualized_return" in metrics
     assert "strategy_max_drawdown" in metrics
     assert "avg_turnover_per_period" in metrics
+    if np.isfinite(metrics["tracking_error_annualized"]) and metrics["tracking_error_annualized"] != 0:
+        expected_ir = (
+            metrics["avg_excess_return_per_period"] * 4.0 / metrics["tracking_error_annualized"]
+        )
+        assert np.isclose(metrics["information_ratio"], expected_ir)
+
+    holdout_metrics = json.loads((out_dir / "holdout/metrics.json").read_text(encoding="utf-8"))
+    if (
+        np.isfinite(holdout_metrics["tracking_error_annualized"])
+        and holdout_metrics["tracking_error_annualized"] != 0
+    ):
+        expected_holdout_ir = (
+            holdout_metrics["avg_excess_return_per_period"]
+            * 4.0
+            / holdout_metrics["tracking_error_annualized"]
+        )
+        assert np.isclose(holdout_metrics["information_ratio"], expected_holdout_ir)
 
     run_summary = (out_dir / "run_summary.txt").read_text(encoding="utf-8")
     assert "Backtest run summary" in run_summary
@@ -166,3 +195,150 @@ def test_run_backtest_script_holdout_uses_test_month_buckets(tmp_path: Path) -> 
 
     holdout_returns = pd.read_csv(out_dir / "holdout/strategy_returns.csv")
     assert len(holdout_returns) == 4
+
+
+def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:
+    first = pd.Series(
+        [1.0, 1.1],
+        index=pd.to_datetime(["2021-03-31", "2021-06-30"]),
+        name="strategy_nav",
+    )
+    second = pd.Series(
+        [9.9, 1.2],
+        index=pd.to_datetime(["2021-06-30", "2021-09-30"]),
+        name="strategy_nav",
+    )
+
+    out = combine_backtest_segments(first, second, name="strategy_nav")
+
+    assert list(out.index) == list(pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30"]))
+    assert np.isclose(float(out.loc[pd.Timestamp("2021-06-30")]), 9.9)
+
+
+def _segment_stub() -> SegmentFitResult:
+    return SegmentFitResult(
+        feature_columns=["f1", "f2"],
+        model_params={"n_estimators": 10},
+        validation_profit=0.01,
+        validation_turnover=0.5,
+        validation_active_names=5,
+        tuning_best_value=0.02,
+        selection_history=None,
+    )
+
+
+def _holdout_stub(start: str, end: str) -> HoldoutResult:
+    idx = pd.to_datetime(["2022-03-31", "2022-06-30"])
+    return HoldoutResult(
+        model_segment="segment_b",
+        train_start="2019-01-01",
+        train_end="2021-12-31",
+        holdout_start=start,
+        holdout_end=end,
+        strategy_nav=pd.Series([1.1, 1.2], index=idx, name="strategy_nav"),
+        spy_nav=pd.Series([1.0, 1.01], index=idx, name="spy_nav"),
+        strategy_returns=pd.Series([0.1, 0.09], index=idx, name="strategy_ret"),
+        spy_returns=pd.Series([0.0, 0.01], index=idx, name="spy_ret"),
+        strategy_turnover=pd.Series([0.5, 0.6], index=idx, name="strategy_turnover"),
+        active_names=pd.Series([10, 12], index=idx, name="active_names"),
+        period_ic=pd.Series([0.1, 0.2], index=idx, name="period_ic"),
+        period_rank_ic=pd.Series([0.05, 0.15], index=idx, name="period_rank_ic"),
+        metrics={"strategy_total_return": 0.1, "spy_total_return": 0.01},
+    )
+
+
+@pytest.mark.parametrize(
+    ("holdout_span", "expected_note"),
+    [
+        (
+            ("2021-01-01", "2021-12-31"),
+            "holdout window overlaps the main backtest window.",
+        ),
+        (
+            ("2023-01-01", "2023-12-31"),
+            "no overlap with main backtest window.",
+        ),
+    ],
+)
+def test_build_run_summary_text_reports_holdout_overlap_note(
+    holdout_span: tuple[str, str],
+    expected_note: str,
+) -> None:
+    strategy_nav = pd.Series(
+        [1.0, 1.1],
+        index=pd.to_datetime(["2021-03-31", "2021-06-30"]),
+        name="strategy_nav",
+    )
+    idx = strategy_nav.index
+    run_summary = build_run_summary_text(
+        strategy_nav=strategy_nav,
+        strategy_turnover=pd.Series([0.2, 0.3], index=idx, name="strategy_turnover"),
+        period_ic=pd.Series([0.1, np.nan], index=idx, name="period_ic"),
+        period_rank_ic=pd.Series([0.05, np.nan], index=idx, name="period_rank_ic"),
+        segment_a=_segment_stub(),
+        segment_b=_segment_stub(),
+        metrics={"strategy_total_return": 0.1, "spy_total_return": 0.05},
+        tuning_cv_folds=1,
+        holdout_result=_holdout_stub(*holdout_span),
+    )
+
+    assert f"Holdout overlap note: {expected_note}" in run_summary
+
+
+def test_run_backtest_script_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "ignored.parquet"
+    data_path.write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_backtest.py",
+            "--data",
+            str(data_path),
+            "--holdout-start",
+            "2024-01-01",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Use --holdout-start and --holdout-end together." in result.stderr
+
+
+def test_run_backtest_script_rejects_test_months_below_one(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "ignored.parquet"
+    data_path.write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_backtest.py",
+            "--data",
+            str(data_path),
+            "--test-months",
+            "0",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--test-months must be >= 1." in result.stderr
+
+
+def test_build_holdout_result_rejects_inverted_holdout_span() -> None:
+    with pytest.raises(ValueError, match="--holdout-start must be <= --holdout-end."):
+        _build_holdout_result(
+            frame=pd.DataFrame(),
+            holdout_start="2024-02-01",
+            holdout_end="2024-01-01",
+            model_segment="segment_b",
+            segment_fit=_segment_stub(),
+            args=argparse.Namespace(),
+            portfolio_cfg=PortfolioConfig(),
+        )
