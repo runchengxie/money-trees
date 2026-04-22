@@ -3,9 +3,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from treealpha.config import BacktestSettings
-from treealpha.markets import get_market_profile
-from treealpha.models import get_model_adapter
+from moneytree.config import BacktestSettings
+from moneytree.markets import get_market_profile
+from moneytree.models import get_model_adapter
 
 
 def test_model_registry_resolves_expected_builtin_ids() -> None:

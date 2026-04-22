@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from treealpha.model import (
+from moneytree.model import (
     estimate_turnover,
     profit_with_estimated_turnover,
     score_predictions_over_time,

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 if TYPE_CHECKING:
-    from treealpha.config import BacktestSettings
+    from moneytree.config import BacktestSettings
 
 
 class BaseMarketProfile(ABC):

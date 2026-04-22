@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from treealpha.config import BacktestSettings
-    from treealpha.markets.base import BaseMarketProfile
+    from moneytree.config import BacktestSettings
+    from moneytree.markets.base import BaseMarketProfile
 
 LabelSource = Literal["actual", "pred_rel_return"]
 

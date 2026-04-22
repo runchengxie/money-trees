@@ -5,7 +5,7 @@
 ## Workflow
 
 1. 先修改 `configs/market/*.yaml`，把 benchmark、标签口径和交易约束改成你自己的市场语义。
-2. 按你的数据契约调整 `configs/market/*.yaml`，必要时再扩展 `src/treealpha/markets/*.py`。
+2. 按你的数据契约调整 `configs/market/*.yaml`，必要时再扩展 `src/moneytree/markets/*.py`。
 3. 运行 smoke test，确认整条训练、回测和落盘链路正常。
 4. 再开始增加特征、模型和更复杂的组合约束。
 
@@ -17,14 +17,14 @@
   参考市场配置。
 - [configs/market/cn.yaml](/home/richard/code/money-tree/configs/market/cn.yaml)
   A 股参考配置，包含 benchmark 和 tradability 过滤开关。
-- [src/treealpha/markets/cn.py](/home/richard/code/money-tree/src/treealpha/markets/cn.py)
+- [src/moneytree/markets/cn.py](/home/richard/code/money-tree/src/moneytree/markets/cn.py)
   A 股参考实现，可继续按你的数据契约扩展。
 - [docs/minimal_run.md](/home/richard/code/money-tree/docs/minimal_run.md)
   最小跑通路径。
 
 ## Project Layout
 
-- `src/treealpha/`
+- `src/moneytree/`
   package CLI、回测执行内核、模型 registry、市场 registry。
 - `configs/market/*.yaml`
   市场适配占位层。

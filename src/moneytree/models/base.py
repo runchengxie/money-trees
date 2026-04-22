@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from treealpha.model import FeatureSelectionResult
+from moneytree.model import FeatureSelectionResult
 
 
 @dataclass(frozen=True)

@@ -45,5 +45,5 @@ uv run moneytree \
 建议顺序：
 
 1. 修改 `configs/market/*.yaml`
-2. 只在现有 market profile 不够用时再扩展 `src/treealpha/markets/*.py`
+2. 只在现有 market profile 不够用时再扩展 `src/moneytree/markets/*.py`
 3. 再增加新特征与新模型配置

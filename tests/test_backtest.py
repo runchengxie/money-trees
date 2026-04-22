@@ -3,14 +3,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from treealpha.backtest import (
+from moneytree.backtest import (
     build_benchmark_nav,
     build_rolling_windows,
     build_spy_benchmark,
     compute_performance_metrics,
     run_rolling_backtest,
 )
-from treealpha.data import preprocess_data
+from moneytree.data import preprocess_data
 
 
 def test_build_rolling_windows_shape_and_dates() -> None:

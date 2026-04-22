@@ -45,7 +45,7 @@ def test_template_smoke_config_stack_runs(tmp_path: Path) -> None:
         "configs/model/rf.yaml",
         "configs/backtest/smoke.yaml",
     ]
-    cmd = [sys.executable, "-m", "treealpha.cli.backtest"]
+    cmd = [sys.executable, "-m", "moneytree.cli.backtest"]
     for config_path in config_paths:
         cmd.extend(["--config", config_path])
     cmd.extend(["--data", str(data_path), "--output-dir", str(out_dir)])

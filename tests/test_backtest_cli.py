@@ -10,17 +10,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from treealpha.config import BacktestSettings
-from treealpha.markets import get_market_profile
-from treealpha.models import get_model_adapter
-from treealpha.runner import (
+from moneytree.config import BacktestSettings
+from moneytree.markets import get_market_profile
+from moneytree.models import get_model_adapter
+from moneytree.runner import (
     HoldoutResult,
     _build_holdout_result,
     SegmentFitResult,
     build_run_summary_text,
     combine_backtest_segments,
 )
-from treealpha.portfolio import PortfolioConfig
+from moneytree.portfolio import PortfolioConfig
 
 DEFAULT_CONFIGS = [
     "configs/market/us.yaml",
@@ -97,7 +97,7 @@ def _cli_cmd(
     extra_args: list[str] | None = None,
     config_paths: list[str] | None = None,
 ) -> list[str]:
-    cmd = [sys.executable, "-m", "treealpha.cli.backtest"]
+    cmd = [sys.executable, "-m", "moneytree.cli.backtest"]
     for config_path in config_paths or DEFAULT_CONFIGS:
         cmd.extend(["--config", config_path])
     cmd.extend(["--data", str(data_path), "--output-dir", str(output_dir)])
@@ -106,7 +106,7 @@ def _cli_cmd(
     return cmd
 
 
-def test_treealpha_cli_smoke(tmp_path: Path) -> None:
+def test_moneytree_cli_smoke(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "smoke.parquet"
     out_dir = tmp_path / "artifacts"
@@ -218,7 +218,7 @@ def test_treealpha_cli_smoke(tmp_path: Path) -> None:
     assert "Final Holdout OOS" in run_summary
 
 
-def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
+def test_moneytree_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "smoke_monthly.parquet"
     out_dir = tmp_path / "artifacts_monthly"
@@ -262,7 +262,7 @@ def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
     assert len(holdout_returns) == 4
 
 
-def test_treealpha_cli_cn_config_stack_emits_benchmark_neutral_outputs(tmp_path: Path) -> None:
+def test_moneytree_cli_cn_config_stack_emits_benchmark_neutral_outputs(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "cn_smoke.parquet"
     out_dir = tmp_path / "cn_artifacts"
@@ -325,7 +325,7 @@ def test_treealpha_cli_cn_config_stack_emits_benchmark_neutral_outputs(tmp_path:
     assert "Performance vs 000300.SH" in run_summary
 
 
-def test_treealpha_cli_uses_default_template_config_stack(tmp_path: Path) -> None:
+def test_moneytree_cli_uses_default_template_config_stack(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "default_stack.parquet"
     out_dir = tmp_path / "default_stack_artifacts"
@@ -335,7 +335,7 @@ def test_treealpha_cli_uses_default_template_config_stack(tmp_path: Path) -> Non
         [
             sys.executable,
             "-m",
-            "treealpha.cli.backtest",
+            "moneytree.cli.backtest",
             "--data",
             str(data_path),
             "--output-dir",
@@ -453,7 +453,7 @@ def test_build_run_summary_text_reports_holdout_overlap_note(
     assert f"Holdout overlap note: {expected_note}" in run_summary
 
 
-def test_treealpha_cli_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
+def test_moneytree_cli_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")
@@ -474,7 +474,7 @@ def test_treealpha_cli_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
     assert "Use --holdout-start and --holdout-end together." in result.stderr
 
 
-def test_treealpha_cli_rejects_test_months_below_one(tmp_path: Path) -> None:
+def test_moneytree_cli_rejects_test_months_below_one(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")
@@ -495,7 +495,7 @@ def test_treealpha_cli_rejects_test_months_below_one(tmp_path: Path) -> None:
     assert "--test-months must be >= 1." in result.stderr
 
 
-def test_treealpha_cli_rejects_negative_feature_lag(tmp_path: Path) -> None:
+def test_moneytree_cli_rejects_negative_feature_lag(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")

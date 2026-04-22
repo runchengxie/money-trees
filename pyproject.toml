@@ -22,7 +22,7 @@ dependencies = [
 xgboost = ["xgboost"]
 
 [project.scripts]
-moneytree = "treealpha.cli.backtest:main"
+moneytree = "moneytree.cli.backtest:main"
 
 [dependency-groups]
 dev = ["pytest"]

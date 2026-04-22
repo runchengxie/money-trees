@@ -10,14 +10,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from treealpha.backtest import (
+from moneytree.backtest import (
     build_benchmark_nav,
     build_rolling_windows,
     compute_performance_metrics,
     run_rolling_backtest,
 )
-from treealpha.config import BacktestSettings
-from treealpha.data import (
+from moneytree.config import BacktestSettings
+from moneytree.data import (
     apply_feature_lag,
     build_xy_target_returns,
     fill_missing_with_reference,
@@ -27,9 +27,9 @@ from treealpha.data import (
     save_market_data,
     slice_by_date,
 )
-from treealpha.markets import get_market_profile
-from treealpha.models import get_model_adapter
-from treealpha.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
+from moneytree.markets import get_market_profile
+from moneytree.models import get_model_adapter
+from moneytree.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
 
 ROOT = Path(__file__).resolve().parents[2]
 

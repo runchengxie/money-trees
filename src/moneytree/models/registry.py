@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from treealpha.models.base import BaseModelAdapter
-from treealpha.models.linear import ElasticNetAdapter, LassoAdapter, RidgeAdapter
-from treealpha.models.random_forest import RandomForestAdapter
-from treealpha.models.xgboost import XGBoostAdapter
+from moneytree.models.base import BaseModelAdapter
+from moneytree.models.linear import ElasticNetAdapter, LassoAdapter, RidgeAdapter
+from moneytree.models.random_forest import RandomForestAdapter
+from moneytree.models.xgboost import XGBoostAdapter
 
 
 _MODEL_REGISTRY: dict[str, BaseModelAdapter] = {

@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from treealpha.model import (
+from moneytree.model import (
     DEFAULT_RF_PARAMS,
     FeatureSelectionResult,
     fit_random_forest,
@@ -13,7 +13,7 @@ from treealpha.model import (
     sequential_feature_selection,
     tune_random_forest,
 )
-from treealpha.portfolio import build_signal_scores
+from moneytree.portfolio import build_signal_scores
 
 from .base import BaseModelAdapter, ModelCapabilities, ModelOutputs
 

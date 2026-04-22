@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from treealpha.config import load_backtest_settings
-from treealpha.runner import print_run_results, run_backtest
+from moneytree.config import load_backtest_settings
+from moneytree.runner import print_run_results, run_backtest
 
 DEFAULT_CONFIG_PATHS = [
     "configs/market/us.yaml",

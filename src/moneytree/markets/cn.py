@@ -7,7 +7,7 @@ import pandas as pd
 from .base import BaseMarketProfile
 
 if TYPE_CHECKING:
-    from treealpha.config import BacktestSettings
+    from moneytree.config import BacktestSettings
 
 
 class CNMarketProfile(BaseMarketProfile):
