@@ -58,6 +58,10 @@ uv sync --dev
 - `configs/model/rf.yaml`
 - `configs/backtest/default.yaml`
 
+如果你想跑接近原 notebook 的兼容路径，可以在最后再叠一层：
+
+- `configs/preset/notebook_compat.yaml`
+
 直接运行：
 
 ```bash
@@ -88,6 +92,20 @@ uv run moneytree \
   --set backtest.segment1_windows=1 \
   --set backtest.segment2_windows=1
 ```
+
+notebook 兼容 preset 示例：
+
+```bash
+uv run moneytree \
+  --config configs/market/us.yaml \
+  --config configs/model/rf.yaml \
+  --config configs/backtest/default.yaml \
+  --config configs/preset/notebook_compat.yaml \
+  --data data_small.parquet \
+  --output-dir artifacts/notebook-compat
+```
+
+这个 preset 依赖输入数据里存在 `pred_rel_return` 列。
 
 ## Smoke Test
 
@@ -129,6 +147,8 @@ configs/
     ridge.yaml
     lasso.yaml
     elasticnet.yaml
+  preset/
+    notebook_compat.yaml
 ```
 
 多文件配置会按传入顺序做深合并，适合把市场、模型和回测参数拆开维护。
@@ -157,16 +177,26 @@ configs/
 - `run_config.json`
 - `run_summary.txt`
 - `strategy_nav.csv`
+- `signal_nav.csv`
 - `benchmark_nav.csv`
 - `strategy_returns.csv`
 - `benchmark_returns.csv`
+- `signal_profit.csv`
 - `strategy_turnover.csv`
 - `active_names.csv`
 - `ic_series.csv`
 - `oos_period_diagnostics.csv`
 - `strategy_vs_benchmark.csv`
+- `notebook_report_navs.csv`
+- `notebook_rolling_beta.csv`
+- `notebook_residual_returns.csv`
+- `notebook_residual_distribution.csv`
 - `segment_a_features.txt`
 - `segment_b_features.txt`
+- 可选 `segment_a_selection_history.csv`
+- 可选 `segment_b_selection_history.csv`
+- 可选 `segment_a_feature_score_curve.csv`
+- 可选 `segment_b_feature_score_curve.csv`
 - 可选 `holdout/`
 
 对 `us` 路径，当前仍会额外保留 `spy_nav.csv`、`spy_returns.csv`、`strategy_vs_spy.csv` 作为兼容别名。

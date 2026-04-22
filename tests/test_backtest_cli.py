@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from moneytree.config import BacktestSettings
+from moneytree.config import BacktestSettings, load_backtest_settings
 from moneytree.markets import get_market_profile
 from moneytree.models import get_model_adapter
 from moneytree.runner import (
@@ -144,17 +144,23 @@ def test_moneytree_cli_smoke(tmp_path: Path) -> None:
 
     required = [
         "strategy_nav.csv",
+        "signal_nav.csv",
         "benchmark_nav.csv",
         "spy_nav.csv",
         "strategy_returns.csv",
         "benchmark_returns.csv",
         "spy_returns.csv",
+        "signal_profit.csv",
         "strategy_turnover.csv",
         "active_names.csv",
         "ic_series.csv",
         "oos_period_diagnostics.csv",
         "strategy_vs_benchmark.csv",
         "strategy_vs_spy.csv",
+        "notebook_report_navs.csv",
+        "notebook_rolling_beta.csv",
+        "notebook_residual_returns.csv",
+        "notebook_residual_distribution.csv",
         "metrics.json",
         "run_config.json",
         "run_summary.txt",
@@ -166,17 +172,23 @@ def test_moneytree_cli_smoke(tmp_path: Path) -> None:
 
     holdout_required = [
         "holdout/strategy_nav.csv",
+        "holdout/signal_nav.csv",
         "holdout/benchmark_nav.csv",
         "holdout/spy_nav.csv",
         "holdout/strategy_returns.csv",
         "holdout/benchmark_returns.csv",
         "holdout/spy_returns.csv",
+        "holdout/signal_profit.csv",
         "holdout/strategy_turnover.csv",
         "holdout/active_names.csv",
         "holdout/ic_series.csv",
         "holdout/oos_period_diagnostics.csv",
         "holdout/strategy_vs_benchmark.csv",
         "holdout/strategy_vs_spy.csv",
+        "holdout/notebook_report_navs.csv",
+        "holdout/notebook_rolling_beta.csv",
+        "holdout/notebook_residual_returns.csv",
+        "holdout/notebook_residual_distribution.csv",
         "holdout/metrics.json",
         "holdout/holdout_config.json",
     ]
@@ -291,20 +303,29 @@ def test_moneytree_cli_cn_config_stack_emits_benchmark_neutral_outputs(tmp_path:
 
     required = [
         "strategy_nav.csv",
+        "signal_nav.csv",
         "benchmark_nav.csv",
         "strategy_returns.csv",
         "benchmark_returns.csv",
+        "signal_profit.csv",
         "strategy_turnover.csv",
         "active_names.csv",
         "ic_series.csv",
         "oos_period_diagnostics.csv",
         "strategy_vs_benchmark.csv",
+        "notebook_report_navs.csv",
+        "notebook_rolling_beta.csv",
+        "notebook_residual_returns.csv",
+        "notebook_residual_distribution.csv",
         "metrics.json",
         "run_config.json",
         "run_summary.txt",
         "holdout/benchmark_nav.csv",
         "holdout/benchmark_returns.csv",
+        "holdout/signal_nav.csv",
+        "holdout/signal_profit.csv",
         "holdout/strategy_vs_benchmark.csv",
+        "holdout/notebook_report_navs.csv",
     ]
     for rel_path in required:
         assert (out_dir / rel_path).exists(), rel_path
@@ -363,6 +384,26 @@ def test_moneytree_cli_uses_default_template_config_stack(tmp_path: Path) -> Non
     assert (out_dir / "metrics.json").exists()
 
 
+def test_notebook_compat_preset_resolves_expected_overrides() -> None:
+    settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/us.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+            "configs/preset/notebook_compat.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+
+    assert settings.label_source == "pred_rel_return"
+    assert np.isclose(settings.label_threshold, 0.05)
+    assert settings.feature_lag_periods == 0
+    assert settings.feature_selection == "notebook_compat"
+    assert settings.n_trials == 200
+    assert settings.tuning_cv_folds == 1
+    assert np.isclose(settings.cost_bps, 0.0)
+
+
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:
     first = pd.Series(
         [1.0, 1.1],
@@ -408,6 +449,10 @@ def _holdout_stub(start: str, end: str) -> HoldoutResult:
         benchmark_returns=pd.Series([0.0, 0.01], index=idx, name="benchmark_ret"),
         strategy_turnover=pd.Series([0.5, 0.6], index=idx, name="strategy_turnover"),
         active_names=pd.Series([10, 12], index=idx, name="active_names"),
+        signal_nav=pd.Series([1.05, 1.16], index=idx, name="signal_nav"),
+        signal_profit=pd.Series([0.05, 0.10], index=idx, name="signal_profit"),
+        signal_turnover=pd.Series([0.4, 0.5], index=idx, name="signal_turnover"),
+        signal_active_names=pd.Series([9, 11], index=idx, name="signal_active_names"),
         period_ic=pd.Series([0.1, 0.2], index=idx, name="period_ic"),
         period_rank_ic=pd.Series([0.05, 0.15], index=idx, name="period_rank_ic"),
         metrics={"strategy_total_return": 0.1, "benchmark_total_return": 0.01},

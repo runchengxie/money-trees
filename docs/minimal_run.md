@@ -40,6 +40,20 @@ uv run moneytree \
   --output-dir ./artifacts/smoke
 ```
 
+如果你要对照 `referece_notebook/notebook.ipynb` 的标签和调参路径，再额外叠一层：
+
+```bash
+uv run moneytree \
+  --config configs/market/us.yaml \
+  --config configs/model/rf.yaml \
+  --config configs/backtest/default.yaml \
+  --config configs/preset/notebook_compat.yaml \
+  --data ./data_small.parquet \
+  --output-dir ./artifacts/notebook-compat
+```
+
+这个 preset 依赖数据里已有 `pred_rel_return` 列。
+
 ## 4. 开始做自己的市场适配
 
 建议顺序：

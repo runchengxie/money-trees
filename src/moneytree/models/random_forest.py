@@ -9,13 +9,14 @@ from moneytree.model import (
     DEFAULT_RF_PARAMS,
     FeatureSelectionResult,
     fit_random_forest,
+    notebook_compat_feature_selection,
     select_positive_importance_features,
     sequential_feature_selection,
     tune_random_forest,
 )
 from moneytree.portfolio import build_signal_scores
 
-from .base import BaseModelAdapter, ModelCapabilities, ModelOutputs
+from .base import BaseModelAdapter, ModelCapabilities, ModelOutputs, ModelPreparationResult
 
 
 class RandomForestAdapter(BaseModelAdapter):
@@ -23,7 +24,7 @@ class RandomForestAdapter(BaseModelAdapter):
     training_target_column = "rel_performance"
     capabilities = ModelCapabilities(
         supports_tuning=True,
-        supported_feature_selection=("none", "importance", "sequential"),
+        supported_feature_selection=("none", "importance", "sequential", "notebook_compat"),
         supports_probability_scores=True,
     )
 
@@ -151,4 +152,61 @@ class RandomForestAdapter(BaseModelAdapter):
             min_features=min_features,
             max_steps=max_steps,
             cost_bps=cost_bps,
+        )
+
+    def prepare_training(
+        self,
+        *,
+        train_x: pd.DataFrame,
+        train_y: np.ndarray,
+        train_returns: np.ndarray,
+        valid_x: pd.DataFrame,
+        valid_returns: np.ndarray,
+        feature_selection: str,
+        n_trials: int,
+        random_state: int,
+        cost_bps: float,
+        tuning_cv_folds: int,
+        min_features: int,
+        max_steps: int,
+        base_params: dict[str, Any] | None = None,
+    ) -> ModelPreparationResult:
+        if feature_selection != "notebook_compat":
+            return super().prepare_training(
+                train_x=train_x,
+                train_y=train_y,
+                train_returns=train_returns,
+                valid_x=valid_x,
+                valid_returns=valid_returns,
+                feature_selection=feature_selection,
+                n_trials=n_trials,
+                random_state=random_state,
+                cost_bps=cost_bps,
+                tuning_cv_folds=tuning_cv_folds,
+                min_features=min_features,
+                max_steps=max_steps,
+                base_params=base_params,
+            )
+
+        selected_features, model_params, tuning_best_value, selection_history = (
+            notebook_compat_feature_selection(
+                train_x=train_x,
+                train_y=train_y,
+                train_returns=train_returns,
+                valid_x=valid_x,
+                valid_returns=valid_returns,
+                base_params=base_params,
+                n_trials=n_trials,
+                random_state=random_state,
+                cost_bps=cost_bps,
+                tuning_cv_folds=tuning_cv_folds,
+                min_features=min_features,
+                max_steps=max_steps,
+            )
+        )
+        return ModelPreparationResult(
+            selected_features=selected_features,
+            model_params=model_params,
+            tuning_best_value=tuning_best_value,
+            selection_history=selection_history,
         )

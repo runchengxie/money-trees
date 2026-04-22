@@ -5,6 +5,7 @@ import pandas as pd
 
 from moneytree.backtest import (
     build_benchmark_nav,
+    build_notebook_report_artifacts,
     build_rolling_windows,
     build_spy_benchmark,
     compute_performance_metrics,
@@ -141,10 +142,17 @@ def test_run_rolling_backtest_outputs_stable_series() -> None:
     assert len(result.nav) == len(result.active_names)
     assert len(result.nav) == len(result.period_ic)
     assert len(result.nav) == len(result.period_rank_ic)
+    assert len(result.nav) == len(result.signal_nav)
+    assert len(result.nav) == len(result.signal_period_profit)
+    assert len(result.nav) == len(result.signal_turnover)
+    assert len(result.nav) == len(result.signal_active_names)
     assert len(result.nav) > 0
     assert not result.nav.isna().any()
+    assert not result.signal_nav.isna().any()
     assert not result.period_returns.isna().any()
+    assert not result.signal_period_profit.isna().any()
     assert not result.period_turnover.isna().any()
+    assert not result.signal_turnover.isna().any()
 
 
 def test_build_spy_benchmark_aligns_and_rebases_target_index() -> None:
@@ -186,3 +194,27 @@ def test_build_benchmark_nav_aligns_and_uses_canonical_name() -> None:
     assert benchmark_nav.name == "benchmark_nav"
     assert benchmark_nav.index.equals(target_index)
     assert np.isclose(float(benchmark_nav.iloc[0]), 1.0)
+
+
+def test_build_notebook_report_artifacts_exports_nav_beta_and_residuals() -> None:
+    idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30", "2021-12-31"])
+    strategy_ret = pd.Series([0.05, 0.02, -0.01, 0.03], index=idx, name="strategy_ret")
+    benchmark_ret = pd.Series([0.02, 0.01, -0.005, 0.01], index=idx, name="benchmark_ret")
+    strategy_nav = (1.0 + strategy_ret).cumprod().rename("strategy_nav")
+    benchmark_nav = (1.0 + benchmark_ret).cumprod().rename("benchmark_nav")
+    signal_nav = pd.Series([1.0, 1.03, 1.02, 1.05], index=idx, name="signal_nav")
+
+    report = build_notebook_report_artifacts(
+        strategy_nav=strategy_nav,
+        benchmark_nav=benchmark_nav,
+        signal_nav=signal_nav,
+        strategy_returns=strategy_ret,
+        benchmark_returns=benchmark_ret,
+        rolling_beta_window=3,
+        residual_bins=4,
+    )
+
+    assert {"strategy_nav", "benchmark_nav", "signal_nav", "hedged_nav"}.issubset(report.navs.columns)
+    assert report.rolling_beta.name == "rolling_beta"
+    assert report.residual_returns.name == "residual_return"
+    assert list(report.residual_distribution.columns) == ["bin_left", "bin_right", "count", "density"]

@@ -235,6 +235,26 @@ def _build_time_series_cv_splits(
     return splits
 
 
+def _suggest_random_forest_params(
+    trial: optuna.trial.Trial,
+    *,
+    search_space: str,
+) -> dict[str, Any]:
+    if search_space == "notebook_compat":
+        return {
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 50, 1200, step=50),
+            "max_depth": trial.suggest_int("max_depth", 5, 40, step=5),
+            "n_estimators": trial.suggest_int("n_estimators", 5, 50, step=5),
+            "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
+        }
+    return {
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 50, 1200, step=50),
+        "max_depth": trial.suggest_int("max_depth", 5, 40, step=5),
+        "n_estimators": trial.suggest_int("n_estimators", 10, 120, step=10),
+        "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
+    }
+
+
 def tune_random_forest(
     train_x: pd.DataFrame,
     train_y: np.ndarray,
@@ -245,6 +265,7 @@ def tune_random_forest(
     random_state: int = 123,
     cost_bps: float = 0.0,
     tuning_cv_folds: int = 1,
+    search_space: str = "default",
 ) -> tuple[dict[str, Any], float]:
     """Tune RF hyperparameters with trading profit as objective."""
 
@@ -253,12 +274,7 @@ def tune_random_forest(
     cv_splits = _build_time_series_cv_splits(train_x.index, tuning_cv_folds)
 
     def objective(trial: optuna.trial.Trial) -> float:
-        params = {
-            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 50, 1200, step=50),
-            "max_depth": trial.suggest_int("max_depth", 5, 40, step=5),
-            "n_estimators": trial.suggest_int("n_estimators", 10, 120, step=10),
-            "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
-        }
+        params = _suggest_random_forest_params(trial, search_space=search_space)
         if tuning_cv_folds > 1:
             fold_scores: list[float] = []
             for fold_id, (train_idx, valid_idx) in enumerate(cv_splits):
@@ -422,3 +438,94 @@ def sequential_feature_selection(
 
     history_frame = pd.DataFrame(history)
     return FeatureSelectionResult(selected_features=best_cols, history=history_frame)
+
+
+def notebook_compat_feature_selection(
+    train_x: pd.DataFrame,
+    train_y: np.ndarray,
+    train_returns: np.ndarray,
+    valid_x: pd.DataFrame,
+    valid_returns: np.ndarray,
+    base_params: dict[str, Any] | None = None,
+    n_trials: int = 50,
+    random_state: int = 123,
+    cost_bps: float = 0.0,
+    tuning_cv_folds: int = 1,
+    min_features: int = 2,
+    max_steps: int | None = None,
+) -> tuple[list[str], dict[str, Any], float, pd.DataFrame | None]:
+    """
+    Reproduce the notebook RF pipeline:
+    positive importance filter -> tune -> sequential permutation elimination -> retune.
+    """
+    initial_params = dict(DEFAULT_RF_PARAMS)
+    if base_params:
+        initial_params.update(base_params)
+
+    initial_model = fit_random_forest(
+        train_x=train_x,
+        train_y=train_y,
+        params=initial_params,
+        random_state=random_state,
+    )
+    selected_by_importance = select_positive_importance_features(initial_model, list(train_x.columns))
+    if len(selected_by_importance) < min_features:
+        ranked = feature_importance_frame(initial_model, list(train_x.columns))
+        selected_by_importance = ranked.head(min_features)["cols"].tolist()
+    train_importance = train_x[selected_by_importance]
+    valid_importance = valid_x[selected_by_importance]
+
+    tuned_params = dict(initial_params)
+    tuned_best_value = float("nan")
+    if n_trials > 0:
+        tuned_params, tuned_best_value = tune_random_forest(
+            train_x=train_importance,
+            train_y=train_y,
+            train_returns=train_returns,
+            valid_x=valid_importance,
+            valid_returns=valid_returns,
+            n_trials=n_trials,
+            random_state=random_state,
+            cost_bps=cost_bps,
+            tuning_cv_folds=tuning_cv_folds,
+            search_space="notebook_compat",
+        )
+        if base_params:
+            merged_tuned = dict(base_params)
+            merged_tuned.update(tuned_params)
+            tuned_params = merged_tuned
+
+    sequential = sequential_feature_selection(
+        train_x=train_importance,
+        train_y=train_y,
+        valid_x=valid_importance,
+        valid_returns=valid_returns,
+        params=tuned_params,
+        random_state=random_state,
+        min_features=min_features,
+        max_steps=max_steps,
+        cost_bps=cost_bps,
+    )
+    final_features = list(sequential.selected_features)
+
+    final_params = dict(tuned_params)
+    final_best_value = tuned_best_value
+    if n_trials > 0:
+        final_params, final_best_value = tune_random_forest(
+            train_x=train_importance[final_features],
+            train_y=train_y,
+            train_returns=train_returns,
+            valid_x=valid_importance[final_features],
+            valid_returns=valid_returns,
+            n_trials=n_trials,
+            random_state=random_state + 1,
+            cost_bps=cost_bps,
+            tuning_cv_folds=tuning_cv_folds,
+            search_space="notebook_compat",
+        )
+        if base_params:
+            merged_final = dict(base_params)
+            merged_final.update(final_params)
+            final_params = merged_final
+
+    return final_features, final_params, float(final_best_value), sequential.history

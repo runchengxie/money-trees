@@ -25,6 +25,14 @@ class ModelOutputs:
     classes_: np.ndarray | None = None
 
 
+@dataclass
+class ModelPreparationResult:
+    selected_features: list[str]
+    model_params: dict[str, Any]
+    tuning_best_value: float
+    selection_history: pd.DataFrame | None = None
+
+
 class BaseModelAdapter(ABC):
     model_id: str
     training_target_column: str
@@ -108,4 +116,52 @@ class BaseModelAdapter(ABC):
             return FeatureSelectionResult(selected_features=list(train_x.columns))
         raise ValueError(
             f"Model '{self.model_id}' does not implement feature selection method '{method}'."
+        )
+
+    def prepare_training(
+        self,
+        *,
+        train_x: pd.DataFrame,
+        train_y: np.ndarray,
+        train_returns: np.ndarray,
+        valid_x: pd.DataFrame,
+        valid_returns: np.ndarray,
+        feature_selection: str,
+        n_trials: int,
+        random_state: int,
+        cost_bps: float,
+        tuning_cv_folds: int,
+        min_features: int,
+        max_steps: int,
+        base_params: dict[str, Any] | None = None,
+    ) -> ModelPreparationResult:
+        params, best_value = self.tune(
+            train_x=train_x,
+            train_y=train_y,
+            train_returns=train_returns,
+            valid_x=valid_x,
+            valid_returns=valid_returns,
+            n_trials=n_trials,
+            random_state=random_state,
+            cost_bps=cost_bps,
+            tuning_cv_folds=tuning_cv_folds,
+            base_params=base_params,
+        )
+        selection = self.select_features(
+            method=feature_selection,
+            train_x=train_x,
+            train_y=train_y,
+            valid_x=valid_x,
+            valid_returns=valid_returns,
+            params=params,
+            random_state=random_state,
+            min_features=min_features,
+            max_steps=max_steps,
+            cost_bps=cost_bps,
+        )
+        return ModelPreparationResult(
+            selected_features=list(selection.selected_features),
+            model_params=params,
+            tuning_best_value=best_value,
+            selection_history=selection.history,
         )

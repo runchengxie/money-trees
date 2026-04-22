@@ -10,12 +10,11 @@ from scipy.stats import linregress
 
 from .data import (
     build_benchmark_series,
-    build_xy_returns,
     build_xy_target_returns,
     fill_missing_with_reference,
     slice_by_date,
 )
-from .model import fit_random_forest
+from .model import count_active_names, fit_random_forest, profit_with_estimated_turnover
 from .portfolio import (
     PortfolioConfig,
     build_portfolio_weights,
@@ -32,6 +31,18 @@ class BacktestResult:
     active_names: pd.Series
     period_ic: pd.Series
     period_rank_ic: pd.Series
+    signal_nav: pd.Series
+    signal_period_profit: pd.Series
+    signal_turnover: pd.Series
+    signal_active_names: pd.Series
+
+
+@dataclass
+class NotebookReportArtifacts:
+    navs: pd.DataFrame
+    rolling_beta: pd.Series
+    residual_returns: pd.Series
+    residual_distribution: pd.DataFrame
 
 
 def build_rolling_windows(
@@ -127,20 +138,27 @@ def run_rolling_backtest(
     random_state: int = 123,
     cost_bps: float = 0.0,
     initial_nav: float = 1.0,
+    initial_signal_nav: float | None = None,
     add_missing_indicators: bool = False,
     portfolio_config: PortfolioConfig | None = None,
     tradability_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
 ) -> BacktestResult:
     portfolio_cfg = PortfolioConfig() if portfolio_config is None else portfolio_config
     nav_value = float(initial_nav)
+    signal_nav_value = float(initial_nav if initial_signal_nav is None else initial_signal_nav)
     nav_points: list[float] = []
+    signal_nav_points: list[float] = []
     period_returns: list[float] = []
+    signal_period_profits: list[float] = []
     period_turnovers: list[float] = []
+    signal_turnovers: list[float] = []
     active_names: list[int] = []
+    signal_active_names: list[int] = []
     period_ic_values: list[float] = []
     period_rank_ic_values: list[float] = []
     period_dates: list[pd.Timestamp] = []
     previous_weights: pd.Series | None = None
+    previous_signal_weights: pd.Series | None = None
 
     for idx, (train_start, train_end, test_start, test_end) in enumerate(windows):
         train_raw = slice_by_date(frame, train_start, train_end)
@@ -234,7 +252,15 @@ def run_rolling_backtest(
             cost_bps=cost_bps,
             previous_weights=previous_weights,
         )
+        signal_profit, signal_weights, signal_turnover = profit_with_estimated_turnover(
+            predictions=np.asarray(preds, dtype=int),
+            realized_returns=test_returns,
+            cost_bps=cost_bps,
+            sample_index=test_x.index,
+            previous_weights=previous_signal_weights,
+        )
         previous_weights = current_weights
+        previous_signal_weights = signal_weights
         period_ic, period_rank_ic = _compute_period_ic(
             predictions=signal_scores,
             realized_returns=test_returns,
@@ -242,18 +268,27 @@ def run_rolling_backtest(
         )
 
         nav_value *= 1.0 + period_return
+        signal_nav_value *= 1.0 + signal_profit
         nav_points.append(nav_value)
+        signal_nav_points.append(signal_nav_value)
         period_returns.append(period_return)
+        signal_period_profits.append(signal_profit)
         period_turnovers.append(turnover)
+        signal_turnovers.append(signal_turnover)
         active_names.append(int(len(current_weights)))
+        signal_active_names.append(count_active_names(np.asarray(preds, dtype=int), test_x.index))
         period_ic_values.append(period_ic)
         period_rank_ic_values.append(period_rank_ic)
         period_dates.append(_resolve_period_date(test_frame, fallback=test_end))
 
     nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
+    signal_nav = pd.Series(signal_nav_points, index=period_dates, name="signal_nav")
     returns = pd.Series(period_returns, index=period_dates, name="strategy_ret")
+    signal_profit_series = pd.Series(signal_period_profits, index=period_dates, name="signal_profit")
     turnover = pd.Series(period_turnovers, index=period_dates, name="strategy_turnover")
+    signal_turnover_series = pd.Series(signal_turnovers, index=period_dates, name="signal_turnover")
     active = pd.Series(active_names, index=period_dates, name="active_names")
+    signal_active = pd.Series(signal_active_names, index=period_dates, name="signal_active_names")
     period_ic = pd.Series(period_ic_values, index=period_dates, name="period_ic")
     period_rank_ic = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
     return BacktestResult(
@@ -263,6 +298,10 @@ def run_rolling_backtest(
         active_names=active,
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
+        signal_nav=signal_nav,
+        signal_period_profit=signal_profit_series,
+        signal_turnover=signal_turnover_series,
+        signal_active_names=signal_active,
     )
 
 
@@ -300,6 +339,98 @@ def build_spy_benchmark(
     )
     legacy.name = "spy_nav"
     return legacy
+
+
+def build_notebook_report_artifacts(
+    *,
+    strategy_nav: pd.Series,
+    benchmark_nav: pd.Series,
+    signal_nav: pd.Series | None = None,
+    strategy_returns: pd.Series | None = None,
+    benchmark_returns: pd.Series | None = None,
+    rolling_beta_window: int = 8,
+    residual_bins: int = 10,
+) -> NotebookReportArtifacts:
+    navs = pd.concat([strategy_nav, benchmark_nav], axis=1)
+    if signal_nav is not None and not signal_nav.empty:
+        navs = pd.concat([navs, signal_nav], axis=1)
+
+    if strategy_returns is None:
+        strategy_ret = strategy_nav.pct_change()
+    else:
+        strategy_ret = strategy_returns.copy()
+    if benchmark_returns is None:
+        benchmark_ret = benchmark_nav.pct_change()
+    else:
+        benchmark_ret = benchmark_returns.copy()
+
+    aligned_ret = pd.concat([strategy_ret, benchmark_ret], axis=1).dropna()
+    aligned_ret.columns = ["strategy_ret", "benchmark_ret"]
+    if aligned_ret.empty:
+        return NotebookReportArtifacts(
+            navs=navs,
+            rolling_beta=pd.Series(dtype=float, name="rolling_beta"),
+            residual_returns=pd.Series(dtype=float, name="residual_return"),
+            residual_distribution=pd.DataFrame(
+                columns=["bin_left", "bin_right", "count", "density"]
+            ),
+        )
+
+    beta = float("nan")
+    alpha = float("nan")
+    if len(aligned_ret) >= 2:
+        reg = linregress(aligned_ret["benchmark_ret"].to_numpy(), aligned_ret["strategy_ret"].to_numpy())
+        beta = float(reg.slope)
+        alpha = float(reg.intercept)
+
+    if np.isfinite(beta):
+        hedged_ret = aligned_ret["strategy_ret"] - beta * aligned_ret["benchmark_ret"]
+        hedged_nav = (1.0 + hedged_ret).cumprod()
+        hedged_nav.name = "hedged_nav"
+        navs = pd.concat([navs, hedged_nav], axis=1)
+    else:
+        hedged_ret = pd.Series(dtype=float, name="hedged_return")
+
+    rolling_beta = pd.Series(dtype=float, name="rolling_beta")
+    if len(aligned_ret) >= 2:
+        window = max(2, min(int(rolling_beta_window), len(aligned_ret)))
+        rolling_cov = aligned_ret["strategy_ret"].rolling(window).cov(aligned_ret["benchmark_ret"])
+        rolling_var = aligned_ret["benchmark_ret"].rolling(window).var()
+        rolling_beta = (rolling_cov / rolling_var).rename("rolling_beta")
+
+    residual_returns = pd.Series(dtype=float, name="residual_return")
+    residual_distribution = pd.DataFrame(columns=["bin_left", "bin_right", "count", "density"])
+    if np.isfinite(alpha) and np.isfinite(beta):
+        residual_returns = (
+            aligned_ret["strategy_ret"] - (alpha + beta * aligned_ret["benchmark_ret"])
+        ).rename("residual_return")
+        clean_residuals = residual_returns.dropna()
+        if not clean_residuals.empty:
+            bin_count = max(1, min(int(residual_bins), int(np.sqrt(len(clean_residuals))) or 1))
+            counts, edges = np.histogram(clean_residuals.to_numpy(), bins=bin_count)
+            widths = np.diff(edges)
+            total = int(counts.sum())
+            density = np.divide(
+                counts,
+                total * widths,
+                out=np.zeros_like(widths, dtype=float),
+                where=(widths > 0) & (total > 0),
+            )
+            residual_distribution = pd.DataFrame(
+                {
+                    "bin_left": edges[:-1],
+                    "bin_right": edges[1:],
+                    "count": counts,
+                    "density": density,
+                }
+            )
+
+    return NotebookReportArtifacts(
+        navs=navs,
+        rolling_beta=rolling_beta,
+        residual_returns=residual_returns,
+        residual_distribution=residual_distribution,
+    )
 
 
 def compute_performance_metrics(

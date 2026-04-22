@@ -5,6 +5,7 @@ import pandas as pd
 
 from moneytree.model import (
     estimate_turnover,
+    notebook_compat_feature_selection,
     profit_with_estimated_turnover,
     score_predictions_over_time,
     sequential_feature_selection,
@@ -156,3 +157,64 @@ def test_tune_random_forest_supports_time_series_cv() -> None:
         best_params.keys()
     )
     assert np.isfinite(best_value)
+
+
+def test_tune_random_forest_notebook_search_space_uses_notebook_ranges() -> None:
+    rng = np.random.default_rng(17)
+    dates = pd.date_range("2018-03-31", periods=8, freq="QE")
+    tickers = ["A", "B"]
+    index = pd.MultiIndex.from_product([dates, tickers], names=["date", "ticker"])
+    train_x = pd.DataFrame({"f1": rng.normal(size=len(index))}, index=index)
+    train_y = rng.choice([-1, 0, 1], size=len(index))
+    train_returns = rng.normal(loc=0.001, scale=0.02, size=len(index))
+
+    best_params, _ = tune_random_forest(
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=train_returns,
+        valid_x=train_x.iloc[:4],
+        valid_returns=train_returns[:4],
+        n_trials=1,
+        random_state=3,
+        search_space="notebook_compat",
+    )
+
+    assert 5 <= best_params["n_estimators"] <= 50
+    assert best_params["n_estimators"] % 5 == 0
+
+
+def test_notebook_compat_feature_selection_runs_full_pipeline() -> None:
+    rng = np.random.default_rng(23)
+    cols = ["f1", "f2", "f3", "f4", "f5"]
+    dates = pd.date_range("2019-03-31", periods=10, freq="QE")
+    tickers = ["A", "B", "C"]
+    index = pd.MultiIndex.from_product([dates, tickers], names=["date", "ticker"])
+    train_x = pd.DataFrame(rng.normal(size=(len(index), len(cols))), index=index, columns=cols)
+    train_y = rng.choice([-1, 0, 1], size=len(index))
+    train_returns = rng.normal(loc=0.001, scale=0.02, size=len(index))
+    valid_x = train_x.iloc[:12].copy()
+    valid_returns = train_returns[:12]
+
+    selected_features, final_params, best_value, history = notebook_compat_feature_selection(
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=train_returns,
+        valid_x=valid_x,
+        valid_returns=valid_returns,
+        base_params={
+            "n_estimators": 20,
+            "max_depth": 10,
+            "min_samples_leaf": 50,
+            "max_features": "sqrt",
+        },
+        n_trials=1,
+        random_state=5,
+        min_features=2,
+        max_steps=3,
+    )
+
+    assert len(selected_features) >= 2
+    assert set(selected_features).issubset(set(cols))
+    assert {"n_estimators", "max_depth", "min_samples_leaf", "max_features"} == set(final_params.keys())
+    assert np.isfinite(best_value)
+    assert history is None or "score" in history.columns

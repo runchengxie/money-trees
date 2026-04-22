@@ -1,0 +1,17 @@
+market:
+  label_source: pred_rel_return
+  label_threshold: 0.05
+  feature_lag_periods: 0
+
+model:
+  params:
+    n_estimators: 100
+    max_depth: 35
+    min_samples_leaf: 50
+    max_features: sqrt
+  feature_selection: notebook_compat
+  n_trials: 200
+  tuning_cv_folds: 1
+
+backtest:
+  cost_bps: 0.0

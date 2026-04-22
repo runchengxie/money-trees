@@ -12,6 +12,7 @@ import pandas as pd
 
 from moneytree.backtest import (
     build_benchmark_nav,
+    build_notebook_report_artifacts,
     build_rolling_windows,
     compute_performance_metrics,
     run_rolling_backtest,
@@ -29,6 +30,7 @@ from moneytree.data import (
 )
 from moneytree.markets import get_market_profile
 from moneytree.models import get_model_adapter
+from moneytree.model import count_active_names, profit_with_estimated_turnover
 from moneytree.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,9 +72,14 @@ class HoldoutResult:
     benchmark_returns: pd.Series
     strategy_turnover: pd.Series
     active_names: pd.Series
+    signal_nav: pd.Series
+    signal_profit: pd.Series
+    signal_turnover: pd.Series
+    signal_active_names: pd.Series
     period_ic: pd.Series
     period_rank_ic: pd.Series
     metrics: dict[str, float]
+
 
 def build_portfolio_config(settings: BacktestSettings) -> PortfolioConfig:
     return PortfolioConfig(
@@ -150,39 +157,29 @@ def fit_segment_model(
     )
 
     seed = settings.random_seed + seed_offset
-    best_params, best_value = model_adapter.tune(
+    prepared = model_adapter.prepare_training(
         train_x=train_x,
         train_y=train_y,
         train_returns=train_returns,
         valid_x=valid_x,
         valid_returns=valid_returns,
+        feature_selection=settings.feature_selection,
         n_trials=settings.n_trials,
         random_state=seed,
         cost_bps=settings.cost_bps,
         tuning_cv_folds=settings.tuning_cv_folds,
-        base_params=settings.model_params,
-    )
-
-    selection = model_adapter.select_features(
-        method=settings.feature_selection,
-        train_x=train_x,
-        train_y=train_y,
-        valid_x=valid_x,
-        valid_returns=valid_returns,
-        params=best_params,
-        random_state=seed,
         min_features=settings.min_features,
         max_steps=settings.max_selection_steps,
-        cost_bps=settings.cost_bps,
+        base_params=settings.model_params,
     )
-    selected_features = list(selection.selected_features)
+    selected_features = list(prepared.selected_features)
 
     train_sel = train_x[selected_features]
     valid_sel = valid_x[selected_features]
     model = model_adapter.fit(
         train_x=train_sel,
         train_y=train_y,
-        params=best_params,
+        params=prepared.model_params,
         random_state=seed,
     )
     outputs = model_adapter.predict_outputs(model=model, features=valid_sel)
@@ -208,12 +205,12 @@ def fit_segment_model(
     )
     return SegmentFitResult(
         feature_columns=selected_features,
-        model_params=best_params,
+        model_params=prepared.model_params,
         validation_profit=valid_profit,
         validation_turnover=valid_turnover,
         validation_active_names=int(len(valid_weights)),
-        tuning_best_value=best_value,
-        selection_history=selection.history,
+        tuning_best_value=prepared.tuning_best_value,
+        selection_history=prepared.selection_history,
     )
 
 
@@ -358,11 +355,17 @@ def _build_holdout_result(
     period_returns: list[float] = []
     period_turnover: list[float] = []
     period_active_names: list[int] = []
+    signal_period_profits: list[float] = []
+    signal_turnovers: list[float] = []
+    signal_active_name_counts: list[int] = []
     period_ic_values: list[float] = []
     period_rank_ic_values: list[float] = []
     nav_points: list[float] = []
     nav_value = 1.0
+    signal_nav_points: list[float] = []
+    signal_nav_value = 1.0
     previous_weights: pd.Series | None = None
+    previous_signal_weights: pd.Series | None = None
     holdout_date_values = pd.Index(holdout_x.index.get_level_values("date"))
 
     for period_start, period_end in _build_holdout_period_ranges(
@@ -392,25 +395,48 @@ def _build_holdout_result(
             cost_bps=settings.cost_bps,
             previous_weights=previous_weights,
         )
+        signal_profit, signal_weights, signal_turnover = profit_with_estimated_turnover(
+            predictions=np.asarray(holdout_predictions[mask], dtype=int),
+            realized_returns=holdout_returns[mask],
+            cost_bps=settings.cost_bps,
+            sample_index=idx,
+            previous_weights=previous_signal_weights,
+        )
         previous_weights = current_weights
+        previous_signal_weights = signal_weights
         ic_value, rank_ic_value = _period_ic(
             predictions=holdout_scores[mask],
             realized_returns=holdout_returns[mask],
             sample_index=idx,
         )
         nav_value *= 1.0 + period_profit
+        signal_nav_value *= 1.0 + signal_profit
         nav_points.append(nav_value)
+        signal_nav_points.append(signal_nav_value)
         period_dates.append(_resolve_period_date_from_index(idx, fallback=period_end))
         period_returns.append(float(period_profit))
         period_turnover.append(float(turnover))
         period_active_names.append(int(len(current_weights)))
+        signal_period_profits.append(float(signal_profit))
+        signal_turnovers.append(float(signal_turnover))
+        signal_active_name_counts.append(
+            count_active_names(np.asarray(holdout_predictions[mask], dtype=int), idx)
+        )
         period_ic_values.append(float(ic_value))
         period_rank_ic_values.append(float(rank_ic_value))
 
     strategy_nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
+    signal_nav = pd.Series(signal_nav_points, index=period_dates, name="signal_nav")
     strategy_returns = pd.Series(period_returns, index=period_dates, name="strategy_ret")
+    signal_profit_series = pd.Series(signal_period_profits, index=period_dates, name="signal_profit")
     strategy_turnover = pd.Series(period_turnover, index=period_dates, name="strategy_turnover")
+    signal_turnover_series = pd.Series(signal_turnovers, index=period_dates, name="signal_turnover")
     active_names = pd.Series(period_active_names, index=period_dates, name="active_names")
+    signal_active_names = pd.Series(
+        signal_active_name_counts,
+        index=period_dates,
+        name="signal_active_names",
+    )
     period_ic_series = pd.Series(period_ic_values, index=period_dates, name="period_ic")
     period_rank_ic_series = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
     benchmark_nav = build_benchmark_nav(
@@ -444,6 +470,10 @@ def _build_holdout_result(
         benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
         active_names=active_names,
+        signal_nav=signal_nav,
+        signal_profit=signal_profit_series,
+        signal_turnover=signal_turnover_series,
+        signal_active_names=signal_active_names,
         period_ic=period_ic_series,
         period_rank_ic=period_rank_ic_series,
         metrics=metrics,
@@ -549,6 +579,9 @@ def build_run_summary_text(
         "",
         "Artifacts",
         "- OOS period-level diagnostics are exported to oos_period_diagnostics.csv.",
+        "- Signal oracle diagnostics are exported to signal_nav.csv and signal_profit.csv.",
+        "- Notebook-style report datasets are exported to notebook_report_navs.csv, notebook_rolling_beta.csv, and notebook_residual_*.csv.",
+        "- Feature score curves are exported when selection history is available.",
     ]
     if holdout_result is not None:
         hm = holdout_result.metrics
@@ -573,8 +606,47 @@ def build_run_summary_text(
                 overlap_note,
                 "- Holdout artifacts are exported to holdout/*.csv and holdout/metrics.json.",
             ]
-        )
+    )
     return "\n".join(lines)
+
+
+def _write_selection_curve(path: Path, history: pd.DataFrame | None) -> None:
+    if history is None or history.empty:
+        return
+    curve = history.rename(
+        columns={
+            "n_features": "feature_count",
+            "score": "validation_signal_profit",
+        }
+    ).copy()
+    curve.to_csv(path, index=False)
+
+
+def _write_notebook_report_files(
+    *,
+    out_dir: Path,
+    strategy_nav: pd.Series,
+    benchmark_nav: pd.Series,
+    signal_nav: pd.Series,
+    strategy_returns: pd.Series,
+    benchmark_returns: pd.Series,
+) -> None:
+    report = build_notebook_report_artifacts(
+        strategy_nav=strategy_nav,
+        benchmark_nav=benchmark_nav,
+        signal_nav=signal_nav,
+        strategy_returns=strategy_returns,
+        benchmark_returns=benchmark_returns,
+    )
+    report.navs.to_csv(out_dir / "notebook_report_navs.csv")
+    report.rolling_beta.to_frame(name="rolling_beta").to_csv(out_dir / "notebook_rolling_beta.csv")
+    report.residual_returns.to_frame(name="residual_return").to_csv(
+        out_dir / "notebook_residual_returns.csv"
+    )
+    report.residual_distribution.to_csv(
+        out_dir / "notebook_residual_distribution.csv",
+        index=False,
+    )
 
 
 def write_outputs(
@@ -582,11 +654,15 @@ def write_outputs(
     out_dir: Path,
     benchmark_name: str,
     strategy_nav: pd.Series,
+    signal_nav: pd.Series,
     benchmark_nav: pd.Series,
     strategy_returns: pd.Series,
+    signal_profit: pd.Series,
     benchmark_returns: pd.Series,
     strategy_turnover: pd.Series,
     active_names: pd.Series,
+    signal_turnover: pd.Series,
+    signal_active_names: pd.Series,
     period_ic: pd.Series,
     period_rank_ic: pd.Series,
     segment_a: SegmentFitResult,
@@ -598,9 +674,18 @@ def write_outputs(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     strategy_nav.to_frame(name="strategy_nav").to_csv(out_dir / "strategy_nav.csv")
+    signal_nav.to_frame(name="signal_nav").to_csv(out_dir / "signal_nav.csv")
     benchmark_nav.to_frame(name="benchmark_nav").to_csv(out_dir / "benchmark_nav.csv")
     strategy_returns.to_frame(name="strategy_ret").to_csv(out_dir / "strategy_returns.csv")
     benchmark_returns.to_frame(name="benchmark_ret").to_csv(out_dir / "benchmark_returns.csv")
+    pd.concat(
+        [
+            signal_profit.rename("signal_profit"),
+            signal_turnover.rename("signal_turnover"),
+            signal_active_names.rename("signal_active_names"),
+        ],
+        axis=1,
+    ).to_csv(out_dir / "signal_profit.csv")
     strategy_turnover.to_frame(name="strategy_turnover").to_csv(out_dir / "strategy_turnover.csv")
     active_names.to_frame(name="active_names").to_csv(out_dir / "active_names.csv")
     pd.concat([period_ic, period_rank_ic], axis=1).to_csv(out_dir / "ic_series.csv")
@@ -609,8 +694,11 @@ def write_outputs(
         [
             strategy_returns.rename("strategy_ret"),
             benchmark_returns.rename("benchmark_ret"),
+            signal_profit.rename("signal_profit"),
             strategy_turnover.rename("strategy_turnover"),
+            signal_turnover.rename("signal_turnover"),
             active_names.rename("active_names"),
+            signal_active_names.rename("signal_active_names"),
             period_ic.rename("period_ic"),
             period_rank_ic.rename("period_rank_ic"),
         ],
@@ -630,11 +718,24 @@ def write_outputs(
     }
     summary.update(metrics)
     summary["benchmark_name"] = benchmark_name
+    summary["signal_total_return"] = (
+        float(signal_nav.iloc[-1] / signal_nav.iloc[0] - 1.0)
+        if len(signal_nav) > 0 and float(signal_nav.iloc[0]) != 0.0
+        else float("nan")
+    )
     (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
     (out_dir / "run_summary.txt").write_text(run_summary_text + "\n", encoding="utf-8")
     (out_dir / "segment_a_features.txt").write_text("\n".join(segment_a.feature_columns), encoding="utf-8")
     (out_dir / "segment_b_features.txt").write_text("\n".join(segment_b.feature_columns), encoding="utf-8")
+    _write_notebook_report_files(
+        out_dir=out_dir,
+        strategy_nav=strategy_nav,
+        benchmark_nav=benchmark_nav,
+        signal_nav=signal_nav,
+        strategy_returns=strategy_returns,
+        benchmark_returns=benchmark_returns,
+    )
     if write_legacy_spy_aliases:
         benchmark_nav.to_frame(name="spy_nav").to_csv(out_dir / "spy_nav.csv")
         benchmark_returns.to_frame(name="spy_ret").to_csv(out_dir / "spy_returns.csv")
@@ -644,8 +745,10 @@ def write_outputs(
         ).to_csv(out_dir / "strategy_vs_spy.csv")
     if segment_a.selection_history is not None and not segment_a.selection_history.empty:
         segment_a.selection_history.to_csv(out_dir / "segment_a_selection_history.csv", index=False)
+        _write_selection_curve(out_dir / "segment_a_feature_score_curve.csv", segment_a.selection_history)
     if segment_b.selection_history is not None and not segment_b.selection_history.empty:
         segment_b.selection_history.to_csv(out_dir / "segment_b_selection_history.csv", index=False)
+        _write_selection_curve(out_dir / "segment_b_feature_score_curve.csv", segment_b.selection_history)
 
 
 def write_holdout_outputs(
@@ -657,9 +760,18 @@ def write_holdout_outputs(
     holdout_dir = out_dir / "holdout"
     holdout_dir.mkdir(parents=True, exist_ok=True)
     holdout.strategy_nav.to_frame(name="strategy_nav").to_csv(holdout_dir / "strategy_nav.csv")
+    holdout.signal_nav.to_frame(name="signal_nav").to_csv(holdout_dir / "signal_nav.csv")
     holdout.benchmark_nav.to_frame(name="benchmark_nav").to_csv(holdout_dir / "benchmark_nav.csv")
     holdout.strategy_returns.to_frame(name="strategy_ret").to_csv(holdout_dir / "strategy_returns.csv")
     holdout.benchmark_returns.to_frame(name="benchmark_ret").to_csv(holdout_dir / "benchmark_returns.csv")
+    pd.concat(
+        [
+            holdout.signal_profit.rename("signal_profit"),
+            holdout.signal_turnover.rename("signal_turnover"),
+            holdout.signal_active_names.rename("signal_active_names"),
+        ],
+        axis=1,
+    ).to_csv(holdout_dir / "signal_profit.csv")
     holdout.strategy_turnover.to_frame(name="strategy_turnover").to_csv(holdout_dir / "strategy_turnover.csv")
     holdout.active_names.to_frame(name="active_names").to_csv(holdout_dir / "active_names.csv")
     pd.concat([holdout.period_ic, holdout.period_rank_ic], axis=1).to_csv(holdout_dir / "ic_series.csv")
@@ -670,13 +782,24 @@ def write_holdout_outputs(
         [
             holdout.strategy_returns.rename("strategy_ret"),
             holdout.benchmark_returns.rename("benchmark_ret"),
+            holdout.signal_profit.rename("signal_profit"),
             holdout.strategy_turnover.rename("strategy_turnover"),
+            holdout.signal_turnover.rename("signal_turnover"),
             holdout.active_names.rename("active_names"),
+            holdout.signal_active_names.rename("signal_active_names"),
             holdout.period_ic.rename("period_ic"),
             holdout.period_rank_ic.rename("period_rank_ic"),
         ],
         axis=1,
     ).to_csv(holdout_dir / "oos_period_diagnostics.csv")
+    _write_notebook_report_files(
+        out_dir=holdout_dir,
+        strategy_nav=holdout.strategy_nav,
+        benchmark_nav=holdout.benchmark_nav,
+        signal_nav=holdout.signal_nav,
+        strategy_returns=holdout.strategy_returns,
+        benchmark_returns=holdout.benchmark_returns,
+    )
     (holdout_dir / "metrics.json").write_text(json.dumps(holdout.metrics, indent=2), encoding="utf-8")
     (holdout_dir / "holdout_config.json").write_text(
         json.dumps(
@@ -866,6 +989,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         random_state=settings.random_seed,
         cost_bps=settings.cost_bps,
         initial_nav=1.0,
+        initial_signal_nav=1.0,
         add_missing_indicators=settings.add_missing_indicators,
         portfolio_config=portfolio_cfg,
         tradability_filter=lambda frame_slice: market_profile.filter_tradable_frame(
@@ -889,6 +1013,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         random_state=settings.random_seed + 2000,
         cost_bps=settings.cost_bps,
         initial_nav=float(bt_a.nav.iloc[-1]) if not bt_a.nav.empty else 1.0,
+        initial_signal_nav=float(bt_a.signal_nav.iloc[-1]) if not bt_a.signal_nav.empty else 1.0,
         add_missing_indicators=settings.add_missing_indicators,
         portfolio_config=portfolio_cfg,
         tradability_filter=lambda frame_slice: market_profile.filter_tradable_frame(
@@ -898,13 +1023,29 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     )
 
     strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav, name="strategy_nav")
+    signal_nav = combine_backtest_segments(bt_a.signal_nav, bt_b.signal_nav, name="signal_nav")
     strategy_returns = combine_backtest_segments(bt_a.period_returns, bt_b.period_returns, name="strategy_ret")
+    signal_profit = combine_backtest_segments(
+        bt_a.signal_period_profit,
+        bt_b.signal_period_profit,
+        name="signal_profit",
+    )
     strategy_turnover = combine_backtest_segments(
         bt_a.period_turnover,
         bt_b.period_turnover,
         name="strategy_turnover",
     )
+    signal_turnover = combine_backtest_segments(
+        bt_a.signal_turnover,
+        bt_b.signal_turnover,
+        name="signal_turnover",
+    )
     active_names = combine_backtest_segments(bt_a.active_names, bt_b.active_names, name="active_names")
+    signal_active_names = combine_backtest_segments(
+        bt_a.signal_active_names,
+        bt_b.signal_active_names,
+        name="signal_active_names",
+    )
     period_ic = combine_backtest_segments(bt_a.period_ic, bt_b.period_ic, name="period_ic")
     period_rank_ic = combine_backtest_segments(bt_a.period_rank_ic, bt_b.period_rank_ic, name="period_rank_ic")
     benchmark_nav = build_benchmark_nav(frame, strategy_nav.index, benchmark_cum_col="benchmark_cum_ret")
@@ -959,11 +1100,15 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         out_dir=out_dir,
         benchmark_name=settings.benchmark_name,
         strategy_nav=strategy_nav,
+        signal_nav=signal_nav,
         benchmark_nav=benchmark_nav,
         strategy_returns=strategy_returns,
+        signal_profit=signal_profit,
         benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
+        signal_turnover=signal_turnover,
         active_names=active_names,
+        signal_active_names=signal_active_names,
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
         segment_a=segment_a,
