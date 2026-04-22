@@ -266,43 +266,70 @@ def run_rolling_backtest(
     )
 
 
+def build_benchmark_nav(
+    frame: pd.DataFrame,
+    target_index: pd.Index,
+    frequency: str = "QE",
+    benchmark_cum_col: str | None = None,
+) -> pd.Series:
+    benchmark = build_benchmark_series(frame, benchmark_cum_col=benchmark_cum_col).resample(
+        frequency
+    ).ffill()
+    if benchmark.empty:
+        return pd.Series(dtype=float, name="benchmark_nav")
+
+    benchmark_nav = benchmark - float(benchmark.iloc[0]) + 1.0
+    aligned = benchmark_nav.reindex(target_index, method="ffill")
+    if not aligned.empty:
+        aligned = aligned - float(aligned.iloc[0]) + 1.0
+    aligned.name = "benchmark_nav"
+    return aligned
+
+
 def build_spy_benchmark(
     frame: pd.DataFrame,
     target_index: pd.Index,
     frequency: str = "QE",
     benchmark_cum_col: str | None = None,
 ) -> pd.Series:
-    spy = build_benchmark_series(frame, benchmark_cum_col=benchmark_cum_col).resample(
-        frequency
-    ).ffill()
-    if spy.empty:
-        return pd.Series(dtype=float, name="spy_nav")
-
-    spy_nav = spy - float(spy.iloc[0]) + 1.0
-    aligned = spy_nav.reindex(target_index, method="ffill")
-    if not aligned.empty:
-        aligned = aligned - float(aligned.iloc[0]) + 1.0
-    aligned.name = "spy_nav"
-    return aligned
+    legacy = build_benchmark_nav(
+        frame=frame,
+        target_index=target_index,
+        frequency=frequency,
+        benchmark_cum_col=benchmark_cum_col,
+    )
+    legacy.name = "spy_nav"
+    return legacy
 
 
 def compute_performance_metrics(
     strategy_nav: pd.Series,
-    spy_nav: pd.Series,
+    benchmark_nav: pd.Series | None = None,
     strategy_returns: pd.Series | None = None,
-    spy_returns: pd.Series | None = None,
+    benchmark_returns: pd.Series | None = None,
     strategy_turnover: pd.Series | None = None,
     active_names: pd.Series | None = None,
     period_ic: pd.Series | None = None,
     period_rank_ic: pd.Series | None = None,
     periods_per_year: float = 4.0,
     var_confidence: float = 0.95,
+    include_legacy_spy_aliases: bool = False,
+    *,
+    spy_nav: pd.Series | None = None,
+    spy_returns: pd.Series | None = None,
 ) -> dict[str, float]:
+    if benchmark_nav is None:
+        benchmark_nav = spy_nav
+    if benchmark_nav is None:
+        raise ValueError("benchmark_nav is required.")
+    if benchmark_returns is None and spy_returns is not None:
+        benchmark_returns = spy_returns
+
     if strategy_nav.empty:
         return {}
 
-    aligned_nav = pd.concat([strategy_nav, spy_nav], axis=1).dropna()
-    aligned_nav.columns = ["strategy_nav", "spy_nav"]
+    aligned_nav = pd.concat([strategy_nav, benchmark_nav], axis=1).dropna()
+    aligned_nav.columns = ["strategy_nav", "benchmark_nav"]
     if aligned_nav.empty:
         return {}
 
@@ -310,42 +337,42 @@ def compute_performance_metrics(
         strategy_ret = aligned_nav["strategy_nav"].pct_change()
     else:
         strategy_ret = strategy_returns.copy()
-    if spy_returns is None:
-        spy_ret = aligned_nav["spy_nav"].pct_change()
+    if benchmark_returns is None:
+        benchmark_ret = aligned_nav["benchmark_nav"].pct_change()
     else:
-        spy_ret = spy_returns.copy()
+        benchmark_ret = benchmark_returns.copy()
 
-    aligned_ret = pd.concat([strategy_ret, spy_ret], axis=1).dropna()
-    aligned_ret.columns = ["strategy_ret", "spy_ret"]
+    aligned_ret = pd.concat([strategy_ret, benchmark_ret], axis=1).dropna()
+    aligned_ret.columns = ["strategy_ret", "benchmark_ret"]
     if aligned_ret.empty:
         return {}
 
     strategy_ret = aligned_ret["strategy_ret"]
-    spy_ret = aligned_ret["spy_ret"]
+    benchmark_ret = aligned_ret["benchmark_ret"]
     strategy_std = float(strategy_ret.std())
-    spy_std = float(spy_ret.std())
+    benchmark_std = float(benchmark_ret.std())
     strategy_sharpe = (
         float(strategy_ret.mean() / strategy_std)
         if np.isfinite(strategy_std) and strategy_std != 0
         else 0.0
     )
-    spy_sharpe = (
-        float(spy_ret.mean() / spy_std)
-        if np.isfinite(spy_std) and spy_std != 0
+    benchmark_sharpe = (
+        float(benchmark_ret.mean() / benchmark_std)
+        if np.isfinite(benchmark_std) and benchmark_std != 0
         else 0.0
     )
     strategy_start_nav = float(aligned_nav["strategy_nav"].iloc[0])
     strategy_end_nav = float(aligned_nav["strategy_nav"].iloc[-1])
-    spy_start_nav = float(aligned_nav["spy_nav"].iloc[0])
-    spy_end_nav = float(aligned_nav["spy_nav"].iloc[-1])
+    benchmark_start_nav = float(aligned_nav["benchmark_nav"].iloc[0])
+    benchmark_end_nav = float(aligned_nav["benchmark_nav"].iloc[-1])
     strategy_total_return = (
         float(strategy_end_nav / strategy_start_nav - 1.0)
         if np.isfinite(strategy_start_nav) and strategy_start_nav != 0
         else float("nan")
     )
-    spy_total_return = (
-        float(spy_end_nav / spy_start_nav - 1.0)
-        if np.isfinite(spy_start_nav) and spy_start_nav != 0
+    benchmark_total_return = (
+        float(benchmark_end_nav / benchmark_start_nav - 1.0)
+        if np.isfinite(benchmark_start_nav) and benchmark_start_nav != 0
         else float("nan")
     )
 
@@ -355,8 +382,8 @@ def compute_performance_metrics(
         if n_nav_periods > 0
         else float("nan")
     )
-    spy_ann_return = (
-        float((spy_end_nav / spy_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
+    benchmark_ann_return = (
+        float((benchmark_end_nav / benchmark_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
         if n_nav_periods > 0
         else float("nan")
     )
@@ -365,14 +392,14 @@ def compute_performance_metrics(
         if len(strategy_ret) > 1
         else float("nan")
     )
-    spy_ann_vol = (
-        float(spy_ret.std(ddof=1) * np.sqrt(periods_per_year))
-        if len(spy_ret) > 1
+    benchmark_ann_vol = (
+        float(benchmark_ret.std(ddof=1) * np.sqrt(periods_per_year))
+        if len(benchmark_ret) > 1
         else float("nan")
     )
 
     strategy_mdd = _max_drawdown(aligned_nav["strategy_nav"])
-    spy_mdd = _max_drawdown(aligned_nav["spy_nav"])
+    benchmark_mdd = _max_drawdown(aligned_nav["benchmark_nav"])
 
     downside = np.minimum(strategy_ret.to_numpy(), 0.0)
     strategy_downside_vol = (
@@ -395,12 +422,12 @@ def compute_performance_metrics(
     strategy_var = float(strategy_ret.quantile(var_level))
     strategy_tail = strategy_ret[strategy_ret <= strategy_var]
     strategy_cvar = float(strategy_tail.mean()) if not strategy_tail.empty else float("nan")
-    spy_var = float(spy_ret.quantile(var_level))
-    spy_tail = spy_ret[spy_ret <= spy_var]
-    spy_cvar = float(spy_tail.mean()) if not spy_tail.empty else float("nan")
+    benchmark_var = float(benchmark_ret.quantile(var_level))
+    benchmark_tail = benchmark_ret[benchmark_ret <= benchmark_var]
+    benchmark_cvar = float(benchmark_tail.mean()) if not benchmark_tail.empty else float("nan")
 
-    excess_ret = strategy_ret - spy_ret
-    win_rate_vs_spy = float((excess_ret > 0).mean())
+    excess_ret = strategy_ret - benchmark_ret
+    win_rate_vs_benchmark = float((excess_ret > 0).mean())
     avg_excess_return = float(excess_ret.mean())
     tracking_error = (
         float(excess_ret.std(ddof=1) * np.sqrt(periods_per_year))
@@ -416,12 +443,12 @@ def compute_performance_metrics(
     alpha = float("nan")
     beta = float("nan")
     hedged_sharpe = float("nan")
-    if len(strategy_ret) >= 2 and len(spy_ret) >= 2:
-        reg = linregress(spy_ret.to_numpy(), strategy_ret.to_numpy())
+    if len(strategy_ret) >= 2 and len(benchmark_ret) >= 2:
+        reg = linregress(benchmark_ret.to_numpy(), strategy_ret.to_numpy())
         beta = float(reg.slope)
         alpha = float(reg.intercept)
 
-        hedged_ret = strategy_ret - beta * spy_ret
+        hedged_ret = strategy_ret - beta * benchmark_ret
         hedged_std = float(hedged_ret.std()) if not hedged_ret.empty else 0.0
         hedged_sharpe = (
             float(hedged_ret.mean() / hedged_std)
@@ -430,26 +457,26 @@ def compute_performance_metrics(
         )
     metrics: dict[str, float] = {
         "strategy_total_return": strategy_total_return,
-        "spy_total_return": spy_total_return,
+        "benchmark_total_return": benchmark_total_return,
         "strategy_annualized_return": strategy_ann_return,
-        "spy_annualized_return": spy_ann_return,
+        "benchmark_annualized_return": benchmark_ann_return,
         "strategy_annualized_volatility": strategy_ann_vol,
-        "spy_annualized_volatility": spy_ann_vol,
+        "benchmark_annualized_volatility": benchmark_ann_vol,
         "strategy_max_drawdown": strategy_mdd,
-        "spy_max_drawdown": spy_mdd,
+        "benchmark_max_drawdown": benchmark_mdd,
         "strategy_sharpe": strategy_sharpe,
-        "spy_sharpe": spy_sharpe,
+        "benchmark_sharpe": benchmark_sharpe,
         "strategy_sortino": strategy_sortino,
         "strategy_calmar": strategy_calmar,
         "strategy_skew": float(strategy_ret.skew()),
         "strategy_kurtosis": float(strategy_ret.kurt()),
-        "spy_skew": float(spy_ret.skew()),
-        "spy_kurtosis": float(spy_ret.kurt()),
+        "benchmark_skew": float(benchmark_ret.skew()),
+        "benchmark_kurtosis": float(benchmark_ret.kurt()),
         "strategy_var_95": strategy_var,
         "strategy_cvar_95": strategy_cvar,
-        "spy_var_95": spy_var,
-        "spy_cvar_95": spy_cvar,
-        "win_rate_vs_spy": win_rate_vs_spy,
+        "benchmark_var_95": benchmark_var,
+        "benchmark_cvar_95": benchmark_cvar,
+        "win_rate_vs_benchmark": win_rate_vs_benchmark,
         "avg_excess_return_per_period": avg_excess_return,
         "tracking_error_annualized": tracking_error,
         "alpha": alpha,
@@ -502,6 +529,22 @@ def compute_performance_metrics(
         )
         metrics["rank_ic_positive_rate"] = (
             float((rank_ic > 0).mean()) if not rank_ic.empty else float("nan")
+        )
+
+    if include_legacy_spy_aliases:
+        metrics.update(
+            {
+                "spy_total_return": metrics["benchmark_total_return"],
+                "spy_annualized_return": metrics["benchmark_annualized_return"],
+                "spy_annualized_volatility": metrics["benchmark_annualized_volatility"],
+                "spy_max_drawdown": metrics["benchmark_max_drawdown"],
+                "spy_sharpe": metrics["benchmark_sharpe"],
+                "spy_skew": metrics["benchmark_skew"],
+                "spy_kurtosis": metrics["benchmark_kurtosis"],
+                "spy_var_95": metrics["benchmark_var_95"],
+                "spy_cvar_95": metrics["benchmark_cvar_95"],
+                "win_rate_vs_spy": metrics["win_rate_vs_benchmark"],
+            }
         )
 
     return metrics

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from treealpha.backtest import (
+    build_benchmark_nav,
     build_rolling_windows,
     build_spy_benchmark,
     compute_performance_metrics,
@@ -166,3 +167,22 @@ def test_build_spy_benchmark_aligns_and_rebases_target_index() -> None:
     assert spy_nav.index.equals(target_index)
     assert np.isclose(float(spy_nav.iloc[0]), 1.0)
     assert float(spy_nav.iloc[1]) > float(spy_nav.iloc[0])
+
+
+def test_build_benchmark_nav_aligns_and_uses_canonical_name() -> None:
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2021-03-31"), "A"),
+            (pd.Timestamp("2021-06-30"), "A"),
+            (pd.Timestamp("2021-09-30"), "A"),
+        ],
+        names=["date", "ticker"],
+    )
+    frame = pd.DataFrame({"benchmark_cum_ret": [100.0, 110.0, 121.0]}, index=idx)
+    target_index = pd.to_datetime(["2021-06-30", "2021-09-30"])
+
+    benchmark_nav = build_benchmark_nav(frame=frame, target_index=target_index)
+
+    assert benchmark_nav.name == "benchmark_nav"
+    assert benchmark_nav.index.equals(target_index)
+    assert np.isclose(float(benchmark_nav.iloc[0]), 1.0)

@@ -1,6 +1,8 @@
 market:
   profile: cn
   benchmark: 000300.SH
+  benchmark_return_column: benchmark_next_period_return
+  benchmark_cum_column: benchmark_cum_ret
   label_mode: relative_to_benchmark
   label_source: actual
   label_threshold: 0.03
@@ -11,3 +13,8 @@ market:
     st: is_st
     up_limit: hit_up_limit
     down_limit: hit_down_limit
+  tradability_filters:
+    suspend: true
+    st: true
+    up_limit: true
+    down_limit: true

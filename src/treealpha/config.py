@@ -92,6 +92,11 @@ class BacktestSettings:
     data: str
     output_dir: str = "artifacts/backtest"
     market_profile: str = "us"
+    benchmark_name: str = "SPY"
+    benchmark_return_column: str = "benchmark_next_period_return"
+    benchmark_cum_column: str = "benchmark_cum_ret"
+    market_tradability_columns: dict[str, str] = field(default_factory=dict)
+    market_tradability_filters: dict[str, bool] = field(default_factory=dict)
     model_id: str = "random_forest"
     model_params: dict[str, Any] = field(default_factory=dict)
     label_source: str = "actual"
@@ -181,6 +186,30 @@ def load_backtest_settings(
         data=str(resolved_data),
         output_dir=str(resolved_output_dir),
         market_profile=str(market.get("profile", "us")),
+        benchmark_name=str(market.get("benchmark", "SPY")),
+        benchmark_return_column=str(
+            market.get(
+                "benchmark_return_column",
+                "spy_next_period_return"
+                if str(market.get("profile", "us")) == "us"
+                else "benchmark_next_period_return",
+            )
+        ),
+        benchmark_cum_column=str(
+            market.get(
+                "benchmark_cum_column",
+                "spy_cum_ret"
+                if str(market.get("profile", "us")) == "us"
+                else "benchmark_cum_ret",
+            )
+        ),
+        market_tradability_columns=dict(market.get("tradability_columns", {})),
+        market_tradability_filters={
+            "suspend": bool(market.get("tradability_filters", {}).get("suspend", False)),
+            "st": bool(market.get("tradability_filters", {}).get("st", False)),
+            "up_limit": bool(market.get("tradability_filters", {}).get("up_limit", False)),
+            "down_limit": bool(market.get("tradability_filters", {}).get("down_limit", False)),
+        },
         model_id=str(model.get("id", "random_forest")),
         model_params=dict(model.get("params", {})),
         label_source=str(market.get("label_source", "actual")),

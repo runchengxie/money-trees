@@ -1,26 +1,26 @@
 # Treealpha Template Scaffold
 
-一个用于孵化截面选股项目的模板仓库。它保留了可复用的训练、回测、组合和评估骨架，并把市场适配层与模型选择层拆开，适合继续衍生 `tree-alpha-cn`、`tree-alpha-us` 这类独立仓库。
+一个用于孵化截面选股项目的模板仓库。它保留了可复用的训练、回测、组合和评估骨架，并把市场适配层与模型选择层拆开，当前内置可运行的 `us` / `cn` 两条市场路径。
 
 ## Template Workflow
 
 1. 用这个仓库生成一个新仓库。
 2. 先修改 `configs/market/*.yaml`，把 benchmark、标签口径和交易约束占位符改成你自己的市场语义。
-3. 替换 `src/treealpha/markets/*.py`，让 market profile 和你的数据契约一致。
+3. 按你的数据契约调整 `configs/market/*.yaml`，必要时再扩展 `src/treealpha/markets/*.py`。
 4. 运行 smoke test，确认脚手架还能完整训练、回测并落盘。
 5. 再开始增加特征、模型和更复杂的组合约束。
 
 ## First Files To Edit
 
-- [pyproject.toml](/home/richard/code/guan-random-forest-cross-sectional/pyproject.toml)
+- [pyproject.toml](/home/richard/code/money-tree/pyproject.toml)
   改项目名、描述和发布元数据。
-- [configs/market/us.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/market/us.yaml)
+- [configs/market/us.yaml](/home/richard/code/money-tree/configs/market/us.yaml)
   参考市场配置。
-- [configs/market/cn.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/market/cn.yaml)
-  A 股占位配置。
-- [src/treealpha/markets/cn.py](/home/richard/code/guan-random-forest-cross-sectional/src/treealpha/markets/cn.py)
-  模板占位实现，默认会明确报错提醒你替换。
-- [examples/minimal_run.md](/home/richard/code/guan-random-forest-cross-sectional/examples/minimal_run.md)
+- [configs/market/cn.yaml](/home/richard/code/money-tree/configs/market/cn.yaml)
+  A 股参考配置，包含 benchmark 和 tradability 过滤开关。
+- [src/treealpha/markets/cn.py](/home/richard/code/money-tree/src/treealpha/markets/cn.py)
+  A 股参考实现，可继续按你的数据契约扩展。
+- [examples/minimal_run.md](/home/richard/code/money-tree/examples/minimal_run.md)
   最小跑通路径。
 
 ## What The Template Includes
@@ -92,8 +92,8 @@ uv run treealpha-backtest \
 
 模板自带一个最小 smoke 配置和测试文件：
 
-- [configs/backtest/smoke.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/backtest/smoke.yaml)
-- [tests/test_smoke.py](/home/richard/code/guan-random-forest-cross-sectional/tests/test_smoke.py)
+- [configs/backtest/smoke.yaml](/home/richard/code/money-tree/configs/backtest/smoke.yaml)
+- [tests/test_smoke.py](/home/richard/code/money-tree/tests/test_smoke.py)
 
 本地跑 smoke：
 
@@ -129,8 +129,8 @@ configs/
 
 ## Market Layer
 
-- `us` 是当前唯一可运行的参考实现，保留原有 SPY 相对收益语义。
-- `cn` 已注册为模板占位 profile，但默认会抛出明确错误，提醒你先替换 A 股数据契约。
+- `us` 是可运行的参考实现，保留原有 SPY 相对收益输入与兼容输出。
+- `cn` 是可运行的 A 股参考实现，需要 benchmark 列与 tradability 列契约。
 - 市场 profile 负责三件事：
   benchmark 别名、标签列约束、可交易过滤。
 
@@ -151,14 +151,16 @@ configs/
 - `run_config.json`
 - `run_summary.txt`
 - `strategy_nav.csv`
-- `spy_nav.csv`
+- `benchmark_nav.csv`
 - `strategy_returns.csv`
-- `spy_returns.csv`
+- `benchmark_returns.csv`
 - `strategy_turnover.csv`
 - `active_names.csv`
 - `ic_series.csv`
 - `oos_period_diagnostics.csv`
-- `strategy_vs_spy.csv`
+- `strategy_vs_benchmark.csv`
 - `segment_a_features.txt`
 - `segment_b_features.txt`
 - 可选 `holdout/`
+
+对 `us` 路径，当前仍会额外保留 `spy_nav.csv`、`spy_returns.csv`、`strategy_vs_spy.csv` 作为兼容别名。

@@ -55,6 +55,35 @@ def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _build_cn_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
+    start = "2004-03-31" if freq == "QE" else "2004-01-31"
+    dates = pd.date_range(start, "2015-12-31", freq=freq)
+    tickers = ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ", "000005.SZ", "000006.SZ"]
+    rows: list[dict[str, object]] = []
+
+    for dt in dates:
+        benchmark_ret = 0.01 if dt.quarter in {1, 3} else -0.005
+        benchmark_cum = 100.0 + 0.6 * len(rows)
+        for i, ticker in enumerate(tickers):
+            rel = 0.06 if i % 2 == 0 else -0.04
+            rows.append(
+                {
+                    "date": dt,
+                    "ticker": ticker,
+                    "f_signal": rel + 0.001 * i,
+                    "f_rank": float(i),
+                    "next_period_return": benchmark_ret + rel,
+                    "benchmark_next_period_return": benchmark_ret,
+                    "benchmark_cum_ret": benchmark_cum,
+                    "is_suspended": ticker == "000002.SZ" and dt.quarter == 2,
+                    "is_st": ticker == "000003.SZ" and dt.quarter == 3,
+                    "hit_up_limit": ticker == "000004.SZ" and dt.quarter == 4,
+                    "hit_down_limit": ticker == "000005.SZ" and dt.quarter == 1 and dt.year % 2 == 0,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _cli_env(root: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root / "src")
@@ -115,13 +144,16 @@ def test_treealpha_cli_smoke(tmp_path: Path) -> None:
 
     required = [
         "strategy_nav.csv",
+        "benchmark_nav.csv",
         "spy_nav.csv",
         "strategy_returns.csv",
+        "benchmark_returns.csv",
         "spy_returns.csv",
         "strategy_turnover.csv",
         "active_names.csv",
         "ic_series.csv",
         "oos_period_diagnostics.csv",
+        "strategy_vs_benchmark.csv",
         "strategy_vs_spy.csv",
         "metrics.json",
         "run_config.json",
@@ -134,13 +166,16 @@ def test_treealpha_cli_smoke(tmp_path: Path) -> None:
 
     holdout_required = [
         "holdout/strategy_nav.csv",
+        "holdout/benchmark_nav.csv",
         "holdout/spy_nav.csv",
         "holdout/strategy_returns.csv",
+        "holdout/benchmark_returns.csv",
         "holdout/spy_returns.csv",
         "holdout/strategy_turnover.csv",
         "holdout/active_names.csv",
         "holdout/ic_series.csv",
         "holdout/oos_period_diagnostics.csv",
+        "holdout/strategy_vs_benchmark.csv",
         "holdout/strategy_vs_spy.csv",
         "holdout/metrics.json",
         "holdout/holdout_config.json",
@@ -150,6 +185,7 @@ def test_treealpha_cli_smoke(tmp_path: Path) -> None:
 
     config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
     assert "arguments" in config
+    assert config["benchmark"]["name"] == "SPY"
     assert "segment_specs" in config
     assert "holdout" in config
     assert config["holdout"]["enabled"] is True
@@ -224,6 +260,69 @@ def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
 
     holdout_returns = pd.read_csv(out_dir / "holdout/strategy_returns.csv")
     assert len(holdout_returns) == 4
+
+
+def test_treealpha_cli_cn_config_stack_emits_benchmark_neutral_outputs(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "cn_smoke.parquet"
+    out_dir = tmp_path / "cn_artifacts"
+    _build_cn_smoke_dataset().to_parquet(data_path, index=False)
+
+    subprocess.run(
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=out_dir,
+            config_paths=[
+                "configs/market/cn.yaml",
+                "configs/model/rf.yaml",
+                "configs/backtest/smoke.yaml",
+            ],
+            extra_args=[
+                "--set",
+                "model.feature_selection=none",
+                "--set",
+                "model.n_trials=0",
+            ],
+        ),
+        cwd=root,
+        env=_cli_env(root),
+        check=True,
+    )
+
+    required = [
+        "strategy_nav.csv",
+        "benchmark_nav.csv",
+        "strategy_returns.csv",
+        "benchmark_returns.csv",
+        "strategy_turnover.csv",
+        "active_names.csv",
+        "ic_series.csv",
+        "oos_period_diagnostics.csv",
+        "strategy_vs_benchmark.csv",
+        "metrics.json",
+        "run_config.json",
+        "run_summary.txt",
+        "holdout/benchmark_nav.csv",
+        "holdout/benchmark_returns.csv",
+        "holdout/strategy_vs_benchmark.csv",
+    ]
+    for rel_path in required:
+        assert (out_dir / rel_path).exists(), rel_path
+
+    assert not (out_dir / "spy_nav.csv").exists()
+    assert not (out_dir / "spy_returns.csv").exists()
+    assert not (out_dir / "strategy_vs_spy.csv").exists()
+
+    config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert config["benchmark"]["name"] == "000300.SH"
+    assert config["benchmark"]["legacy_spy_alias_outputs"] is False
+
+    metrics = json.loads((out_dir / "metrics.json").read_text(encoding="utf-8"))
+    assert "benchmark_total_return" in metrics
+    assert "spy_total_return" not in metrics
+
+    run_summary = (out_dir / "run_summary.txt").read_text(encoding="utf-8")
+    assert "Performance vs 000300.SH" in run_summary
 
 
 def test_treealpha_cli_uses_default_template_config_stack(tmp_path: Path) -> None:
@@ -302,15 +401,16 @@ def _holdout_stub(start: str, end: str) -> HoldoutResult:
         train_end="2021-12-31",
         holdout_start=start,
         holdout_end=end,
+        benchmark_name="SPY",
         strategy_nav=pd.Series([1.1, 1.2], index=idx, name="strategy_nav"),
-        spy_nav=pd.Series([1.0, 1.01], index=idx, name="spy_nav"),
+        benchmark_nav=pd.Series([1.0, 1.01], index=idx, name="benchmark_nav"),
         strategy_returns=pd.Series([0.1, 0.09], index=idx, name="strategy_ret"),
-        spy_returns=pd.Series([0.0, 0.01], index=idx, name="spy_ret"),
+        benchmark_returns=pd.Series([0.0, 0.01], index=idx, name="benchmark_ret"),
         strategy_turnover=pd.Series([0.5, 0.6], index=idx, name="strategy_turnover"),
         active_names=pd.Series([10, 12], index=idx, name="active_names"),
         period_ic=pd.Series([0.1, 0.2], index=idx, name="period_ic"),
         period_rank_ic=pd.Series([0.05, 0.15], index=idx, name="period_rank_ic"),
-        metrics={"strategy_total_return": 0.1, "spy_total_return": 0.01},
+        metrics={"strategy_total_return": 0.1, "benchmark_total_return": 0.01},
     )
 
 
@@ -338,13 +438,14 @@ def test_build_run_summary_text_reports_holdout_overlap_note(
     )
     idx = strategy_nav.index
     run_summary = build_run_summary_text(
+        benchmark_name="SPY",
         strategy_nav=strategy_nav,
         strategy_turnover=pd.Series([0.2, 0.3], index=idx, name="strategy_turnover"),
         period_ic=pd.Series([0.1, np.nan], index=idx, name="period_ic"),
         period_rank_ic=pd.Series([0.05, np.nan], index=idx, name="period_rank_ic"),
         segment_a=_segment_stub(),
         segment_b=_segment_stub(),
-        metrics={"strategy_total_return": 0.1, "spy_total_return": 0.05},
+        metrics={"strategy_total_return": 0.1, "benchmark_total_return": 0.05},
         tuning_cv_folds=1,
         holdout_result=_holdout_stub(*holdout_span),
     )

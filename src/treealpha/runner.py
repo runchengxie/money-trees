@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 
 from treealpha.backtest import (
+    build_benchmark_nav,
     build_rolling_windows,
-    build_spy_benchmark,
     compute_performance_metrics,
     run_rolling_backtest,
 )
@@ -63,10 +63,11 @@ class HoldoutResult:
     train_end: str
     holdout_start: str
     holdout_end: str
+    benchmark_name: str
     strategy_nav: pd.Series
-    spy_nav: pd.Series
+    benchmark_nav: pd.Series
     strategy_returns: pd.Series
-    spy_returns: pd.Series
+    benchmark_returns: pd.Series
     strategy_turnover: pd.Series
     active_names: pd.Series
     period_ic: pd.Series
@@ -100,6 +101,10 @@ def build_portfolio_config(settings: BacktestSettings) -> PortfolioConfig:
     )
 
 
+def _extra_feature_drop(settings: BacktestSettings) -> set[str]:
+    return {str(column) for column in settings.market_tradability_columns.values()}
+
+
 def fit_segment_model(
     *,
     frame: pd.DataFrame,
@@ -110,8 +115,14 @@ def fit_segment_model(
     market_profile,
     seed_offset: int = 0,
 ) -> SegmentFitResult:
-    train_raw = market_profile.filter_tradable_frame(slice_by_date(frame, spec.train_start, spec.train_end))
-    valid_raw = market_profile.filter_tradable_frame(slice_by_date(frame, spec.valid_start, spec.valid_end))
+    train_raw = market_profile.filter_tradable_frame(
+        slice_by_date(frame, spec.train_start, spec.train_end),
+        settings=settings,
+    )
+    valid_raw = market_profile.filter_tradable_frame(
+        slice_by_date(frame, spec.valid_start, spec.valid_end),
+        settings=settings,
+    )
     if train_raw.empty or valid_raw.empty:
         raise ValueError(f"Segment {spec.name} has empty train/valid frame.")
 
@@ -126,7 +137,7 @@ def fit_segment_model(
         add_missing_indicators=settings.add_missing_indicators,
     )
 
-    feature_columns = get_feature_columns(train_frame)
+    feature_columns = get_feature_columns(train_frame, extra_drop=_extra_feature_drop(settings))
     train_x, train_y, train_returns = build_xy_target_returns(
         train_frame,
         feature_columns,
@@ -289,8 +300,14 @@ def _build_holdout_result(
         raise ValueError("--holdout-start must be <= --holdout-end.")
 
     date_values = pd.Index(frame.index.get_level_values("date"))
-    train_raw = market_profile.filter_tradable_frame(frame.loc[date_values < holdout_start_ts])
-    holdout_raw = market_profile.filter_tradable_frame(slice_by_date(frame, holdout_start, holdout_end))
+    train_raw = market_profile.filter_tradable_frame(
+        frame.loc[date_values < holdout_start_ts],
+        settings=settings,
+    )
+    holdout_raw = market_profile.filter_tradable_frame(
+        slice_by_date(frame, holdout_start, holdout_end),
+        settings=settings,
+    )
     if train_raw.empty or holdout_raw.empty:
         raise ValueError("Holdout train/test frame is empty; adjust holdout dates.")
 
@@ -396,18 +413,23 @@ def _build_holdout_result(
     active_names = pd.Series(period_active_names, index=period_dates, name="active_names")
     period_ic_series = pd.Series(period_ic_values, index=period_dates, name="period_ic")
     period_rank_ic_series = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
-    spy_nav = build_spy_benchmark(frame, strategy_nav.index, benchmark_cum_col="benchmark_cum_ret")
-    spy_returns = spy_nav.pct_change().dropna()
+    benchmark_nav = build_benchmark_nav(
+        frame,
+        strategy_nav.index,
+        benchmark_cum_col="benchmark_cum_ret",
+    )
+    benchmark_returns = benchmark_nav.pct_change().dropna()
     metrics = compute_performance_metrics(
         strategy_nav=strategy_nav,
-        spy_nav=spy_nav,
+        benchmark_nav=benchmark_nav,
         strategy_returns=strategy_returns,
-        spy_returns=spy_returns,
+        benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
         active_names=active_names,
         period_ic=period_ic_series,
         period_rank_ic=period_rank_ic_series,
         periods_per_year=_periods_per_year_from_test_months(settings.test_months),
+        include_legacy_spy_aliases=settings.market_profile == "us",
     )
     return HoldoutResult(
         model_segment=model_segment,
@@ -415,10 +437,11 @@ def _build_holdout_result(
         train_end=pd.Timestamp(train_raw.index.get_level_values("date").max()).strftime("%Y-%m-%d"),
         holdout_start=holdout_start_ts.strftime("%Y-%m-%d"),
         holdout_end=holdout_end_ts.strftime("%Y-%m-%d"),
+        benchmark_name=settings.benchmark_name,
         strategy_nav=strategy_nav,
-        spy_nav=spy_nav,
+        benchmark_nav=benchmark_nav,
         strategy_returns=strategy_returns,
-        spy_returns=spy_returns,
+        benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
         active_names=active_names,
         period_ic=period_ic_series,
@@ -441,6 +464,7 @@ def _format_float(value: float, precision: int = 6) -> str:
 
 def build_run_summary_text(
     *,
+    benchmark_name: str,
     strategy_nav: pd.Series,
     strategy_turnover: pd.Series,
     period_ic: pd.Series,
@@ -459,16 +483,17 @@ def build_run_summary_text(
             f"{pd.Timestamp(strategy_nav.index.max()).strftime('%Y-%m-%d')}"
         )
     strategy_total_return = float(metrics.get("strategy_total_return", float("nan")))
-    spy_total_return = float(metrics.get("spy_total_return", float("nan")))
-    excess_total_return = strategy_total_return - spy_total_return
+    benchmark_total_return = float(metrics.get("benchmark_total_return", float("nan")))
+    excess_total_return = strategy_total_return - benchmark_total_return
+    benchmark_label = benchmark_name or "Benchmark"
     if pd.isna(excess_total_return):
         relative_result = "n/a"
     elif excess_total_return > 0:
-        relative_result = f"Outperformed SPY by {_format_percent(excess_total_return)}."
+        relative_result = f"Outperformed {benchmark_label} by {_format_percent(excess_total_return)}."
     elif excess_total_return < 0:
-        relative_result = f"Underperformed SPY by {_format_percent(abs(excess_total_return))}."
+        relative_result = f"Underperformed {benchmark_label} by {_format_percent(abs(excess_total_return))}."
     else:
-        relative_result = "Matched SPY total return."
+        relative_result = f"Matched {benchmark_label} total return."
 
     lines = [
         "Backtest run summary",
@@ -481,12 +506,12 @@ def build_run_summary_text(
             else "Time-series CV tuning: disabled (single validation slice)."
         ),
         "",
-        "Performance vs SPY",
+        f"Performance vs {benchmark_label}",
         f"- Strategy total return: {_format_percent(strategy_total_return)}",
-        f"- SPY total return: {_format_percent(spy_total_return)}",
+        f"- {benchmark_label} total return: {_format_percent(benchmark_total_return)}",
         f"- Relative result: {relative_result}",
         f"- Strategy annualized return: {_format_percent(float(metrics.get('strategy_annualized_return', float('nan'))))}",
-        f"- SPY annualized return: {_format_percent(float(metrics.get('spy_annualized_return', float('nan'))))}",
+        f"- {benchmark_label} annualized return: {_format_percent(float(metrics.get('benchmark_annualized_return', float('nan'))))}",
         f"- Strategy sharpe: {_format_float(float(metrics.get('strategy_sharpe', float('nan'))))}",
         f"- Strategy sortino: {_format_float(float(metrics.get('strategy_sortino', float('nan'))))}",
         f"- Strategy calmar: {_format_float(float(metrics.get('strategy_calmar', float('nan'))))}",
@@ -544,7 +569,7 @@ def build_run_summary_text(
                 f"- Holdout date span: {holdout_result.holdout_start} -> {holdout_result.holdout_end}",
                 f"- Holdout model source: {holdout_result.model_segment}",
                 f"- Holdout strategy total return: {_format_percent(float(hm.get('strategy_total_return', float('nan'))))}",
-                f"- Holdout SPY total return: {_format_percent(float(hm.get('spy_total_return', float('nan'))))}",
+                f"- Holdout {holdout_result.benchmark_name or 'Benchmark'} total return: {_format_percent(float(hm.get('benchmark_total_return', float('nan'))))}",
                 overlap_note,
                 "- Holdout artifacts are exported to holdout/*.csv and holdout/metrics.json.",
             ]
@@ -555,10 +580,11 @@ def build_run_summary_text(
 def write_outputs(
     *,
     out_dir: Path,
+    benchmark_name: str,
     strategy_nav: pd.Series,
-    spy_nav: pd.Series,
+    benchmark_nav: pd.Series,
     strategy_returns: pd.Series,
-    spy_returns: pd.Series,
+    benchmark_returns: pd.Series,
     strategy_turnover: pd.Series,
     active_names: pd.Series,
     period_ic: pd.Series,
@@ -568,20 +594,21 @@ def write_outputs(
     metrics: dict[str, float],
     run_config: dict[str, Any],
     run_summary_text: str,
+    write_legacy_spy_aliases: bool = False,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     strategy_nav.to_frame(name="strategy_nav").to_csv(out_dir / "strategy_nav.csv")
-    spy_nav.to_frame(name="spy_nav").to_csv(out_dir / "spy_nav.csv")
+    benchmark_nav.to_frame(name="benchmark_nav").to_csv(out_dir / "benchmark_nav.csv")
     strategy_returns.to_frame(name="strategy_ret").to_csv(out_dir / "strategy_returns.csv")
-    spy_returns.to_frame(name="spy_ret").to_csv(out_dir / "spy_returns.csv")
+    benchmark_returns.to_frame(name="benchmark_ret").to_csv(out_dir / "benchmark_returns.csv")
     strategy_turnover.to_frame(name="strategy_turnover").to_csv(out_dir / "strategy_turnover.csv")
     active_names.to_frame(name="active_names").to_csv(out_dir / "active_names.csv")
     pd.concat([period_ic, period_rank_ic], axis=1).to_csv(out_dir / "ic_series.csv")
-    pd.concat([strategy_nav, spy_nav], axis=1).to_csv(out_dir / "strategy_vs_spy.csv")
+    pd.concat([strategy_nav, benchmark_nav], axis=1).to_csv(out_dir / "strategy_vs_benchmark.csv")
     pd.concat(
         [
             strategy_returns.rename("strategy_ret"),
-            spy_returns.rename("spy_ret"),
+            benchmark_returns.rename("benchmark_ret"),
             strategy_turnover.rename("strategy_turnover"),
             active_names.rename("active_names"),
             period_ic.rename("period_ic"),
@@ -602,32 +629,47 @@ def write_outputs(
         "segment_b_feature_count": len(segment_b.feature_columns),
     }
     summary.update(metrics)
+    summary["benchmark_name"] = benchmark_name
     (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
     (out_dir / "run_summary.txt").write_text(run_summary_text + "\n", encoding="utf-8")
     (out_dir / "segment_a_features.txt").write_text("\n".join(segment_a.feature_columns), encoding="utf-8")
     (out_dir / "segment_b_features.txt").write_text("\n".join(segment_b.feature_columns), encoding="utf-8")
+    if write_legacy_spy_aliases:
+        benchmark_nav.to_frame(name="spy_nav").to_csv(out_dir / "spy_nav.csv")
+        benchmark_returns.to_frame(name="spy_ret").to_csv(out_dir / "spy_returns.csv")
+        pd.concat(
+            [strategy_nav, benchmark_nav.rename("spy_nav")],
+            axis=1,
+        ).to_csv(out_dir / "strategy_vs_spy.csv")
     if segment_a.selection_history is not None and not segment_a.selection_history.empty:
         segment_a.selection_history.to_csv(out_dir / "segment_a_selection_history.csv", index=False)
     if segment_b.selection_history is not None and not segment_b.selection_history.empty:
         segment_b.selection_history.to_csv(out_dir / "segment_b_selection_history.csv", index=False)
 
 
-def write_holdout_outputs(*, out_dir: Path, holdout: HoldoutResult) -> None:
+def write_holdout_outputs(
+    *,
+    out_dir: Path,
+    holdout: HoldoutResult,
+    write_legacy_spy_aliases: bool = False,
+) -> None:
     holdout_dir = out_dir / "holdout"
     holdout_dir.mkdir(parents=True, exist_ok=True)
     holdout.strategy_nav.to_frame(name="strategy_nav").to_csv(holdout_dir / "strategy_nav.csv")
-    holdout.spy_nav.to_frame(name="spy_nav").to_csv(holdout_dir / "spy_nav.csv")
+    holdout.benchmark_nav.to_frame(name="benchmark_nav").to_csv(holdout_dir / "benchmark_nav.csv")
     holdout.strategy_returns.to_frame(name="strategy_ret").to_csv(holdout_dir / "strategy_returns.csv")
-    holdout.spy_returns.to_frame(name="spy_ret").to_csv(holdout_dir / "spy_returns.csv")
+    holdout.benchmark_returns.to_frame(name="benchmark_ret").to_csv(holdout_dir / "benchmark_returns.csv")
     holdout.strategy_turnover.to_frame(name="strategy_turnover").to_csv(holdout_dir / "strategy_turnover.csv")
     holdout.active_names.to_frame(name="active_names").to_csv(holdout_dir / "active_names.csv")
     pd.concat([holdout.period_ic, holdout.period_rank_ic], axis=1).to_csv(holdout_dir / "ic_series.csv")
-    pd.concat([holdout.strategy_nav, holdout.spy_nav], axis=1).to_csv(holdout_dir / "strategy_vs_spy.csv")
+    pd.concat([holdout.strategy_nav, holdout.benchmark_nav], axis=1).to_csv(
+        holdout_dir / "strategy_vs_benchmark.csv"
+    )
     pd.concat(
         [
             holdout.strategy_returns.rename("strategy_ret"),
-            holdout.spy_returns.rename("spy_ret"),
+            holdout.benchmark_returns.rename("benchmark_ret"),
             holdout.strategy_turnover.rename("strategy_turnover"),
             holdout.active_names.rename("active_names"),
             holdout.period_ic.rename("period_ic"),
@@ -640,6 +682,7 @@ def write_holdout_outputs(*, out_dir: Path, holdout: HoldoutResult) -> None:
         json.dumps(
             {
                 "model_segment": holdout.model_segment,
+                "benchmark_name": holdout.benchmark_name,
                 "train_start": holdout.train_start,
                 "train_end": holdout.train_end,
                 "holdout_start": holdout.holdout_start,
@@ -649,6 +692,13 @@ def write_holdout_outputs(*, out_dir: Path, holdout: HoldoutResult) -> None:
         ),
         encoding="utf-8",
     )
+    if write_legacy_spy_aliases:
+        holdout.benchmark_nav.to_frame(name="spy_nav").to_csv(holdout_dir / "spy_nav.csv")
+        holdout.benchmark_returns.to_frame(name="spy_ret").to_csv(holdout_dir / "spy_returns.csv")
+        pd.concat(
+            [holdout.strategy_nav, holdout.benchmark_nav.rename("spy_nav")],
+            axis=1,
+        ).to_csv(holdout_dir / "strategy_vs_spy.csv")
 
 
 def resolve_git_commit(root: Path) -> str | None:
@@ -676,6 +726,12 @@ def build_run_config(
         "resolved_at_utc": datetime.now(timezone.utc).isoformat(),
         "git_commit": resolve_git_commit(ROOT),
         "arguments": settings.to_display_config(),
+        "benchmark": {
+            "name": settings.benchmark_name,
+            "return_column": settings.benchmark_return_column,
+            "cum_column": settings.benchmark_cum_column,
+            "legacy_spy_alias_outputs": settings.market_profile == "us",
+        },
         "segment_specs": {
             "segment_a": asdict(segment_a_spec),
             "segment_b": asdict(segment_b_spec),
@@ -726,11 +782,12 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         label_threshold=settings.label_threshold,
         add_missing_indicators=False,
         apply_global_fill=False,
+        settings=settings,
     )
     if settings.feature_lag_periods > 0:
         frame = apply_feature_lag(
             frame,
-            feature_columns=get_feature_columns(frame),
+            feature_columns=get_feature_columns(frame, extra_drop=_extra_feature_drop(settings)),
             lag_periods=int(settings.feature_lag_periods),
         )
 
@@ -742,11 +799,15 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
             label_threshold=settings.label_threshold,
             add_missing_indicators=settings.add_missing_indicators,
             apply_global_fill=True,
+            settings=settings,
         )
         if settings.feature_lag_periods > 0:
             export_frame = apply_feature_lag(
                 export_frame,
-                feature_columns=get_feature_columns(export_frame),
+                feature_columns=get_feature_columns(
+                    export_frame,
+                    extra_drop=_extra_feature_drop(settings),
+                ),
                 lag_periods=int(settings.feature_lag_periods),
             )
         save_market_data(export_frame, settings.export_parquet)
@@ -807,7 +868,10 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         initial_nav=1.0,
         add_missing_indicators=settings.add_missing_indicators,
         portfolio_config=portfolio_cfg,
-        tradability_filter=market_profile.filter_tradable_frame,
+        tradability_filter=lambda frame_slice: market_profile.filter_tradable_frame(
+            frame_slice,
+            settings=settings,
+        ),
     )
     bt_b = run_rolling_backtest(
         frame=frame,
@@ -827,7 +891,10 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         initial_nav=float(bt_a.nav.iloc[-1]) if not bt_a.nav.empty else 1.0,
         add_missing_indicators=settings.add_missing_indicators,
         portfolio_config=portfolio_cfg,
-        tradability_filter=market_profile.filter_tradable_frame,
+        tradability_filter=lambda frame_slice: market_profile.filter_tradable_frame(
+            frame_slice,
+            settings=settings,
+        ),
     )
 
     strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav, name="strategy_nav")
@@ -840,18 +907,19 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     active_names = combine_backtest_segments(bt_a.active_names, bt_b.active_names, name="active_names")
     period_ic = combine_backtest_segments(bt_a.period_ic, bt_b.period_ic, name="period_ic")
     period_rank_ic = combine_backtest_segments(bt_a.period_rank_ic, bt_b.period_rank_ic, name="period_rank_ic")
-    spy_nav = build_spy_benchmark(frame, strategy_nav.index, benchmark_cum_col="benchmark_cum_ret")
-    spy_returns = spy_nav.pct_change().dropna()
+    benchmark_nav = build_benchmark_nav(frame, strategy_nav.index, benchmark_cum_col="benchmark_cum_ret")
+    benchmark_returns = benchmark_nav.pct_change().dropna()
     metrics = compute_performance_metrics(
-        strategy_nav,
-        spy_nav,
+        strategy_nav=strategy_nav,
+        benchmark_nav=benchmark_nav,
         strategy_returns=strategy_returns,
-        spy_returns=spy_returns,
+        benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
         active_names=active_names,
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
         periods_per_year=_periods_per_year_from_test_months(settings.test_months),
+        include_legacy_spy_aliases=settings.market_profile == "us",
     )
     holdout_result: HoldoutResult | None = None
     if settings.holdout_start and settings.holdout_end:
@@ -875,6 +943,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         holdout_result=holdout_result,
     )
     run_summary_text = build_run_summary_text(
+        benchmark_name=settings.benchmark_name,
         strategy_nav=strategy_nav,
         strategy_turnover=strategy_turnover,
         period_ic=period_ic,
@@ -888,10 +957,11 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     out_dir = Path(settings.output_dir)
     write_outputs(
         out_dir=out_dir,
+        benchmark_name=settings.benchmark_name,
         strategy_nav=strategy_nav,
-        spy_nav=spy_nav,
+        benchmark_nav=benchmark_nav,
         strategy_returns=strategy_returns,
-        spy_returns=spy_returns,
+        benchmark_returns=benchmark_returns,
         strategy_turnover=strategy_turnover,
         active_names=active_names,
         period_ic=period_ic,
@@ -901,9 +971,14 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         metrics=metrics,
         run_config=run_config,
         run_summary_text=run_summary_text,
+        write_legacy_spy_aliases=settings.market_profile == "us",
     )
     if holdout_result is not None:
-        write_holdout_outputs(out_dir=out_dir, holdout=holdout_result)
+        write_holdout_outputs(
+            out_dir=out_dir,
+            holdout=holdout_result,
+            write_legacy_spy_aliases=settings.market_profile == "us",
+        )
 
     return {
         "output_dir": out_dir,

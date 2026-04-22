@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
+    from treealpha.config import BacktestSettings
     from treealpha.markets.base import BaseMarketProfile
 
 LabelSource = Literal["actual", "pred_rel_return"]
@@ -168,6 +169,7 @@ def preprocess_data(
     label_threshold: float = 0.05,
     add_missing_indicators: bool = False,
     apply_global_fill: bool = True,
+    settings: "BacktestSettings | None" = None,
 ) -> pd.DataFrame:
     """
     Clean the dataset and build labels.
@@ -180,7 +182,7 @@ def preprocess_data(
     5) rel_return + rel_performance labels
     """
     prepared_frame = (
-        market_profile.prepare_frame(frame=frame, label_source=label_source)
+        market_profile.prepare_frame(frame=frame, label_source=label_source, settings=settings)
         if market_profile is not None
         else frame
     )
