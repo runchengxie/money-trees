@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from strategy.model import FeatureSelectionResult
+from treealpha.model import FeatureSelectionResult
 
 
 @dataclass(frozen=True)

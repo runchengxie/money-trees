@@ -7,7 +7,6 @@
 - 默认入口已经切到 package CLI：`treealpha.cli.backtest`
 - 模型层通过 registry 选择：`random_forest`、`xgboost`、`ridge`、`lasso`、`elasticnet`
 - 市场层通过 profile 选择：当前内置 `us`
-- 旧 `scripts/run_backtest.py` 仍保留，但现在只是兼容包装层
 - 历史 artifacts 和参考 notebook 已移到 `examples/`，不再属于默认工作流
 
 ## 快速开始
@@ -37,14 +36,6 @@ uv run python -m treealpha.cli.backtest \
 ```bash
 uv run treealpha-backtest \
   --config configs/reference_us_random_forest.toml \
-  --data data_small.parquet \
-  --output-dir artifacts/backtest
-```
-
-兼容旧入口：
-
-```bash
-uv run python scripts/run_backtest.py \
   --data data_small.parquet \
   --output-dir artifacts/backtest
 ```
@@ -82,7 +73,7 @@ src/treealpha/
   backtest.py   # walk-forward backtest core
   data.py       # panel loading / preprocessing helpers
   portfolio.py  # score -> weights / turnover / PnL
-  runner.py     # shared execution kernel for package CLI and legacy script
+  runner.py     # shared execution kernel for config-driven backtests
 ```
 
 ## 内置能力

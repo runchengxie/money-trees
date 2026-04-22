@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
@@ -11,6 +10,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from treealpha.config import BacktestSettings
+from treealpha.markets import get_market_profile
+from treealpha.models import get_model_adapter
 from treealpha.runner import (
     HoldoutResult,
     _build_holdout_result,
@@ -47,40 +49,67 @@ def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_run_backtest_script_smoke(tmp_path: Path) -> None:
+def _cli_env(root: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "src")
+    return env
+
+
+def _cli_cmd(
+    *,
+    data_path: Path,
+    output_dir: Path,
+    extra_args: list[str] | None = None,
+) -> list[str]:
+    cmd = [
+        sys.executable,
+        "-m",
+        "treealpha.cli.backtest",
+        "--config",
+        "configs/reference_us_random_forest.toml",
+        "--data",
+        str(data_path),
+        "--output-dir",
+        str(output_dir),
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+    return cmd
+
+
+def test_treealpha_cli_smoke(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "smoke.parquet"
     out_dir = tmp_path / "artifacts"
     _build_smoke_dataset().to_parquet(data_path, index=False)
 
     subprocess.run(
-        [
-            sys.executable,
-            "scripts/run_backtest.py",
-            "--data",
-            str(data_path),
-            "--output-dir",
-            str(out_dir),
-            "--feature-selection",
-            "importance",
-            "--n-trials",
-            "1",
-            "--tuning-cv-folds",
-            "3",
-            "--segment1-windows",
-            "1",
-            "--segment2-windows",
-            "1",
-            "--holdout-start",
-            "2015-01-01",
-            "--holdout-end",
-            "2015-12-31",
-            "--holdout-model-segment",
-            "segment_b",
-            "--cost-bps",
-            "10",
-        ],
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=out_dir,
+            extra_args=[
+                "--set",
+                "model.feature_selection=importance",
+                "--set",
+                "model.n_trials=1",
+                "--set",
+                "model.tuning_cv_folds=3",
+                "--set",
+                "backtest.segment1_windows=1",
+                "--set",
+                "backtest.segment2_windows=1",
+                "--set",
+                "backtest.holdout.start=2015-01-01",
+                "--set",
+                "backtest.holdout.end=2015-12-31",
+                "--set",
+                "backtest.holdout.model_segment=segment_b",
+                "--set",
+                "backtest.cost_bps=10",
+            ],
+        ),
         cwd=root,
+        env=_cli_env(root),
         check=True,
     )
 
@@ -151,88 +180,39 @@ def test_run_backtest_script_smoke(tmp_path: Path) -> None:
     assert "Tail / Distribution" in run_summary
     assert "Segment diagnostics" in run_summary
     assert "Final Holdout OOS" in run_summary
-
-
-def test_treealpha_package_cli_smoke(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[1]
-    data_path = tmp_path / "smoke_cli.parquet"
-    out_dir = tmp_path / "artifacts_cli"
-    _build_smoke_dataset().to_parquet(data_path, index=False)
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(root / "src")
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "treealpha.cli.backtest",
-            "--config",
-            "configs/reference_us_random_forest.toml",
-            "--data",
-            str(data_path),
-            "--output-dir",
-            str(out_dir),
-            "--set",
-            "model.n_trials=1",
-            "--set",
-            "model.tuning_cv_folds=3",
-            "--set",
-            "backtest.segment1_windows=1",
-            "--set",
-            "backtest.segment2_windows=1",
-            "--set",
-            "backtest.holdout.start=2015-01-01",
-            "--set",
-            "backtest.holdout.end=2015-12-31",
-            "--set",
-            "backtest.holdout.model_segment=segment_b",
-        ],
-        cwd=root,
-        env=env,
-        check=True,
-    )
-
-    assert (out_dir / "metrics.json").exists()
-    assert (out_dir / "run_config.json").exists()
-    assert (out_dir / "run_summary.txt").exists()
-    assert (out_dir / "holdout/metrics.json").exists()
-
-
-def test_run_backtest_script_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
+def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "smoke_monthly.parquet"
     out_dir = tmp_path / "artifacts_monthly"
     _build_smoke_dataset(freq="ME").to_parquet(data_path, index=False)
 
     subprocess.run(
-        [
-            sys.executable,
-            "scripts/run_backtest.py",
-            "--data",
-            str(data_path),
-            "--output-dir",
-            str(out_dir),
-            "--feature-selection",
-            "none",
-            "--n-trials",
-            "1",
-            "--segment1-windows",
-            "0",
-            "--segment2-windows",
-            "0",
-            "--test-months",
-            "3",
-            "--holdout-start",
-            "2015-01-01",
-            "--holdout-end",
-            "2015-12-31",
-            "--holdout-model-segment",
-            "segment_b",
-            "--cost-bps",
-            "10",
-        ],
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=out_dir,
+            extra_args=[
+                "--set",
+                "model.feature_selection=none",
+                "--set",
+                "model.n_trials=1",
+                "--set",
+                "backtest.segment1_windows=0",
+                "--set",
+                "backtest.segment2_windows=0",
+                "--set",
+                "backtest.test_months=3",
+                "--set",
+                "backtest.holdout.start=2015-01-01",
+                "--set",
+                "backtest.holdout.end=2015-12-31",
+                "--set",
+                "backtest.holdout.model_segment=segment_b",
+                "--set",
+                "backtest.cost_bps=10",
+            ],
+        ),
         cwd=root,
+        env=_cli_env(root),
         check=True,
     )
 
@@ -332,21 +312,19 @@ def test_build_run_summary_text_reports_holdout_overlap_note(
     assert f"Holdout overlap note: {expected_note}" in run_summary
 
 
-def test_run_backtest_script_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
+def test_treealpha_cli_rejects_unpaired_holdout_dates(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")
 
     result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/run_backtest.py",
-            "--data",
-            str(data_path),
-            "--holdout-start",
-            "2024-01-01",
-        ],
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=tmp_path / "unused",
+            extra_args=["--set", "backtest.holdout.start=2024-01-01"],
+        ),
         cwd=root,
+        env=_cli_env(root),
         capture_output=True,
         text=True,
     )
@@ -355,21 +333,19 @@ def test_run_backtest_script_rejects_unpaired_holdout_dates(tmp_path: Path) -> N
     assert "Use --holdout-start and --holdout-end together." in result.stderr
 
 
-def test_run_backtest_script_rejects_test_months_below_one(tmp_path: Path) -> None:
+def test_treealpha_cli_rejects_test_months_below_one(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")
 
     result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/run_backtest.py",
-            "--data",
-            str(data_path),
-            "--test-months",
-            "0",
-        ],
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=tmp_path / "unused",
+            extra_args=["--set", "backtest.test_months=0"],
+        ),
         cwd=root,
+        env=_cli_env(root),
         capture_output=True,
         text=True,
     )
@@ -378,21 +354,19 @@ def test_run_backtest_script_rejects_test_months_below_one(tmp_path: Path) -> No
     assert "--test-months must be >= 1." in result.stderr
 
 
-def test_run_backtest_script_rejects_negative_feature_lag(tmp_path: Path) -> None:
+def test_treealpha_cli_rejects_negative_feature_lag(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "ignored.parquet"
     data_path.write_text("", encoding="utf-8")
 
     result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/run_backtest.py",
-            "--data",
-            str(data_path),
-            "--feature-lag-periods",
-            "-1",
-        ],
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=tmp_path / "unused",
+            extra_args=["--set", "market.feature_lag_periods=-1"],
+        ),
         cwd=root,
+        env=_cli_env(root),
         capture_output=True,
         text=True,
     )
@@ -409,6 +383,8 @@ def test_build_holdout_result_rejects_inverted_holdout_span() -> None:
             holdout_end="2024-01-01",
             model_segment="segment_b",
             segment_fit=_segment_stub(),
-            args=argparse.Namespace(),
+            settings=BacktestSettings(data="dummy.parquet"),
             portfolio_cfg=PortfolioConfig(),
+            model_adapter=get_model_adapter("random_forest"),
+            market_profile=get_market_profile("us"),
         )

@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from strategy.portfolio import build_signal_scores
+from treealpha.portfolio import build_signal_scores
 
 from .base import BaseModelAdapter, ModelCapabilities, ModelOutputs
 

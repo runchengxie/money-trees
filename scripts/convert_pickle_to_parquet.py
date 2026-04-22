@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from strategy.data import load_market_data, save_market_data  # noqa: E402
+from treealpha.data import load_market_data, save_market_data  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,4 +43,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

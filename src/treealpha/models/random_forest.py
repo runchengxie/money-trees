@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from strategy.model import (
+from treealpha.model import (
     DEFAULT_RF_PARAMS,
     FeatureSelectionResult,
     fit_random_forest,
@@ -13,7 +13,7 @@ from strategy.model import (
     sequential_feature_selection,
     tune_random_forest,
 )
-from strategy.portfolio import build_signal_scores
+from treealpha.portfolio import build_signal_scores
 
 from .base import BaseModelAdapter, ModelCapabilities, ModelOutputs
 

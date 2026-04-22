@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
@@ -73,73 +72,6 @@ class HoldoutResult:
     period_ic: pd.Series
     period_rank_ic: pd.Series
     metrics: dict[str, float]
-
-
-def parse_legacy_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run treealpha rolling backtest.")
-    parser.add_argument("--data", required=True, help="Input data file (.pkl/.parquet).")
-    parser.add_argument("--output-dir", default="artifacts/backtest", help="Output directory.")
-    parser.add_argument("--label-source", choices=["actual", "pred_rel_return"], default="actual")
-    parser.add_argument("--label-threshold", type=float, default=0.05)
-    parser.add_argument("--add-missing-indicators", action="store_true")
-    parser.add_argument("--cost-bps", type=float, default=10.0)
-    parser.add_argument("--portfolio-min-score", type=float, default=0.05)
-    parser.add_argument("--portfolio-winsor-z", type=float, default=3.0)
-    parser.add_argument(
-        "--portfolio-weighting-method",
-        choices=["heuristic", "signal_risk_qp"],
-        default="heuristic",
-    )
-    parser.add_argument("--portfolio-gross-target", type=float, default=1.0)
-    parser.add_argument("--portfolio-net-target", type=float, default=0.0)
-    parser.add_argument("--portfolio-max-name-weight", type=float, default=0.02)
-    parser.add_argument("--portfolio-min-names-per-side", type=int, default=5)
-    parser.add_argument("--portfolio-vol-scaling", choices=["on", "off"], default="on")
-    parser.add_argument("--portfolio-vol-power", type=float, default=1.0)
-    parser.add_argument("--portfolio-sector-neutral", choices=["on", "off"], default="off")
-    parser.add_argument("--portfolio-sector-prefix", default="SP_sector_code_")
-    parser.add_argument("--portfolio-qp-risk-aversion", type=float, default=10.0)
-    parser.add_argument("--portfolio-qp-turnover-penalty", type=float, default=5.0)
-    parser.add_argument("--portfolio-qp-cov-lookback", type=int, default=252)
-    parser.add_argument("--portfolio-qp-cov-shrinkage", choices=["on", "off"], default="on")
-    parser.add_argument("--portfolio-qp-cov-ridge", type=float, default=1e-6)
-    parser.add_argument("--portfolio-qp-mu-clip", type=float, default=1.0)
-    parser.add_argument("--portfolio-qp-max-names", type=int, default=300)
-    parser.add_argument("--portfolio-qp-solver-max-iter", type=int, default=300)
-    parser.add_argument("--portfolio-qp-solver-ftol", type=float, default=1e-9)
-    parser.add_argument(
-        "--portfolio-qp-fallback-to-heuristic",
-        choices=["on", "off"],
-        default="on",
-    )
-    parser.add_argument("--n-trials", type=int, default=50)
-    parser.add_argument("--tuning-cv-folds", type=int, default=1)
-    parser.add_argument(
-        "--feature-selection",
-        choices=["none", "importance", "sequential"],
-        default="importance",
-    )
-    parser.add_argument("--min-features", type=int, default=2)
-    parser.add_argument("--max-selection-steps", type=int, default=200)
-    parser.add_argument("--random-seed", type=int, default=123)
-    parser.add_argument("--feature-lag-periods", type=int, default=0)
-    parser.add_argument("--train-months", type=int, default=60)
-    parser.add_argument("--gap-months", type=int, default=3)
-    parser.add_argument("--test-months", type=int, default=3)
-    parser.add_argument("--segment1-start", default="2004-04-01")
-    parser.add_argument("--segment1-windows", type=int, default=60)
-    parser.add_argument("--segment2-start", default="2009-04-01")
-    parser.add_argument("--segment2-windows", type=int, default=20)
-    parser.add_argument("--holdout-start", default="")
-    parser.add_argument("--holdout-end", default="")
-    parser.add_argument(
-        "--holdout-model-segment",
-        choices=["segment_a", "segment_b"],
-        default="segment_b",
-    )
-    parser.add_argument("--export-parquet", default="")
-    return parser.parse_args(argv)
-
 
 def build_portfolio_config(settings: BacktestSettings) -> PortfolioConfig:
     return PortfolioConfig(
@@ -346,25 +278,15 @@ def _build_holdout_result(
     holdout_end: str,
     model_segment: str,
     segment_fit: SegmentFitResult,
-    settings: BacktestSettings | None = None,
-    args: argparse.Namespace | None = None,
+    settings: BacktestSettings,
     portfolio_cfg: PortfolioConfig,
-    model_adapter=None,
-    market_profile=None,
+    model_adapter,
+    market_profile,
 ) -> HoldoutResult:
     holdout_start_ts = pd.Timestamp(holdout_start)
     holdout_end_ts = pd.Timestamp(holdout_end)
     if holdout_start_ts > holdout_end_ts:
         raise ValueError("--holdout-start must be <= --holdout-end.")
-    if settings is None:
-        if args is not None and hasattr(args, "data"):
-            settings = BacktestSettings.from_legacy_args(args)
-        else:
-            settings = BacktestSettings(data="")
-    if model_adapter is None:
-        model_adapter = get_model_adapter("random_forest")
-    if market_profile is None:
-        market_profile = get_market_profile("us")
 
     date_values = pd.Index(frame.index.get_level_values("date"))
     train_raw = market_profile.filter_tradable_frame(frame.loc[date_values < holdout_start_ts])
@@ -1011,8 +933,3 @@ def print_run_results(results: dict[str, Any]) -> None:
         print(json.dumps(metrics, indent=2))
     else:
         print("No metrics were computed; verify strategy/benchmark date overlap.")
-
-
-def legacy_main(argv: list[str] | None = None) -> None:
-    settings = BacktestSettings.from_legacy_args(parse_legacy_args(argv))
-    print_run_results(run_backtest(settings))

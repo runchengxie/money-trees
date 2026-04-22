@@ -120,22 +120,6 @@ class BacktestSettings:
         payload["resolved_config"] = _deep_copy_dict(self.resolved_config)
         return payload
 
-    @classmethod
-    def from_legacy_args(cls, args_namespace, *, config_path: str = "") -> "BacktestSettings":
-        raw = vars(args_namespace).copy()
-        data = raw.pop("data")
-        output_dir = raw.pop("output_dir")
-        export_parquet = raw.pop("export_parquet", "")
-        settings = cls(
-            data=data,
-            output_dir=output_dir,
-            export_parquet=export_parquet,
-            config_path=config_path,
-            resolved_config={"legacy_args": vars(args_namespace).copy()},
-            **raw,
-        )
-        return settings
-
 
 def load_backtest_settings(
     *,
