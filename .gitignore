@@ -217,3 +217,9 @@ full_project_source.txt
 # Backtest runtime outputs
 artifacts/backtest/
 artifacts/template-smoke/
+
+# Debugging purpose
+full_project_source.txt
+
+# Codec 
+.codex
