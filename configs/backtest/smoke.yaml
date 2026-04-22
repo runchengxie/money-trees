@@ -18,4 +18,4 @@ backtest:
     model_segment: segment_b
 
 output:
-  output_dir: artifacts/template-smoke
+  output_dir: artifacts/smoke

@@ -1,14 +1,13 @@
-# Treealpha Template Scaffold
+# money-tree
 
-一个用于孵化截面选股项目的模板仓库。它保留了可复用的训练、回测、组合和评估骨架，并把市场适配层与模型选择层拆开，当前内置可运行的 `us` / `cn` 两条市场路径。
+一个用于截面选股研究与回测的项目仓库。它保留了可复用的训练、回测、组合和评估骨架，并把市场适配层与模型选择层拆开，当前内置可运行的 `us` / `cn` 两条市场路径。
 
-## Template Workflow
+## Workflow
 
-1. 用这个仓库生成一个新仓库。
-2. 先修改 `configs/market/*.yaml`，把 benchmark、标签口径和交易约束占位符改成你自己的市场语义。
-3. 按你的数据契约调整 `configs/market/*.yaml`，必要时再扩展 `src/treealpha/markets/*.py`。
-4. 运行 smoke test，确认脚手架还能完整训练、回测并落盘。
-5. 再开始增加特征、模型和更复杂的组合约束。
+1. 先修改 `configs/market/*.yaml`，把 benchmark、标签口径和交易约束改成你自己的市场语义。
+2. 按你的数据契约调整 `configs/market/*.yaml`，必要时再扩展 `src/treealpha/markets/*.py`。
+3. 运行 smoke test，确认整条训练、回测和落盘链路正常。
+4. 再开始增加特征、模型和更复杂的组合约束。
 
 ## First Files To Edit
 
@@ -20,10 +19,10 @@
   A 股参考配置，包含 benchmark 和 tradability 过滤开关。
 - [src/treealpha/markets/cn.py](/home/richard/code/money-tree/src/treealpha/markets/cn.py)
   A 股参考实现，可继续按你的数据契约扩展。
-- [examples/minimal_run.md](/home/richard/code/money-tree/examples/minimal_run.md)
+- [docs/minimal_run.md](/home/richard/code/money-tree/docs/minimal_run.md)
   最小跑通路径。
 
-## What The Template Includes
+## Project Layout
 
 - `src/treealpha/`
   package CLI、回测执行内核、模型 registry、市场 registry。
@@ -34,9 +33,9 @@
 - `configs/backtest/*.yaml`
   默认运行参数和 smoke 参数。
 - `tests/`
-  单元测试和模板 smoke test。
-- `scripts/convert_pickle_to_parquet.py`
-  一个保留的本地数据转换小工具。
+  单元测试和 smoke test。
+- `project_tools/`
+  仓库级辅助脚本。
 
 ## Quick Start
 
@@ -51,6 +50,8 @@
 uv sync --dev
 ```
 
+常用命令直接通过 `uv run` 执行，不再依赖 `Makefile`。
+
 默认 CLI 会按下面顺序叠配置：
 
 - `configs/market/us.yaml`
@@ -60,7 +61,7 @@ uv sync --dev
 直接运行：
 
 ```bash
-uv run treealpha-backtest \
+uv run moneytree \
   --data data_small.parquet \
   --output-dir artifacts/backtest
 ```
@@ -68,7 +69,7 @@ uv run treealpha-backtest \
 显式传入配置也可以，后面的文件会覆盖前面的同名字段：
 
 ```bash
-uv run treealpha-backtest \
+uv run moneytree \
   --config configs/market/us.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/default.yaml \
@@ -79,7 +80,7 @@ uv run treealpha-backtest \
 也支持局部覆盖：
 
 ```bash
-uv run treealpha-backtest \
+uv run moneytree \
   --config configs/market/us.yaml \
   --config configs/model/ridge.yaml \
   --config configs/backtest/default.yaml \
@@ -90,7 +91,7 @@ uv run treealpha-backtest \
 
 ## Smoke Test
 
-模板自带一个最小 smoke 配置和测试文件：
+项目自带一个最小 smoke 配置和测试文件：
 
 - [configs/backtest/smoke.yaml](/home/richard/code/money-tree/configs/backtest/smoke.yaml)
 - [tests/test_smoke.py](/home/richard/code/money-tree/tests/test_smoke.py)
@@ -98,13 +99,18 @@ uv run treealpha-backtest \
 本地跑 smoke：
 
 ```bash
-make smoke DATA=./data_small.parquet OUTPUT=./artifacts/template-smoke
+uv run moneytree \
+  --config configs/market/us.yaml \
+  --config configs/model/rf.yaml \
+  --config configs/backtest/smoke.yaml \
+  --data ./data_small.parquet \
+  --output-dir ./artifacts/smoke
 ```
 
 跑完整测试：
 
 ```bash
-make test
+uv run pytest -q
 ```
 
 ## Config Layout

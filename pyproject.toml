@@ -3,41 +3,35 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "treealpha-template"
+name = "money-tree"
 version = "0.1.0"
-description = "Template scaffold for cross-sectional equity models with market adapters and a model registry."
+description = "Cross-sectional equity research and backtesting toolkit with market adapters and a model registry."
 requires-python = ">=3.10"
 dependencies = [
-    "matplotlib",
-    "numpy",
-    "optuna",
-    "pandas",
-    "PyYAML",
-    "pyarrow",
-    "scikit-learn",
-    "scipy",
+  "matplotlib",
+  "numpy",
+  "optuna",
+  "pandas",
+  "PyYAML",
+  "pyarrow",
+  "scikit-learn",
+  "scipy",
 ]
 
 [project.optional-dependencies]
-xgboost = [
-    "xgboost",
-]
+xgboost = ["xgboost"]
 
 [project.scripts]
-treealpha-backtest = "treealpha.cli.backtest:main"
+moneytree = "treealpha.cli.backtest:main"
 
 [dependency-groups]
-dev = [
-    "ipykernel",
-    "jupyterlab",
-    "pytest",
-]
+dev = ["pytest"]
 
 [tool.uv]
 package = true
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

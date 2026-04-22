@@ -1,4 +1,4 @@
-"""Market-agnostic cross-sectional alpha research scaffold."""
+"""Money Tree cross-sectional research package."""
 
 __all__ = [
     "__version__",

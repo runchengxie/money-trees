@@ -1,1 +1,1 @@
-"""CLI entrypoints for treealpha."""
+"""CLI entrypoints for Money Tree."""

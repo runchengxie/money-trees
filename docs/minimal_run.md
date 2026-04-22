@@ -1,6 +1,6 @@
 # Minimal Run
 
-这个模板的最小工作流只做两件事：先确认脚手架能跑，再开始替换或扩展市场实现。
+这个项目的最小工作流只做两件事：先确认主链路能跑，再开始替换或扩展市场实现。
 
 ## 1. 安装依赖
 
@@ -32,18 +32,12 @@ uv sync --dev
 ## 3. 运行 smoke 配置
 
 ```bash
-make smoke DATA=./data_small.parquet OUTPUT=./artifacts/template-smoke
-```
-
-等价的直接命令：
-
-```bash
-uv run treealpha-backtest \
+uv run moneytree \
   --config configs/market/us.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/smoke.yaml \
   --data ./data_small.parquet \
-  --output-dir ./artifacts/template-smoke
+  --output-dir ./artifacts/smoke
 ```
 
 ## 4. 开始做自己的市场适配
