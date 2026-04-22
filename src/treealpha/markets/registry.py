@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from treealpha.markets.base import BaseMarketProfile
+from treealpha.markets.cn import CNMarketProfile
 from treealpha.markets.us import USMarketProfile
 
 
 _MARKET_REGISTRY: dict[str, BaseMarketProfile] = {
+    "cn": CNMarketProfile(),
     "us": USMarketProfile(),
 }
 

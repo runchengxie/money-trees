@@ -1,0 +1,21 @@
+model:
+  feature_selection: none
+  n_trials: 0
+  tuning_cv_folds: 1
+
+backtest:
+  cost_bps: 10.0
+  train_months: 60
+  gap_months: 3
+  test_months: 3
+  segment1_start: "2004-04-01"
+  segment1_windows: 1
+  segment2_start: "2009-04-01"
+  segment2_windows: 1
+  holdout:
+    start: "2015-01-01"
+    end: "2015-12-31"
+    model_segment: segment_b
+
+output:
+  output_dir: artifacts/template-smoke

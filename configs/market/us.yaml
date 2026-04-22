@@ -1,0 +1,8 @@
+market:
+  profile: us
+  benchmark: SPY
+  label_mode: relative_to_benchmark
+  label_source: actual
+  label_threshold: 0.05
+  feature_lag_periods: 0
+  add_missing_indicators: false

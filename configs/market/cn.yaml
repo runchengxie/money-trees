@@ -1,0 +1,13 @@
+market:
+  profile: cn
+  benchmark: 000300.SH
+  label_mode: relative_to_benchmark
+  label_source: actual
+  label_threshold: 0.03
+  feature_lag_periods: 1
+  add_missing_indicators: false
+  tradability_columns:
+    suspend: is_suspended
+    st: is_st
+    up_limit: hit_up_limit
+    down_limit: hit_down_limit

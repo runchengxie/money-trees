@@ -1,0 +1,10 @@
+model:
+  id: lasso
+  params:
+    alpha: 0.001
+  feature_selection: none
+  min_features: 2
+  max_selection_steps: 0
+  n_trials: 0
+  tuning_cv_folds: 1
+  random_seed: 123

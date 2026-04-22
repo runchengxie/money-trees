@@ -1,0 +1,13 @@
+model:
+  id: random_forest
+  params:
+    n_estimators: 300
+    max_depth: 12
+    min_samples_leaf: 4
+    max_features: sqrt
+  feature_selection: importance
+  min_features: 2
+  max_selection_steps: 200
+  n_trials: 25
+  tuning_cv_folds: 3
+  random_seed: 123

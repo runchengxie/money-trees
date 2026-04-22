@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from treealpha.config import load_backtest_settings
 from treealpha.runner import print_run_results, run_backtest
+
+DEFAULT_CONFIG_PATHS = [
+    "configs/market/us.yaml",
+    "configs/model/rf.yaml",
+    "configs/backtest/default.yaml",
+]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a treealpha backtest from config.")
     parser.add_argument(
         "--config",
-        default="configs/reference_us_random_forest.toml",
-        help="Path to the structured run config.",
+        action="append",
+        default=[],
+        help="Repeatable config path. Later files override earlier files.",
     )
     parser.add_argument("--data", default="", help="Optional dataset override.")
     parser.add_argument("--output-dir", default="", help="Optional output directory override.")
@@ -29,7 +35,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     settings = load_backtest_settings(
-        config_path=args.config,
+        config_paths=list(args.config) or list(DEFAULT_CONFIG_PATHS),
         data_path=args.data or None,
         output_dir=args.output_dir or None,
         overrides=list(args.overrides),

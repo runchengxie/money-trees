@@ -64,3 +64,16 @@ def test_us_market_profile_adds_generic_benchmark_aliases() -> None:
     prepared = profile.prepare_frame(frame=frame, label_source="actual")
     assert "benchmark_next_period_return" in prepared.columns
     assert "benchmark_cum_ret" in prepared.columns
+
+
+def test_cn_market_profile_is_registered_as_template_placeholder() -> None:
+    profile = get_market_profile("cn")
+    frame = pd.DataFrame(
+        {
+            "date": ["2021-01-31"],
+            "ticker": ["000001.SZ"],
+        }
+    )
+
+    with pytest.raises(NotImplementedError, match="template placeholder"):
+        profile.prepare_frame(frame=frame, label_source="actual")

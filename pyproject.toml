@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "guan-random-forest-cross-sectional"
+name = "treealpha-template"
 version = "0.1.0"
-description = "Cross-sectional random forest strategy backtest scripts and reproducible outputs."
+description = "Template scaffold for cross-sectional equity models with market adapters and a model registry."
 requires-python = ">=3.10"
 dependencies = [
     "matplotlib",

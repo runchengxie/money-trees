@@ -41,6 +41,16 @@ def _deep_copy_dict(mapping: dict[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(mapping))
 
 
+def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = _deep_copy_dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _load_mapping(path: str | Path) -> dict[str, Any]:
     file_path = Path(path)
     suffix = file_path.suffix.lower()
@@ -60,6 +70,21 @@ def _load_mapping(path: str | Path) -> dict[str, Any]:
         loaded = yaml.safe_load(file_path.read_text(encoding="utf-8"))
         return loaded or {}
     raise ValueError(f"Unsupported config format: {file_path}")
+
+
+def _resolve_config_paths(
+    *,
+    config_paths: list[str | Path] | None = None,
+    config_path: str | Path | None = None,
+) -> list[Path]:
+    resolved: list[Path] = []
+    for raw_path in config_paths or []:
+        resolved.append(Path(raw_path))
+    if config_path is not None:
+        resolved.append(Path(config_path))
+    if not resolved:
+        raise ValueError("At least one config path is required.")
+    return resolved
 
 
 @dataclass
@@ -113,6 +138,7 @@ class BacktestSettings:
     holdout_model_segment: str = "segment_b"
     export_parquet: str = ""
     config_path: str = ""
+    config_paths: list[str] = field(default_factory=list)
     resolved_config: dict[str, Any] = field(default_factory=dict)
 
     def to_display_config(self) -> dict[str, Any]:
@@ -123,12 +149,16 @@ class BacktestSettings:
 
 def load_backtest_settings(
     *,
-    config_path: str | Path,
+    config_paths: list[str | Path] | None = None,
+    config_path: str | Path | None = None,
     data_path: str | None = None,
     output_dir: str | None = None,
     overrides: list[str] | None = None,
 ) -> BacktestSettings:
-    mapping = _load_mapping(config_path)
+    resolved_paths = _resolve_config_paths(config_paths=config_paths, config_path=config_path)
+    mapping: dict[str, Any] = {}
+    for path in resolved_paths:
+        mapping = _deep_merge_dict(mapping, _load_mapping(path))
     for override in overrides or []:
         if "=" not in override:
             raise ValueError(f"Invalid override '{override}'. Use dotted.path=value.")
@@ -200,7 +230,8 @@ def load_backtest_settings(
         holdout_end=str(holdout.get("end", "")),
         holdout_model_segment=str(holdout.get("model_segment", "segment_b")),
         export_parquet=str(output.get("export_parquet", "")),
-        config_path=str(config_path),
+        config_path=str(resolved_paths[-1]),
+        config_paths=[str(path) for path in resolved_paths],
         resolved_config=_deep_copy_dict(mapping),
     )
     return settings

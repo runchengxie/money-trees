@@ -22,6 +22,12 @@ from treealpha.runner import (
 )
 from treealpha.portfolio import PortfolioConfig
 
+DEFAULT_CONFIGS = [
+    "configs/market/us.yaml",
+    "configs/model/rf.yaml",
+    "configs/backtest/default.yaml",
+]
+
 
 def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
     start = "2004-03-31" if freq == "QE" else "2004-01-31"
@@ -60,18 +66,12 @@ def _cli_cmd(
     data_path: Path,
     output_dir: Path,
     extra_args: list[str] | None = None,
+    config_paths: list[str] | None = None,
 ) -> list[str]:
-    cmd = [
-        sys.executable,
-        "-m",
-        "treealpha.cli.backtest",
-        "--config",
-        "configs/reference_us_random_forest.toml",
-        "--data",
-        str(data_path),
-        "--output-dir",
-        str(output_dir),
-    ]
+    cmd = [sys.executable, "-m", "treealpha.cli.backtest"]
+    for config_path in config_paths or DEFAULT_CONFIGS:
+        cmd.extend(["--config", config_path])
+    cmd.extend(["--data", str(data_path), "--output-dir", str(output_dir)])
     if extra_args:
         cmd.extend(extra_args)
     return cmd
@@ -180,6 +180,8 @@ def test_treealpha_cli_smoke(tmp_path: Path) -> None:
     assert "Tail / Distribution" in run_summary
     assert "Segment diagnostics" in run_summary
     assert "Final Holdout OOS" in run_summary
+
+
 def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "smoke_monthly.parquet"
@@ -222,6 +224,44 @@ def test_treealpha_cli_holdout_uses_test_month_buckets(tmp_path: Path) -> None:
 
     holdout_returns = pd.read_csv(out_dir / "holdout/strategy_returns.csv")
     assert len(holdout_returns) == 4
+
+
+def test_treealpha_cli_uses_default_template_config_stack(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "default_stack.parquet"
+    out_dir = tmp_path / "default_stack_artifacts"
+    _build_smoke_dataset().to_parquet(data_path, index=False)
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "treealpha.cli.backtest",
+            "--data",
+            str(data_path),
+            "--output-dir",
+            str(out_dir),
+            "--set",
+            "model.feature_selection=none",
+            "--set",
+            "model.n_trials=0",
+            "--set",
+            "backtest.segment1_windows=1",
+            "--set",
+            "backtest.segment2_windows=1",
+            "--set",
+            "backtest.holdout.start=2015-01-01",
+            "--set",
+            "backtest.holdout.end=2015-12-31",
+        ],
+        cwd=root,
+        env=_cli_env(root),
+        check=True,
+    )
+
+    run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert run_config["arguments"]["config_paths"] == DEFAULT_CONFIGS
+    assert (out_dir / "metrics.json").exists()
 
 
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:

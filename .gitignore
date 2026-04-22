@@ -137,6 +137,7 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+.codex
 .venv
 env/
 venv/
@@ -215,3 +216,4 @@ full_project_source.txt
 
 # Backtest runtime outputs
 artifacts/backtest/
+artifacts/template-smoke/

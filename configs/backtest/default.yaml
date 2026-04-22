@@ -1,0 +1,40 @@
+portfolio:
+  min_score: 0.05
+  winsor_z: 3.0
+  weighting_method: heuristic
+  gross_target: 1.0
+  net_target: 0.0
+  max_name_weight: 0.02
+  min_names_per_side: 5
+  use_vol_scaling: true
+  vol_power: 1.0
+  sector_neutral: false
+  sector_prefix: SP_sector_code_
+  qp_risk_aversion: 10.0
+  qp_turnover_penalty: 5.0
+  qp_cov_lookback: 252
+  qp_cov_shrinkage: true
+  qp_cov_ridge: 0.000001
+  qp_mu_clip: 1.0
+  qp_max_names: 300
+  qp_solver_max_iter: 300
+  qp_solver_ftol: 1.0e-9
+  qp_fallback_to_heuristic: true
+
+backtest:
+  cost_bps: 10.0
+  train_months: 60
+  gap_months: 3
+  test_months: 3
+  segment1_start: "2004-04-01"
+  segment1_windows: 60
+  segment2_start: "2009-04-01"
+  segment2_windows: 20
+  holdout:
+    start: ""
+    end: ""
+    model_segment: segment_b
+
+output:
+  output_dir: artifacts/backtest
+  export_parquet: ""

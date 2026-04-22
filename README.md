@@ -1,114 +1,151 @@
 # Treealpha Template Scaffold
 
-一个从美股随机森林研究仓库抽出来的可复用截面选股脚手架。当前默认保留 `us` 市场配置作为参考实现，但仓库结构已经改成更适合继续孵化 `tree-alpha-cn` 这类衍生项目的模板形态。
+一个用于孵化截面选股项目的模板仓库。它保留了可复用的训练、回测、组合和评估骨架，并把市场适配层与模型选择层拆开，适合继续衍生 `tree-alpha-cn`、`tree-alpha-us` 这类独立仓库。
 
-## 当前定位
+## Template Workflow
 
-- 默认入口已经切到 package CLI：`treealpha.cli.backtest`
-- 模型层通过 registry 选择：`random_forest`、`xgboost`、`ridge`、`lasso`、`elasticnet`
-- 市场层通过 profile 选择：当前内置 `us`
-- 历史 artifacts 和参考 notebook 已移到 `examples/`，不再属于默认工作流
+1. 用这个仓库生成一个新仓库。
+2. 先修改 `configs/market/*.yaml`，把 benchmark、标签口径和交易约束占位符改成你自己的市场语义。
+3. 替换 `src/treealpha/markets/*.py`，让 market profile 和你的数据契约一致。
+4. 运行 smoke test，确认脚手架还能完整训练、回测并落盘。
+5. 再开始增加特征、模型和更复杂的组合约束。
 
-## 快速开始
+## First Files To Edit
 
-环境：
+- [pyproject.toml](/home/richard/code/guan-random-forest-cross-sectional/pyproject.toml)
+  改项目名、描述和发布元数据。
+- [configs/market/us.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/market/us.yaml)
+  参考市场配置。
+- [configs/market/cn.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/market/cn.yaml)
+  A 股占位配置。
+- [src/treealpha/markets/cn.py](/home/richard/code/guan-random-forest-cross-sectional/src/treealpha/markets/cn.py)
+  模板占位实现，默认会明确报错提醒你替换。
+- [examples/minimal_run.md](/home/richard/code/guan-random-forest-cross-sectional/examples/minimal_run.md)
+  最小跑通路径。
+
+## What The Template Includes
+
+- `src/treealpha/`
+  package CLI、回测执行内核、模型 registry、市场 registry。
+- `configs/market/*.yaml`
+  市场适配占位层。
+- `configs/model/*.yaml`
+  `random_forest`、`xgboost`、`ridge`、`lasso`、`elasticnet` 的模型入口。
+- `configs/backtest/*.yaml`
+  默认运行参数和 smoke 参数。
+- `tests/`
+  单元测试和模板 smoke test。
+- `scripts/convert_pickle_to_parquet.py`
+  一个保留的本地数据转换小工具。
+
+## Quick Start
+
+环境要求：
 
 - Python `>=3.10`
-- 依赖管理器：`uv`
+- `uv`
 
-安装：
+安装依赖：
 
 ```bash
 uv sync --dev
 ```
 
-使用默认参考配置运行：
+默认 CLI 会按下面顺序叠配置：
 
-```bash
-uv run python -m treealpha.cli.backtest \
-  --config configs/reference_us_random_forest.toml \
-  --data data_small.parquet \
-  --output-dir artifacts/backtest
-```
+- `configs/market/us.yaml`
+- `configs/model/rf.yaml`
+- `configs/backtest/default.yaml`
 
-也可以直接使用 console script：
+直接运行：
 
 ```bash
 uv run treealpha-backtest \
-  --config configs/reference_us_random_forest.toml \
   --data data_small.parquet \
   --output-dir artifacts/backtest
 ```
 
-## 配置结构
-
-参考配置见 [configs/reference_us_random_forest.toml](/home/richard/code/guan-random-forest-cross-sectional/configs/reference_us_random_forest.toml)。
-
-主要分为 5 层：
-
-- `market`：市场 profile、标签构造、数据路径、feature lag
-- `model`：模型 id、默认参数、调参与特征选择
-- `portfolio`：信号转仓位、QP 风险约束、行业中性等
-- `backtest`：滚动窗口、成本、segment、holdout
-- `output`：输出目录与可选 parquet 导出
-
-CLI 支持用 `--set dotted.path=value` 做小范围覆盖，例如：
+显式传入配置也可以，后面的文件会覆盖前面的同名字段：
 
 ```bash
-uv run python -m treealpha.cli.backtest \
-  --config configs/reference_us_random_forest.toml \
+uv run treealpha-backtest \
+  --config configs/market/us.yaml \
+  --config configs/model/rf.yaml \
+  --config configs/backtest/default.yaml \
   --data data_small.parquet \
-  --set model.id=ridge \
-  --set model.n_trials=0 \
-  --set model.feature_selection=none
+  --output-dir artifacts/backtest
 ```
 
-## 包结构
+也支持局部覆盖：
+
+```bash
+uv run treealpha-backtest \
+  --config configs/market/us.yaml \
+  --config configs/model/ridge.yaml \
+  --config configs/backtest/default.yaml \
+  --data data_small.parquet \
+  --set backtest.segment1_windows=1 \
+  --set backtest.segment2_windows=1
+```
+
+## Smoke Test
+
+模板自带一个最小 smoke 配置和测试文件：
+
+- [configs/backtest/smoke.yaml](/home/richard/code/guan-random-forest-cross-sectional/configs/backtest/smoke.yaml)
+- [tests/test_smoke.py](/home/richard/code/guan-random-forest-cross-sectional/tests/test_smoke.py)
+
+本地跑 smoke：
+
+```bash
+make smoke DATA=./data_small.parquet OUTPUT=./artifacts/template-smoke
+```
+
+跑完整测试：
+
+```bash
+make test
+```
+
+## Config Layout
 
 ```text
-src/treealpha/
-  cli/          # package CLI
-  markets/      # market profile registry + implementations
-  models/       # model adapter registry + implementations
-  backtest.py   # walk-forward backtest core
-  data.py       # panel loading / preprocessing helpers
-  portfolio.py  # score -> weights / turnover / PnL
-  runner.py     # shared execution kernel for config-driven backtests
+configs/
+  backtest/
+    default.yaml
+    smoke.yaml
+  market/
+    us.yaml
+    cn.yaml
+  model/
+    rf.yaml
+    xgb.yaml
+    ridge.yaml
+    lasso.yaml
+    elasticnet.yaml
 ```
 
-## 内置能力
+多文件配置会按传入顺序做深合并，适合把市场、模型和回测参数拆开维护。
 
-### Models
+## Market Layer
 
-- `random_forest`：保留原项目的 RF 调参与特征选择流程
-- `xgboost`：作为可选依赖接入，未安装时会 fail fast
-- `ridge` / `lasso` / `elasticnet`：线性基准模型，默认不支持 RF 式调参与特征选择
+- `us` 是当前唯一可运行的参考实现，保留原有 SPY 相对收益语义。
+- `cn` 已注册为模板占位 profile，但默认会抛出明确错误，提醒你先替换 A 股数据契约。
+- 市场 profile 负责三件事：
+  benchmark 别名、标签列约束、可交易过滤。
 
-### Market Profiles
+## Model Layer
 
-- `us`：把原来的 SPY 相对收益标签和 benchmark 逻辑抽成 profile
-- profile 可以通过 registry 扩展，衍生仓库可以直接注册 `cn` 等新市场
+- `random_forest`
+  保留原项目的树模型主路径。
+- `xgboost`
+  通过可选依赖启用，未安装时会 fail fast。
+- `ridge` / `lasso` / `elasticnet`
+  作为线性基准，默认关闭特征选择和调参。
 
-## 数据约定
+## Outputs
 
-当前 `us` profile 仍需要原始数据包含：
-
-- `date`
-- `ticker`
-- `next_period_return`
-- `spy_cum_ret`
-- `spy_next_period_return` 或 `pred_rel_return`（取决于 `label_source`）
-
-profile 会在预处理阶段补齐通用 benchmark 别名：
-
-- `benchmark_cum_ret`
-- `benchmark_next_period_return`
-
-这让回测和评估层不再直接写死 SPY 列名。
-
-## 输出产物
-
-默认输出仍保持原项目的核心合同：
+默认运行会生成这些核心产物：
 
 - `metrics.json`
 - `run_config.json`
@@ -124,22 +161,4 @@ profile 会在预处理阶段补齐通用 benchmark 别名：
 - `strategy_vs_spy.csv`
 - `segment_a_features.txt`
 - `segment_b_features.txt`
-- 可选 `holdout/` 目录
-
-## 扩展新市场/新仓库
-
-如果你要基于这个仓库继续做 `tree-alpha-cn`：
-
-1. 新增 `cn` market profile 并注册
-2. 在新仓库里放自己的默认 config
-3. 按 A 股数据语义重定义 benchmark / label / tradability filter
-4. 保持 `treealpha` 的 runner、portfolio、metrics 作为底层复用层
-
-## Legacy 内容
-
-以下内容已从默认模板工作流移出：
-
-- [examples/legacy_artifacts](/home/richard/code/guan-random-forest-cross-sectional/examples/legacy_artifacts)
-- [examples/reference_notebook](/home/richard/code/guan-random-forest-cross-sectional/examples/reference_notebook)
-
-它们保留为历史参考，不再作为模板主入口的一部分。
+- 可选 `holdout/`

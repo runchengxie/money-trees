@@ -1,6 +1,3 @@
-本目录保存从旧研究仓库保留下来的参考材料，不属于默认模板工作流。
+本目录只保留模板使用说明，不再承载历史回测产物或 notebook 草稿。
 
-- `legacy_artifacts/`: 历史回测输出快照
-- `reference_notebook/`: 旧 notebook 参考
-
-新的默认入口是 `treealpha.cli.backtest` 和 `configs/reference_us_random_forest.toml`。
+- [minimal_run.md](/home/richard/code/guan-random-forest-cross-sectional/examples/minimal_run.md): 新仓库生成后的最小跑通路径
