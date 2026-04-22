@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from strategy.portfolio import (
+from treealpha.portfolio import (
     PortfolioConfig,
     build_portfolio_weights,
     build_signal_scores,

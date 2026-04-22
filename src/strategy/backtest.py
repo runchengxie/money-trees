@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from .data import build_spy_series, build_xy_returns, fill_missing_with_reference, slice_by_date
+from .data import (
+    build_benchmark_series,
+    build_xy_returns,
+    build_xy_target_returns,
+    fill_missing_with_reference,
+    slice_by_date,
+)
 from .model import fit_random_forest
 from .portfolio import (
     PortfolioConfig,
@@ -114,11 +122,14 @@ def run_rolling_backtest(
     windows: list[tuple[str, str, str, str]],
     feature_columns: list[str],
     model_params: dict[str, object],
+    model_adapter: Any | None = None,
+    target_column: str = "rel_performance",
     random_state: int = 123,
     cost_bps: float = 0.0,
     initial_nav: float = 1.0,
     add_missing_indicators: bool = False,
     portfolio_config: PortfolioConfig | None = None,
+    tradability_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
 ) -> BacktestResult:
     portfolio_cfg = PortfolioConfig() if portfolio_config is None else portfolio_config
     nav_value = float(initial_nav)
@@ -147,40 +158,69 @@ def run_rolling_backtest(
             reference=train_raw,
             add_missing_indicators=add_missing_indicators,
         )
+        if tradability_filter is not None:
+            test_frame = tradability_filter(test_frame)
+            if test_frame.empty:
+                continue
         for col in feature_columns:
             if col not in train_frame.columns:
                 train_frame[col] = 0.0
             if col not in test_frame.columns:
                 test_frame[col] = 0.0
 
-        train_x, train_y, _ = build_xy_returns(train_frame, feature_columns)
-        test_x, _, test_returns = build_xy_returns(test_frame, feature_columns)
+        train_x, train_y, _ = build_xy_target_returns(
+            train_frame,
+            feature_columns,
+            target_column=target_column,
+        )
+        test_x, _, test_returns = build_xy_target_returns(
+            test_frame,
+            feature_columns,
+            target_column=target_column,
+        )
         if train_x.empty or test_x.empty:
             continue
 
-        model = fit_random_forest(
-            train_x=train_x,
-            train_y=train_y,
-            params=model_params,
-            random_state=random_state + idx,
-        )
-        preds = model.predict(test_x)
-        probs: np.ndarray | None = None
-        classes_: np.ndarray | None = None
-        if portfolio_cfg.use_prob_signal and hasattr(model, "predict_proba"):
-            probs = model.predict_proba(test_x)
-            classes_ = getattr(model, "classes_", None)
-
-        signal_scores = build_signal_scores(
-            predictions=preds,
-            probs=probs,
-            classes_=classes_,
-            use_prob_signal=portfolio_cfg.use_prob_signal,
-        )
+        if model_adapter is None:
+            model = fit_random_forest(
+                train_x=train_x,
+                train_y=train_y,
+                params=model_params,
+                random_state=random_state + idx,
+            )
+            preds = model.predict(test_x)
+            probs: np.ndarray | None = None
+            classes_: np.ndarray | None = None
+            if portfolio_cfg.use_prob_signal and hasattr(model, "predict_proba"):
+                probs = model.predict_proba(test_x)
+                classes_ = getattr(model, "classes_", None)
+            signal_scores = build_signal_scores(
+                predictions=preds,
+                probs=probs,
+                classes_=classes_,
+                use_prob_signal=portfolio_cfg.use_prob_signal,
+            )
+        else:
+            model = model_adapter.fit(
+                train_x=train_x,
+                train_y=train_y,
+                params=model_params,
+                random_state=random_state + idx,
+            )
+            outputs = model_adapter.predict_outputs(model=model, features=test_x)
+            signal_scores = outputs.scores
+            probs = outputs.probabilities
+            classes_ = outputs.classes_
+            preds = (
+                outputs.predictions
+                if outputs.predictions is not None
+                else np.zeros(len(test_x), dtype=int)
+            )
         current_weights = build_portfolio_weights(
             predictions=preds,
             probs=probs,
             classes_=classes_,
+            raw_scores=signal_scores,
             sample_index=test_x.index,
             train_frame=train_frame,
             test_frame=test_frame,
@@ -230,8 +270,11 @@ def build_spy_benchmark(
     frame: pd.DataFrame,
     target_index: pd.Index,
     frequency: str = "QE",
+    benchmark_cum_col: str | None = None,
 ) -> pd.Series:
-    spy = build_spy_series(frame).resample(frequency).ffill()
+    spy = build_benchmark_series(frame, benchmark_cum_col=benchmark_cum_col).resample(
+        frequency
+    ).ffill()
     if spy.empty:
         return pd.Series(dtype=float, name="spy_nav")
 

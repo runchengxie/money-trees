@@ -13,12 +13,16 @@ NON_FEATURE_COLUMNS = {
     "ticker",
     "return",
     "cum_ret",
+    "benchmark_cum_ret",
+    "benchmark_next_period_return",
     "spy_cum_ret",
     "next_period_return",
     "spy_next_period_return",
     "pred_rel_return",
     "rel_return",
     "rel_performance",
+    "is_tradable",
+    "tradeable",
 }
 
 
@@ -63,14 +67,35 @@ def ensure_date_ticker_index(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _resolve_benchmark_return_column(frame: pd.DataFrame) -> str:
+    for column in ("benchmark_next_period_return", "spy_next_period_return"):
+        if column in frame.columns:
+            return column
+    raise KeyError(
+        "Missing required benchmark return column. Expected one of "
+        "['benchmark_next_period_return', 'spy_next_period_return']"
+    )
+
+
+def _resolve_benchmark_cum_column(frame: pd.DataFrame) -> str:
+    for column in ("benchmark_cum_ret", "spy_cum_ret"):
+        if column in frame.columns:
+            return column
+    raise KeyError(
+        "Missing required benchmark cumulative column. Expected one of "
+        "['benchmark_cum_ret', 'spy_cum_ret']"
+    )
+
+
 def compute_relative_return(frame: pd.DataFrame, label_source: LabelSource) -> pd.Series:
     """Compute the relative return used for label generation."""
     if label_source == "actual":
-        required = {"next_period_return", "spy_next_period_return"}
+        benchmark_return_col = _resolve_benchmark_return_column(frame)
+        required = {"next_period_return", benchmark_return_col}
         missing = required.difference(frame.columns)
         if missing:
             raise KeyError(f"Missing required columns for actual labels: {sorted(missing)}")
-        rel = frame["next_period_return"] - frame["spy_next_period_return"]
+        rel = frame["next_period_return"] - frame[benchmark_return_col]
         rel.name = "rel_return"
         return rel
 
@@ -224,28 +249,58 @@ def get_feature_columns(
     return list(numeric_or_bool)
 
 
-def build_xy_returns(
+def build_xy_target_returns(
     frame: pd.DataFrame,
     feature_columns: list[str],
+    target_column: str = "rel_performance",
+    realized_return_column: str = "next_period_return",
 ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Build model matrix, labels and realized next-period returns."""
+    """Build model matrix, configured target, and realized next-period returns."""
     features = frame[feature_columns].copy()
     bool_cols = features.select_dtypes(include=["bool"]).columns
     if len(bool_cols) > 0:
         features[bool_cols] = features[bool_cols].astype(np.int8)
 
-    labels = frame["rel_performance"].to_numpy()
-    realized_returns = frame["next_period_return"].to_numpy()
-    return features, labels, realized_returns
+    if target_column not in frame.columns:
+        raise KeyError(f"Missing target column: {target_column}")
+    if realized_return_column not in frame.columns:
+        raise KeyError(f"Missing realized return column: {realized_return_column}")
+
+    target = frame[target_column].to_numpy()
+    realized_returns = frame[realized_return_column].to_numpy()
+    return features, target, realized_returns
+
+
+def build_xy_returns(
+    frame: pd.DataFrame,
+    feature_columns: list[str],
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """Build model matrix, labels and realized next-period returns."""
+    return build_xy_target_returns(
+        frame=frame,
+        feature_columns=feature_columns,
+        target_column="rel_performance",
+        realized_return_column="next_period_return",
+    )
+
+
+def build_benchmark_series(
+    frame: pd.DataFrame,
+    benchmark_cum_col: str | None = None,
+) -> pd.Series:
+    """Build a unique-date benchmark cumulative return series."""
+    resolved_col = benchmark_cum_col or _resolve_benchmark_cum_column(frame)
+    compact = frame.loc[:, [resolved_col]].copy()
+    benchmark = (
+        compact.reset_index()[["date", resolved_col]]
+        .drop_duplicates(subset=["date"])
+        .set_index("date")
+        .sort_index()[resolved_col]
+    )
+    benchmark.name = resolved_col
+    return benchmark
 
 
 def build_spy_series(frame: pd.DataFrame) -> pd.Series:
     """Build a unique-date SPY cumulative return series."""
-    compact = frame.loc[:, ["spy_cum_ret"]].copy()
-    spy = (
-        compact.reset_index()[["date", "spy_cum_ret"]]
-        .drop_duplicates(subset=["date"])
-        .set_index("date")
-        .sort_index()["spy_cum_ret"]
-    )
-    return spy
+    return build_benchmark_series(frame=frame, benchmark_cum_col="spy_cum_ret")

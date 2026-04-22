@@ -495,6 +495,7 @@ def build_portfolio_weights(
     predictions: np.ndarray,
     probs: np.ndarray | None,
     classes_: np.ndarray | None,
+    raw_scores: np.ndarray | None = None,
     sample_index: pd.Index,
     train_frame: pd.DataFrame,
     test_frame: pd.DataFrame,
@@ -505,12 +506,13 @@ def build_portfolio_weights(
     if len(predictions) != len(sample_index):
         raise ValueError("predictions and sample_index must have equal length.")
 
-    raw_scores = build_signal_scores(
-        predictions=predictions,
-        probs=probs,
-        classes_=classes_,
-        use_prob_signal=cfg.use_prob_signal,
-    )
+    if raw_scores is None:
+        raw_scores = build_signal_scores(
+            predictions=predictions,
+            probs=probs,
+            classes_=classes_,
+            use_prob_signal=cfg.use_prob_signal,
+        )
     score = _to_name_series(raw_scores, sample_index=sample_index, name="score")
 
     score = score.where(score.abs() >= cfg.min_score, 0.0)

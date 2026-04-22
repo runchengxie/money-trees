@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,14 +11,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.run_backtest import (
+from treealpha.runner import (
     HoldoutResult,
     _build_holdout_result,
     SegmentFitResult,
     build_run_summary_text,
     combine_backtest_segments,
 )
-from strategy.portfolio import PortfolioConfig
+from treealpha.portfolio import PortfolioConfig
 
 
 def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
@@ -150,6 +151,52 @@ def test_run_backtest_script_smoke(tmp_path: Path) -> None:
     assert "Tail / Distribution" in run_summary
     assert "Segment diagnostics" in run_summary
     assert "Final Holdout OOS" in run_summary
+
+
+def test_treealpha_package_cli_smoke(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "smoke_cli.parquet"
+    out_dir = tmp_path / "artifacts_cli"
+    _build_smoke_dataset().to_parquet(data_path, index=False)
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "src")
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "treealpha.cli.backtest",
+            "--config",
+            "configs/reference_us_random_forest.toml",
+            "--data",
+            str(data_path),
+            "--output-dir",
+            str(out_dir),
+            "--set",
+            "model.n_trials=1",
+            "--set",
+            "model.tuning_cv_folds=3",
+            "--set",
+            "backtest.segment1_windows=1",
+            "--set",
+            "backtest.segment2_windows=1",
+            "--set",
+            "backtest.holdout.start=2015-01-01",
+            "--set",
+            "backtest.holdout.end=2015-12-31",
+            "--set",
+            "backtest.holdout.model_segment=segment_b",
+        ],
+        cwd=root,
+        env=env,
+        check=True,
+    )
+
+    assert (out_dir / "metrics.json").exists()
+    assert (out_dir / "run_config.json").exists()
+    assert (out_dir / "run_summary.txt").exists()
+    assert (out_dir / "holdout/metrics.json").exists()
 
 
 def test_run_backtest_script_holdout_uses_test_month_buckets(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from strategy.data import (
+from treealpha.data import (
     NON_FEATURE_COLUMNS,
     apply_feature_lag,
     ensure_date_ticker_index,

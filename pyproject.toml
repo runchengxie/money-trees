@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "guan-random-forest-cross-sectional"
 version = "0.1.0"
@@ -8,10 +12,19 @@ dependencies = [
     "numpy",
     "optuna",
     "pandas",
+    "PyYAML",
     "pyarrow",
     "scikit-learn",
     "scipy",
 ]
+
+[project.optional-dependencies]
+xgboost = [
+    "xgboost",
+]
+
+[project.scripts]
+treealpha-backtest = "treealpha.cli.backtest:main"
 
 [dependency-groups]
 dev = [
@@ -21,4 +34,10 @@ dev = [
 ]
 
 [tool.uv]
-package = false
+package = true
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
