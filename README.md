@@ -19,6 +19,8 @@
   A 股 market profile 实现，可继续按你的数据契约扩展。
 - [docs/minimal_run.md](/home/richard/code/money-tree/docs/minimal_run.md)
   最小跑通路径。
+- [docs/daily_alpha_research.md](/home/richard/code/money-tree/docs/daily_alpha_research.md)
+  A 股日频 Alpha101/191/158/360、TuShare 拉取和 XGBoost regressor 说明。
 
 ## Project Layout
 
@@ -27,7 +29,7 @@
 - `configs/market/cn.yaml`
   A 股市场适配层。
 - `configs/model/*.yaml`
-  `random_forest`、`xgboost`、`ridge`、`lasso`、`elasticnet` 的模型入口。
+  `random_forest`、`xgboost`、`xgboost_regressor`、`ridge`、`lasso`、`elasticnet` 的模型入口。
 - `configs/backtest/*.yaml`
   默认运行参数和 smoke 参数。
 - `configs/preset/*.yaml`
@@ -111,6 +113,27 @@ uv run moneytree \
 
 这个 preset 依赖输入数据里存在 `pred_rel_return` 列。
 
+日频 Alpha + XGBoost regressor 示例：
+
+```bash
+uv sync --dev --extra research
+
+uv run moneytree-tushare \
+  --start-date 20180101 \
+  --end-date 20241231 \
+  --output data/cn_daily_alpha.parquet \
+  --benchmark 000300.SH \
+  --factor-family alpha158 \
+  --factor-family alpha360
+
+uv run moneytree \
+  --config configs/market/cn.yaml \
+  --config configs/model/xgb_regressor.yaml \
+  --config configs/backtest/default.yaml \
+  --data data/cn_daily_alpha.parquet \
+  --output-dir artifacts/xgb-alpha-daily
+```
+
 ## Smoke Test
 
 项目自带一个最小 smoke 配置和测试文件：
@@ -147,6 +170,7 @@ configs/
   model/
     rf.yaml
     xgb.yaml
+    xgb_regressor.yaml
     ridge.yaml
     lasso.yaml
     elasticnet.yaml
@@ -181,6 +205,8 @@ configs/
   保留树模型主路径。
 - `xgboost`
   通过可选依赖启用，未安装时会 fail fast。
+- `xgboost_regressor`
+  通过可选依赖启用，使用连续 `rel_return` 作为训练目标，适合日频多因子回归研究。
 - `ridge` / `lasso` / `elasticnet`
   作为线性基准，默认关闭特征选择和调参。
 

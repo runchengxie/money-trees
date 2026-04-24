@@ -14,6 +14,7 @@ def test_model_registry_resolves_expected_builtin_ids() -> None:
     assert get_model_adapter("lasso").model_id == "lasso"
     assert get_model_adapter("elasticnet").model_id == "elasticnet"
     assert get_model_adapter("xgboost").model_id == "xgboost"
+    assert get_model_adapter("xgboost_regressor").model_id == "xgboost_regressor"
 
 
 def test_linear_model_rejects_unsupported_feature_selection_and_tuning() -> None:
@@ -32,6 +33,17 @@ def test_xgboost_adapter_reports_missing_optional_dependency() -> None:
         adapter.fit(
             train_x=pd.DataFrame({"f1": [1.0, 2.0, 3.0]}),
             train_y=pd.Series([-1, 0, 1]).to_numpy(),
+            params=None,
+            random_state=7,
+        )
+
+
+def test_xgboost_regressor_reports_missing_optional_dependency() -> None:
+    adapter = get_model_adapter("xgboost_regressor")
+    with pytest.raises(RuntimeError, match="optional xgboost dependency"):
+        adapter.fit(
+            train_x=pd.DataFrame({"f1": [1.0, 2.0, 3.0]}),
+            train_y=pd.Series([0.01, 0.00, -0.01]).to_numpy(),
             params=None,
             random_state=7,
         )

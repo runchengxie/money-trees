@@ -83,3 +83,57 @@ class XGBoostAdapter(BaseModelAdapter):
             probabilities=probabilities,
             classes_=model.classes_,
         )
+
+
+class XGBoostRegressorAdapter(BaseModelAdapter):
+    model_id = "xgboost_regressor"
+    training_target_column = "rel_return"
+    capabilities = ModelCapabilities(
+        supports_tuning=False,
+        supported_feature_selection=("none",),
+        supports_probability_scores=False,
+    )
+
+    def _load_estimator(self):
+        try:
+            from xgboost import XGBRegressor
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Model 'xgboost_regressor' requires the optional xgboost dependency. "
+                "Install it with the project's xgboost extra."
+            ) from exc
+        return XGBRegressor
+
+    def default_params(self) -> dict[str, Any]:
+        return {
+            "n_estimators": 300,
+            "max_depth": 4,
+            "learning_rate": 0.03,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_lambda": 1.0,
+            "objective": "reg:squarederror",
+            "eval_metric": "rmse",
+        }
+
+    def fit(
+        self,
+        *,
+        train_x: pd.DataFrame,
+        train_y: np.ndarray,
+        params: dict[str, Any] | None = None,
+        random_state: int = 123,
+    ):
+        estimator_cls = self._load_estimator()
+        model_params = self.default_params()
+        if params is not None:
+            model_params.update(params)
+        model_params.setdefault("random_state", random_state)
+        model = estimator_cls(**model_params)
+        model.fit(train_x, np.asarray(train_y, dtype=float))
+        return model
+
+    def predict_outputs(self, *, model, features: pd.DataFrame) -> ModelOutputs:
+        scores = np.asarray(model.predict(features), dtype=float)
+        predictions = np.sign(scores).astype(int)
+        return ModelOutputs(scores=scores, predictions=predictions)

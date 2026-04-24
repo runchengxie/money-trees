@@ -20,9 +20,12 @@ dependencies = [
 
 [project.optional-dependencies]
 xgboost = ["xgboost"]
+tushare = ["tushare"]
+research = ["tushare", "xgboost"]
 
 [project.scripts]
 moneytree = "moneytree.cli.backtest:main"
+moneytree-tushare = "moneytree.cli.tushare:main"
 
 [dependency-groups]
 dev = ["pytest"]

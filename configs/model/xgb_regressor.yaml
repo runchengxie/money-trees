@@ -1,0 +1,17 @@
+model:
+  id: xgboost_regressor
+  params:
+    n_estimators: 300
+    max_depth: 4
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    objective: reg:squarederror
+    eval_metric: rmse
+  feature_selection: none
+  min_features: 2
+  max_selection_steps: 0
+  n_trials: 0
+  tuning_cv_folds: 1
+  random_seed: 123
