@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "money-tree"
 version = "0.1.0"
-description = "Cross-sectional equity research and backtesting toolkit with market adapters and a model registry."
+description = "A-share cross-sectional equity research and backtesting toolkit."
 requires-python = ">=3.10"
 dependencies = [
   "matplotlib",

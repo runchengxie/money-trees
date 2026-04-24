@@ -7,7 +7,6 @@ from moneytree.backtest import (
     build_benchmark_nav,
     build_notebook_report_artifacts,
     build_rolling_windows,
-    build_spy_benchmark,
     compute_performance_metrics,
     run_rolling_backtest,
 )
@@ -30,9 +29,9 @@ def test_build_rolling_windows_shape_and_dates() -> None:
 def test_compute_performance_metrics_uses_return_rates_not_nav_diff() -> None:
     idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30"])
     strategy_nav = pd.Series([1.0, 2.0, 2.2], index=idx)
-    spy_nav = pd.Series([1.0, 1.5, 1.65], index=idx)
+    benchmark_nav = pd.Series([1.0, 1.5, 1.65], index=idx)
 
-    metrics = compute_performance_metrics(strategy_nav, spy_nav)
+    metrics = compute_performance_metrics(strategy_nav, benchmark_nav)
 
     expected_strategy_ret = strategy_nav.pct_change().dropna()
     expected_sharpe = expected_strategy_ret.mean() / expected_strategy_ret.std()
@@ -45,19 +44,19 @@ def test_compute_performance_metrics_uses_return_rates_not_nav_diff() -> None:
 def test_compute_performance_metrics_information_ratio_uses_excess_tracking_error() -> None:
     idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30", "2021-12-31"])
     strategy_ret = pd.Series([0.08, -0.02, 0.03, 0.04], index=idx)
-    spy_ret = pd.Series([0.03, -0.01, 0.01, 0.02], index=idx)
+    benchmark_ret = pd.Series([0.03, -0.01, 0.01, 0.02], index=idx)
     strategy_nav = (1.0 + strategy_ret).cumprod()
-    spy_nav = (1.0 + spy_ret).cumprod()
+    benchmark_nav = (1.0 + benchmark_ret).cumprod()
 
     metrics = compute_performance_metrics(
         strategy_nav=strategy_nav,
-        spy_nav=spy_nav,
+        benchmark_nav=benchmark_nav,
         strategy_returns=strategy_ret,
-        spy_returns=spy_ret,
+        benchmark_returns=benchmark_ret,
         periods_per_year=4.0,
     )
 
-    excess = strategy_ret - spy_ret
+    excess = strategy_ret - benchmark_ret
     expected_tracking_error = float(excess.std(ddof=1) * np.sqrt(4.0))
     expected_ir = float(excess.mean() * 4.0 / expected_tracking_error)
     assert np.isclose(metrics["tracking_error_annualized"], expected_tracking_error)
@@ -67,11 +66,11 @@ def test_compute_performance_metrics_information_ratio_uses_excess_tracking_erro
 def test_compute_performance_metrics_total_return_is_interval_consistent() -> None:
     idx = pd.to_datetime(["2021-03-31", "2021-06-30", "2021-09-30"])
     strategy_nav = pd.Series([1.10, 1.21, 1.331], index=idx)
-    spy_nav = pd.Series([1.00, 1.02, 1.03], index=idx)
+    benchmark_nav = pd.Series([1.00, 1.02, 1.03], index=idx)
 
     metrics = compute_performance_metrics(
         strategy_nav=strategy_nav,
-        spy_nav=spy_nav,
+        benchmark_nav=benchmark_nav,
         periods_per_year=4.0,
     )
 
@@ -86,12 +85,12 @@ def test_compute_performance_metrics_returns_empty_when_nav_has_no_overlap() -> 
         [1.0, 1.1],
         index=pd.to_datetime(["2021-03-31", "2021-06-30"]),
     )
-    spy_nav = pd.Series(
+    benchmark_nav = pd.Series(
         [1.0, 1.1],
         index=pd.to_datetime(["2022-03-31", "2022-06-30"]),
     )
 
-    metrics = compute_performance_metrics(strategy_nav=strategy_nav, spy_nav=spy_nav)
+    metrics = compute_performance_metrics(strategy_nav=strategy_nav, benchmark_nav=benchmark_nav)
 
     assert metrics == {}
 
@@ -111,8 +110,8 @@ def test_run_rolling_backtest_outputs_stable_series() -> None:
                     "f1": signal,
                     "f2": float(i),
                     "next_period_return": 0.01 + 0.02 * signal,
-                    "spy_next_period_return": 0.005,
-                    "spy_cum_ret": 1.0 + 0.001 * len(rows),
+                    "benchmark_next_period_return": 0.005,
+                    "benchmark_cum_ret": 1.0 + 0.001 * len(rows),
                 }
             )
 
@@ -153,28 +152,6 @@ def test_run_rolling_backtest_outputs_stable_series() -> None:
     assert not result.signal_period_profit.isna().any()
     assert not result.period_turnover.isna().any()
     assert not result.signal_turnover.isna().any()
-
-
-def test_build_spy_benchmark_aligns_and_rebases_target_index() -> None:
-    idx = pd.MultiIndex.from_tuples(
-        [
-            (pd.Timestamp("2021-03-31"), "A"),
-            (pd.Timestamp("2021-03-31"), "B"),
-            (pd.Timestamp("2021-06-30"), "A"),
-            (pd.Timestamp("2021-06-30"), "B"),
-            (pd.Timestamp("2021-09-30"), "A"),
-            (pd.Timestamp("2021-09-30"), "B"),
-        ],
-        names=["date", "ticker"],
-    )
-    frame = pd.DataFrame({"spy_cum_ret": [100.0, 100.0, 110.0, 110.0, 121.0, 121.0]}, index=idx)
-    target_index = pd.to_datetime(["2021-06-30", "2021-09-30"])
-
-    spy_nav = build_spy_benchmark(frame=frame, target_index=target_index)
-
-    assert spy_nav.index.equals(target_index)
-    assert np.isclose(float(spy_nav.iloc[0]), 1.0)
-    assert float(spy_nav.iloc[1]) > float(spy_nav.iloc[0])
 
 
 def test_build_benchmark_nav_aligns_and_uses_canonical_name() -> None:

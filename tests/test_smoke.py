@@ -11,10 +11,12 @@ import pandas as pd
 
 def _build_smoke_dataset() -> pd.DataFrame:
     dates = pd.date_range("2004-03-31", "2015-12-31", freq="QE")
-    tickers = ["AAA", "BBB", "CCC", "DDD"]
+    tickers = ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ", "000005.SZ", "000006.SZ"]
     rows: list[dict[str, object]] = []
     for dt in dates:
         quarter_sign = 1.0 if dt.quarter in {1, 3} else -1.0
+        benchmark_ret = 0.01 if dt.quarter in {1, 3} else -0.005
+        benchmark_cum = 100.0 + 0.5 * len(rows)
         for idx, ticker in enumerate(tickers):
             ticker_sign = 1.0 if idx % 2 == 0 else -1.0
             rel = 0.08 * ticker_sign + 0.01 * quarter_sign
@@ -24,9 +26,13 @@ def _build_smoke_dataset() -> pd.DataFrame:
                     "ticker": ticker,
                     "f_signal": rel,
                     "f_rank": float(idx),
-                    "next_period_return": rel,
-                    "spy_next_period_return": 0.0,
-                    "spy_cum_ret": 100.0 + 0.5 * len(rows),
+                    "next_period_return": benchmark_ret + rel,
+                    "benchmark_next_period_return": benchmark_ret,
+                    "benchmark_cum_ret": benchmark_cum,
+                    "is_suspended": False,
+                    "is_st": False,
+                    "hit_up_limit": False,
+                    "hit_down_limit": False,
                 }
             )
     return pd.DataFrame(rows)
@@ -41,7 +47,7 @@ def test_template_smoke_config_stack_runs(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root / "src")
     config_paths = [
-        "configs/market/us.yaml",
+        "configs/market/cn.yaml",
         "configs/model/rf.yaml",
         "configs/backtest/smoke.yaml",
     ]

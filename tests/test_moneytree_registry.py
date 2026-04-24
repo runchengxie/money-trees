@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from moneytree.config import BacktestSettings
-from moneytree.markets import get_market_profile
+from moneytree.markets import get_market_profile, list_market_profiles
 from moneytree.models import get_model_adapter
 
 
@@ -37,34 +37,8 @@ def test_xgboost_adapter_reports_missing_optional_dependency() -> None:
         )
 
 
-def test_us_market_profile_validates_required_columns() -> None:
-    profile = get_market_profile("us")
-    frame = pd.DataFrame(
-        {
-            "date": ["2021-01-31"],
-            "ticker": ["A"],
-            "next_period_return": [0.01],
-            "spy_cum_ret": [100.0],
-        }
-    )
-    with pytest.raises(ValueError, match="missing required columns"):
-        profile.validate_frame(frame=frame, label_source="actual")
-
-
-def test_us_market_profile_adds_generic_benchmark_aliases() -> None:
-    profile = get_market_profile("us")
-    frame = pd.DataFrame(
-        {
-            "date": ["2021-01-31"],
-            "ticker": ["A"],
-            "next_period_return": [0.01],
-            "spy_next_period_return": [0.002],
-            "spy_cum_ret": [100.0],
-        }
-    )
-    prepared = profile.prepare_frame(frame=frame, label_source="actual")
-    assert "benchmark_next_period_return" in prepared.columns
-    assert "benchmark_cum_ret" in prepared.columns
+def test_market_registry_only_exposes_cn_profile() -> None:
+    assert list_market_profiles() == ["cn"]
 
 
 def test_cn_market_profile_normalizes_configured_benchmark_aliases() -> None:

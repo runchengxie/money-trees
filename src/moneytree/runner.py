@@ -455,7 +455,6 @@ def _build_holdout_result(
         period_ic=period_ic_series,
         period_rank_ic=period_rank_ic_series,
         periods_per_year=_periods_per_year_from_test_months(settings.test_months),
-        include_legacy_spy_aliases=settings.market_profile == "us",
     )
     return HoldoutResult(
         model_segment=model_segment,
@@ -670,7 +669,6 @@ def write_outputs(
     metrics: dict[str, float],
     run_config: dict[str, Any],
     run_summary_text: str,
-    write_legacy_spy_aliases: bool = False,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     strategy_nav.to_frame(name="strategy_nav").to_csv(out_dir / "strategy_nav.csv")
@@ -736,13 +734,6 @@ def write_outputs(
         strategy_returns=strategy_returns,
         benchmark_returns=benchmark_returns,
     )
-    if write_legacy_spy_aliases:
-        benchmark_nav.to_frame(name="spy_nav").to_csv(out_dir / "spy_nav.csv")
-        benchmark_returns.to_frame(name="spy_ret").to_csv(out_dir / "spy_returns.csv")
-        pd.concat(
-            [strategy_nav, benchmark_nav.rename("spy_nav")],
-            axis=1,
-        ).to_csv(out_dir / "strategy_vs_spy.csv")
     if segment_a.selection_history is not None and not segment_a.selection_history.empty:
         segment_a.selection_history.to_csv(out_dir / "segment_a_selection_history.csv", index=False)
         _write_selection_curve(out_dir / "segment_a_feature_score_curve.csv", segment_a.selection_history)
@@ -755,7 +746,6 @@ def write_holdout_outputs(
     *,
     out_dir: Path,
     holdout: HoldoutResult,
-    write_legacy_spy_aliases: bool = False,
 ) -> None:
     holdout_dir = out_dir / "holdout"
     holdout_dir.mkdir(parents=True, exist_ok=True)
@@ -815,15 +805,6 @@ def write_holdout_outputs(
         ),
         encoding="utf-8",
     )
-    if write_legacy_spy_aliases:
-        holdout.benchmark_nav.to_frame(name="spy_nav").to_csv(holdout_dir / "spy_nav.csv")
-        holdout.benchmark_returns.to_frame(name="spy_ret").to_csv(holdout_dir / "spy_returns.csv")
-        pd.concat(
-            [holdout.strategy_nav, holdout.benchmark_nav.rename("spy_nav")],
-            axis=1,
-        ).to_csv(holdout_dir / "strategy_vs_spy.csv")
-
-
 def resolve_git_commit(root: Path) -> str | None:
     try:
         out = subprocess.check_output(
@@ -853,7 +834,6 @@ def build_run_config(
             "name": settings.benchmark_name,
             "return_column": settings.benchmark_return_column,
             "cum_column": settings.benchmark_cum_column,
-            "legacy_spy_alias_outputs": settings.market_profile == "us",
         },
         "segment_specs": {
             "segment_a": asdict(segment_a_spec),
@@ -1060,7 +1040,6 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
         periods_per_year=_periods_per_year_from_test_months(settings.test_months),
-        include_legacy_spy_aliases=settings.market_profile == "us",
     )
     holdout_result: HoldoutResult | None = None
     if settings.holdout_start and settings.holdout_end:
@@ -1116,13 +1095,11 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         metrics=metrics,
         run_config=run_config,
         run_summary_text=run_summary_text,
-        write_legacy_spy_aliases=settings.market_profile == "us",
     )
     if holdout_result is not None:
         write_holdout_outputs(
             out_dir=out_dir,
             holdout=holdout_result,
-            write_legacy_spy_aliases=settings.market_profile == "us",
         )
 
     return {

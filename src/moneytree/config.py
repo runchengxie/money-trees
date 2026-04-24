@@ -91,8 +91,8 @@ def _resolve_config_paths(
 class BacktestSettings:
     data: str
     output_dir: str = "artifacts/backtest"
-    market_profile: str = "us"
-    benchmark_name: str = "SPY"
+    market_profile: str = "cn"
+    benchmark_name: str = "000300.SH"
     benchmark_return_column: str = "benchmark_next_period_return"
     benchmark_cum_column: str = "benchmark_cum_ret"
     market_tradability_columns: dict[str, str] = field(default_factory=dict)
@@ -100,7 +100,7 @@ class BacktestSettings:
     model_id: str = "random_forest"
     model_params: dict[str, Any] = field(default_factory=dict)
     label_source: str = "actual"
-    label_threshold: float = 0.05
+    label_threshold: float = 0.03
     add_missing_indicators: bool = False
     cost_bps: float = 10.0
     portfolio_min_score: float = 0.05
@@ -130,7 +130,7 @@ class BacktestSettings:
     min_features: int = 2
     max_selection_steps: int = 200
     random_seed: int = 123
-    feature_lag_periods: int = 0
+    feature_lag_periods: int = 1
     train_months: int = 60
     gap_months: int = 3
     test_months: int = 3
@@ -185,22 +185,18 @@ def load_backtest_settings(
     settings = BacktestSettings(
         data=str(resolved_data),
         output_dir=str(resolved_output_dir),
-        market_profile=str(market.get("profile", "us")),
-        benchmark_name=str(market.get("benchmark", "SPY")),
+        market_profile=str(market.get("profile", "cn")),
+        benchmark_name=str(market.get("benchmark", "000300.SH")),
         benchmark_return_column=str(
             market.get(
                 "benchmark_return_column",
-                "spy_next_period_return"
-                if str(market.get("profile", "us")) == "us"
-                else "benchmark_next_period_return",
+                "benchmark_next_period_return",
             )
         ),
         benchmark_cum_column=str(
             market.get(
                 "benchmark_cum_column",
-                "spy_cum_ret"
-                if str(market.get("profile", "us")) == "us"
-                else "benchmark_cum_ret",
+                "benchmark_cum_ret",
             )
         ),
         market_tradability_columns=dict(market.get("tradability_columns", {})),
@@ -213,7 +209,7 @@ def load_backtest_settings(
         model_id=str(model.get("id", "random_forest")),
         model_params=dict(model.get("params", {})),
         label_source=str(market.get("label_source", "actual")),
-        label_threshold=float(market.get("label_threshold", 0.05)),
+        label_threshold=float(market.get("label_threshold", 0.03)),
         add_missing_indicators=bool(market.get("add_missing_indicators", False)),
         cost_bps=float(backtest.get("cost_bps", 10.0)),
         portfolio_min_score=float(portfolio.get("min_score", 0.05)),
@@ -247,7 +243,7 @@ def load_backtest_settings(
         min_features=int(model.get("min_features", 2)),
         max_selection_steps=int(model.get("max_selection_steps", 200)),
         random_seed=int(model.get("random_seed", 123)),
-        feature_lag_periods=int(market.get("feature_lag_periods", 0)),
+        feature_lag_periods=int(market.get("feature_lag_periods", 1)),
         train_months=int(backtest.get("train_months", 60)),
         gap_months=int(backtest.get("gap_months", 3)),
         test_months=int(backtest.get("test_months", 3)),

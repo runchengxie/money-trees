@@ -6,7 +6,7 @@ from moneytree.config import load_backtest_settings
 from moneytree.runner import print_run_results, run_backtest
 
 DEFAULT_CONFIG_PATHS = [
-    "configs/market/us.yaml",
+    "configs/market/cn.yaml",
     "configs/model/rf.yaml",
     "configs/backtest/default.yaml",
 ]

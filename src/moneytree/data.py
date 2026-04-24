@@ -20,9 +20,7 @@ NON_FEATURE_COLUMNS = {
     "cum_ret",
     "benchmark_cum_ret",
     "benchmark_next_period_return",
-    "spy_cum_ret",
     "next_period_return",
-    "spy_next_period_return",
     "pred_rel_return",
     "rel_return",
     "rel_performance",
@@ -73,23 +71,15 @@ def ensure_date_ticker_index(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _resolve_benchmark_return_column(frame: pd.DataFrame) -> str:
-    for column in ("benchmark_next_period_return", "spy_next_period_return"):
-        if column in frame.columns:
-            return column
-    raise KeyError(
-        "Missing required benchmark return column. Expected one of "
-        "['benchmark_next_period_return', 'spy_next_period_return']"
-    )
+    if "benchmark_next_period_return" in frame.columns:
+        return "benchmark_next_period_return"
+    raise KeyError("Missing required benchmark return column: benchmark_next_period_return")
 
 
 def _resolve_benchmark_cum_column(frame: pd.DataFrame) -> str:
-    for column in ("benchmark_cum_ret", "spy_cum_ret"):
-        if column in frame.columns:
-            return column
-    raise KeyError(
-        "Missing required benchmark cumulative column. Expected one of "
-        "['benchmark_cum_ret', 'spy_cum_ret']"
-    )
+    if "benchmark_cum_ret" in frame.columns:
+        return "benchmark_cum_ret"
+    raise KeyError("Missing required benchmark cumulative column: benchmark_cum_ret")
 
 
 def compute_relative_return(frame: pd.DataFrame, label_source: LabelSource) -> pd.Series:
@@ -312,7 +302,3 @@ def build_benchmark_series(
     benchmark.name = resolved_col
     return benchmark
 
-
-def build_spy_series(frame: pd.DataFrame) -> pd.Series:
-    """Build a unique-date SPY cumulative return series."""
-    return build_benchmark_series(frame=frame, benchmark_cum_col="spy_cum_ret")

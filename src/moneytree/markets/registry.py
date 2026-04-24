@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from moneytree.markets.base import BaseMarketProfile
 from moneytree.markets.cn import CNMarketProfile
-from moneytree.markets.us import USMarketProfile
 
 
 _MARKET_REGISTRY: dict[str, BaseMarketProfile] = {
     "cn": CNMarketProfile(),
-    "us": USMarketProfile(),
 }
 
 

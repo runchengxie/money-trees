@@ -18,8 +18,8 @@ def test_convert_pickle_to_parquet_script_smoke(tmp_path: Path) -> None:
             "ticker": ["AAA", "BBB"],
             "f1": [1.0, 2.0],
             "next_period_return": [0.01, -0.02],
-            "spy_next_period_return": [0.0, 0.0],
-            "spy_cum_ret": [100.0, 100.0],
+            "benchmark_next_period_return": [0.0, 0.0],
+            "benchmark_cum_ret": [100.0, 100.0],
         }
     )
     frame.to_pickle(input_path)

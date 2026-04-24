@@ -325,22 +325,6 @@ def build_benchmark_nav(
     return aligned
 
 
-def build_spy_benchmark(
-    frame: pd.DataFrame,
-    target_index: pd.Index,
-    frequency: str = "QE",
-    benchmark_cum_col: str | None = None,
-) -> pd.Series:
-    legacy = build_benchmark_nav(
-        frame=frame,
-        target_index=target_index,
-        frequency=frequency,
-        benchmark_cum_col=benchmark_cum_col,
-    )
-    legacy.name = "spy_nav"
-    return legacy
-
-
 def build_notebook_report_artifacts(
     *,
     strategy_nav: pd.Series,
@@ -444,17 +428,9 @@ def compute_performance_metrics(
     period_rank_ic: pd.Series | None = None,
     periods_per_year: float = 4.0,
     var_confidence: float = 0.95,
-    include_legacy_spy_aliases: bool = False,
-    *,
-    spy_nav: pd.Series | None = None,
-    spy_returns: pd.Series | None = None,
 ) -> dict[str, float]:
     if benchmark_nav is None:
-        benchmark_nav = spy_nav
-    if benchmark_nav is None:
         raise ValueError("benchmark_nav is required.")
-    if benchmark_returns is None and spy_returns is not None:
-        benchmark_returns = spy_returns
 
     if strategy_nav.empty:
         return {}
@@ -660,22 +636,6 @@ def compute_performance_metrics(
         )
         metrics["rank_ic_positive_rate"] = (
             float((rank_ic > 0).mean()) if not rank_ic.empty else float("nan")
-        )
-
-    if include_legacy_spy_aliases:
-        metrics.update(
-            {
-                "spy_total_return": metrics["benchmark_total_return"],
-                "spy_annualized_return": metrics["benchmark_annualized_return"],
-                "spy_annualized_volatility": metrics["benchmark_annualized_volatility"],
-                "spy_max_drawdown": metrics["benchmark_max_drawdown"],
-                "spy_sharpe": metrics["benchmark_sharpe"],
-                "spy_skew": metrics["benchmark_skew"],
-                "spy_kurtosis": metrics["benchmark_kurtosis"],
-                "spy_var_95": metrics["benchmark_var_95"],
-                "spy_cvar_95": metrics["benchmark_cvar_95"],
-                "win_rate_vs_spy": metrics["win_rate_vs_benchmark"],
-            }
         )
 
     return metrics

@@ -91,8 +91,8 @@ def test_preprocess_data_pred_rel_return_missing_column_raises_key_error() -> No
             "date": ["2021-03-31", "2021-03-31"],
             "ticker": ["A", "B"],
             "next_period_return": [0.01, -0.02],
-            "spy_next_period_return": [0.005, 0.005],
-            "spy_cum_ret": [100.0, 100.0],
+            "benchmark_next_period_return": [0.005, 0.005],
+            "benchmark_cum_ret": [100.0, 100.0],
         }
     )
 

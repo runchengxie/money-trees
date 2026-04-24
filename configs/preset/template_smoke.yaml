@@ -1,0 +1,9 @@
+market:
+  profile: cn
+  benchmark: 000300.SH
+  benchmark_return_column: benchmark_next_period_return
+  benchmark_cum_column: benchmark_cum_ret
+  data_path: ./data_small.parquet
+
+output:
+  output_dir: ./artifacts/template-smoke
