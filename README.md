@@ -122,6 +122,8 @@ uv run moneytree-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
   --output data/cn_daily_alpha.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
   --benchmark 000300.SH \
   --factor-family alpha158 \
   --factor-family alpha360
@@ -133,6 +135,11 @@ uv run moneytree \
   --data data/cn_daily_alpha.parquet \
   --output-dir artifacts/xgb-alpha-daily
 ```
+
+`--cache-dir` 会把 TuShare 日频接口的原始返回按 `api_name/trade_date=YYYYMMDD.parquet`
+缓存下来。后续扩大或重复拉取区间时，已有交易日会直接读本地 parquet，只补缺失日期；
+`--refresh-cache` 可强制重拉，`--refresh-recent-days N` 可重拉最近 N 个交易日以覆盖数据源回填。
+缓存目录下会同步维护 `manifest.sqlite`，记录 raw parquet 的 API、交易日、路径、行数和列信息。
 
 ## Smoke Test
 

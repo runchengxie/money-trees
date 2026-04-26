@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from moneytree.cli.tushare import parse_args
 from moneytree.data_sources.tushare import (
     TushareDailyConfig,
     fetch_tushare_cn_daily_panel,
@@ -129,6 +132,34 @@ class _FakePro:
         return pd.DataFrame(columns=["ts_code", "name", "list_date"])
 
 
+class _CountingFakePro(_FakePro):
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    def _record(self, api_name: str, kwargs) -> None:
+        self.calls.append((api_name, kwargs.get("trade_date")))
+
+    def daily(self, **kwargs) -> pd.DataFrame:
+        self._record("daily", kwargs)
+        return super().daily(**kwargs)
+
+    def daily_basic(self, **kwargs) -> pd.DataFrame:
+        self._record("daily_basic", kwargs)
+        return super().daily_basic(**kwargs)
+
+    def adj_factor(self, **kwargs) -> pd.DataFrame:
+        self._record("adj_factor", kwargs)
+        return super().adj_factor(**kwargs)
+
+    def stk_limit(self, **kwargs) -> pd.DataFrame:
+        self._record("stk_limit", kwargs)
+        return super().stk_limit(**kwargs)
+
+    def suspend_d(self, **kwargs) -> pd.DataFrame:
+        self._record("suspend_d", kwargs)
+        return super().suspend_d(**kwargs)
+
+
 def test_fetch_tushare_cn_daily_panel_accepts_injected_client() -> None:
     panel = fetch_tushare_cn_daily_panel(
         TushareDailyConfig(start_date="20210104", end_date="20210105"),
@@ -137,3 +168,91 @@ def test_fetch_tushare_cn_daily_panel_accepts_injected_client() -> None:
 
     assert len(panel) == 4
     assert "benchmark_cum_ret" in panel.columns
+
+
+def test_fetch_tushare_cn_daily_panel_uses_trade_date_cache(tmp_path) -> None:
+    config = TushareDailyConfig(
+        start_date="20210104",
+        end_date="20210105",
+        cache_dir=tmp_path / "raw-cache",
+    )
+
+    first_client = _CountingFakePro()
+    first_panel = fetch_tushare_cn_daily_panel(config, pro=first_client)
+
+    assert (tmp_path / "raw-cache" / "daily" / "trade_date=20210104.parquet").exists()
+    assert (tmp_path / "raw-cache" / "adj_factor" / "trade_date=20210105.parquet").exists()
+    assert ("daily", "20210104") in first_client.calls
+    with sqlite3.connect(tmp_path / "raw-cache" / "manifest.sqlite") as conn:
+        manifest_row = conn.execute(
+            """
+            SELECT rows, path, columns_json
+            FROM raw_cache
+            WHERE source = 'tushare' AND api_name = 'daily' AND trade_date = '20210104'
+            """
+        ).fetchone()
+    assert manifest_row is not None
+    assert manifest_row[0] == 2
+    assert manifest_row[1] == "daily/trade_date=20210104.parquet"
+    assert "ts_code" in manifest_row[2]
+
+    second_client = _CountingFakePro()
+    second_panel = fetch_tushare_cn_daily_panel(config, pro=second_client)
+
+    cached_apis = {"daily", "daily_basic", "adj_factor", "stk_limit", "suspend_d"}
+    assert [call for call in second_client.calls if call[0] in cached_apis] == []
+    pd.testing.assert_frame_equal(first_panel, second_panel)
+
+
+def test_fetch_tushare_cn_daily_panel_refreshes_recent_cached_dates(tmp_path) -> None:
+    base_config = TushareDailyConfig(
+        start_date="20210104",
+        end_date="20210105",
+        cache_dir=tmp_path / "raw-cache",
+        include_daily_basic=False,
+        include_adj_factor=False,
+        include_limits=False,
+        include_suspend=False,
+        include_stock_basic=False,
+    )
+    fetch_tushare_cn_daily_panel(base_config, pro=_CountingFakePro())
+
+    refresh_client = _CountingFakePro()
+    fetch_tushare_cn_daily_panel(
+        TushareDailyConfig(
+            start_date="20210104",
+            end_date="20210105",
+            cache_dir=tmp_path / "raw-cache",
+            refresh_recent_days=1,
+            include_daily_basic=False,
+            include_adj_factor=False,
+            include_limits=False,
+            include_suspend=False,
+            include_stock_basic=False,
+        ),
+        pro=refresh_client,
+    )
+
+    assert refresh_client.calls == [("daily", "20210105")]
+
+
+def test_tushare_cli_accepts_cache_args() -> None:
+    args = parse_args(
+        [
+            "--start-date",
+            "20210104",
+            "--end-date",
+            "20210105",
+            "--output",
+            "data/cn_daily.parquet",
+            "--cache-dir",
+            "data/raw/tushare",
+            "--refresh-cache",
+            "--refresh-recent-days",
+            "20",
+        ]
+    )
+
+    assert args.cache_dir == "data/raw/tushare"
+    assert args.refresh_cache is True
+    assert args.refresh_recent_days == 20

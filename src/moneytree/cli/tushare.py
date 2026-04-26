@@ -50,6 +50,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--skip-limits", action="store_true")
     parser.add_argument("--skip-suspend", action="store_true")
     parser.add_argument("--skip-stock-basic", action="store_true")
+    parser.add_argument(
+        "--cache-dir",
+        default="",
+        help="Optional raw TuShare parquet cache directory, partitioned by API and trade date.",
+    )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Ignore existing raw cache files and rewrite them.",
+    )
+    parser.add_argument(
+        "--refresh-recent-days",
+        type=int,
+        default=0,
+        help="When caching, refresh the last N trade dates even if cache files exist.",
+    )
     return parser.parse_args(argv)
 
 
@@ -70,6 +86,9 @@ def main(argv: list[str] | None = None) -> None:
         include_stock_basic=not args.skip_stock_basic,
         complete_calendar=bool(args.complete_calendar),
         adjusted_features=not bool(args.raw_features),
+        cache_dir=args.cache_dir or None,
+        refresh_cache=bool(args.refresh_cache),
+        refresh_recent_days=int(args.refresh_recent_days),
     )
     frame = fetch_tushare_cn_daily_panel(config)
     save_market_data(frame, Path(args.output))

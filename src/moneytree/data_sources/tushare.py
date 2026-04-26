@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 import numpy as np
@@ -31,6 +34,9 @@ class TushareDailyConfig:
     include_stock_basic: bool = True
     complete_calendar: bool = False
     adjusted_features: bool = True
+    cache_dir: str | Path | None = None
+    refresh_cache: bool = False
+    refresh_recent_days: int = 0
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -114,6 +120,77 @@ def _call_api(pro, api_name: str, **params) -> pd.DataFrame:
     return out if isinstance(out, pd.DataFrame) else pd.DataFrame(out)
 
 
+def _resolve_cache_dir(cache_dir: str | Path | None) -> Path | None:
+    if cache_dir is None:
+        return None
+    path = Path(cache_dir)
+    return path if str(path) else None
+
+
+def _trade_date_cache_path(cache_dir: Path, api_name: str, trade_date: str) -> Path:
+    return cache_dir / api_name / f"trade_date={trade_date}.parquet"
+
+
+def _recent_trade_dates(trade_dates: list[str], refresh_recent_days: int) -> set[str]:
+    if refresh_recent_days <= 0:
+        return set()
+    return set(trade_dates[-int(refresh_recent_days) :])
+
+
+def _relative_cache_path(cache_dir: Path, cache_path: Path) -> str:
+    try:
+        return str(cache_path.relative_to(cache_dir))
+    except ValueError:
+        return str(cache_path)
+
+
+def _write_cache_manifest(
+    *,
+    cache_dir: Path,
+    api_name: str,
+    trade_date: str,
+    cache_path: Path,
+    frame: pd.DataFrame,
+) -> None:
+    manifest_path = cache_dir / "manifest.sqlite"
+    columns_json = json.dumps(
+        [str(column) for column in frame.columns],
+        ensure_ascii=False,
+    )
+    with sqlite3.connect(manifest_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS raw_cache (
+                source TEXT NOT NULL,
+                api_name TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                path TEXT NOT NULL,
+                rows INTEGER NOT NULL,
+                columns_json TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                PRIMARY KEY (source, api_name, trade_date)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO raw_cache (
+                source, api_name, trade_date, path, rows, columns_json, created_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tushare",
+                api_name,
+                trade_date,
+                _relative_cache_path(cache_dir, cache_path),
+                int(len(frame)),
+                columns_json,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+
 def _fetch_trade_dates(pro, start_date: str, end_date: str) -> list[str]:
     start = _normalize_date_str(start_date)
     end = _normalize_date_str(end_date)
@@ -154,17 +231,42 @@ def _fetch_by_trade_date(
     *,
     tickers: tuple[str, ...] = (),
     fields: str | None = None,
+    cache_dir: str | Path | None = None,
+    refresh_cache: bool = False,
+    refresh_recent_days: int = 0,
     **extra_params,
 ) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
+    resolved_cache_dir = _resolve_cache_dir(cache_dir)
+    recent_dates = _recent_trade_dates(trade_dates, refresh_recent_days)
+
     for trade_date in trade_dates:
-        frame = _call_api(
-            pro,
-            api_name,
-            trade_date=trade_date,
-            fields=fields,
-            **extra_params,
+        cache_path = (
+            _trade_date_cache_path(resolved_cache_dir, api_name, trade_date)
+            if resolved_cache_dir is not None
+            else None
         )
+        should_refresh = refresh_cache or trade_date in recent_dates
+        if cache_path is not None and cache_path.exists() and not should_refresh:
+            frame = pd.read_parquet(cache_path)
+        else:
+            frame = _call_api(
+                pro,
+                api_name,
+                trade_date=trade_date,
+                fields=fields,
+                **extra_params,
+            )
+            if cache_path is not None:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                frame.to_parquet(cache_path, index=False)
+                _write_cache_manifest(
+                    cache_dir=resolved_cache_dir,
+                    api_name=api_name,
+                    trade_date=trade_date,
+                    cache_path=cache_path,
+                    frame=frame,
+                )
         frames.append(_filter_tickers(frame, tickers))
     return _concat(frames)
 
@@ -412,7 +514,18 @@ def fetch_tushare_cn_daily_panel(
     trade_dates = _fetch_trade_dates(client, start_date, end_date)
 
     tickers = tuple(str(ticker).strip() for ticker in config.tickers if str(ticker).strip())
-    daily = _fetch_by_trade_date(client, "daily", trade_dates, tickers=tickers)
+    cache_kwargs = {
+        "cache_dir": config.cache_dir,
+        "refresh_cache": bool(config.refresh_cache),
+        "refresh_recent_days": int(config.refresh_recent_days),
+    }
+    daily = _fetch_by_trade_date(
+        client,
+        "daily",
+        trade_dates,
+        tickers=tickers,
+        **cache_kwargs,
+    )
     benchmark_daily = _call_api(
         client,
         "index_daily",
@@ -426,6 +539,7 @@ def fetch_tushare_cn_daily_panel(
             "daily_basic",
             trade_dates,
             tickers=tickers,
+            **cache_kwargs,
             fields=(
                 "ts_code,trade_date,turnover_rate,turnover_rate_f,volume_ratio,pe,pe_ttm,pb,"
                 "ps,ps_ttm,dv_ratio,dv_ttm,total_share,float_share,free_share,total_mv,circ_mv"
@@ -435,17 +549,35 @@ def fetch_tushare_cn_daily_panel(
         else None
     )
     adj_factor = (
-        _fetch_by_trade_date(client, "adj_factor", trade_dates, tickers=tickers)
+        _fetch_by_trade_date(
+            client,
+            "adj_factor",
+            trade_dates,
+            tickers=tickers,
+            **cache_kwargs,
+        )
         if config.include_adj_factor
         else None
     )
     limits = (
-        _fetch_by_trade_date(client, "stk_limit", trade_dates, tickers=tickers)
+        _fetch_by_trade_date(
+            client,
+            "stk_limit",
+            trade_dates,
+            tickers=tickers,
+            **cache_kwargs,
+        )
         if config.include_limits
         else None
     )
     suspend = (
-        _fetch_by_trade_date(client, "suspend_d", trade_dates, tickers=tickers)
+        _fetch_by_trade_date(
+            client,
+            "suspend_d",
+            trade_dates,
+            tickers=tickers,
+            **cache_kwargs,
+        )
         if config.include_suspend
         else None
     )

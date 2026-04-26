@@ -119,8 +119,20 @@ uv run moneytree-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
   --output data/cn_daily.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
   --benchmark 000300.SH
 ```
+
+增量原始缓存：
+
+- `--cache-dir data/raw/tushare` 会把 `daily`、`daily_basic`、`adj_factor`、`stk_limit`、`suspend_d`
+  按 `api_name/trade_date=YYYYMMDD.parquet` 存为 raw parquet。
+- 重复或扩大同一时间区间时，已有交易日直接读缓存，只请求缺失交易日。
+- `--refresh-cache` 会忽略已有缓存并重写；`--refresh-recent-days N` 会重拉最近 N 个交易日，
+  用于覆盖数据源近期回填。
+- 缓存目录会维护 `manifest.sqlite`，用于记录 API、交易日、parquet 路径、行数和列信息。
+- 最终 panel 仍然每次由 raw `daily + adj_factor + daily_basic + ...` 重建，`close_adj` 和收益列是派生结果。
 
 限制股票池：
 
