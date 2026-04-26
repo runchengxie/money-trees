@@ -39,6 +39,50 @@ rel_return = next_period_return - benchmark_next_period_return
 - GTJA191 / DolphinDB: <https://docs.dolphindb.com/zh/modules/gtja191Alpha/191alpha.html>
 - Qlib Alpha158/Alpha360: <https://qlib.readthedocs.io/en/latest/component/data.html>
 
+## 因子清单与口径
+
+本仓库把因子分成“外部公式库并入”和“本地生成基线”两类。文档只维护稳定的列名规则、输入口径和生成方式；完整逐列值以代码或外部生成结果为准，避免手写清单和实现漂移。列级清单见 [factor_catalog.md](factor_catalog.md)，机器可读版本见 [factor_catalog.csv](factor_catalog.csv)。
+
+| 因子/字段组 | 列名规则 | 数量 | 输入口径 | 生成方式 | 说明 |
+| --- | --- | ---: | --- | --- | --- |
+| Alpha101 / WQ101 | `alpha101_001` 到 `alpha101_101` | 101 | OHLCV、VWAP、市值、行业 | 外部生成后并入 panel | 本仓库不重写公式。行业相关因子必须使用 point-in-time 行业和市值。 |
+| Alpha191 / GTJA191 | `alpha191_001` 到 `alpha191_191` | 191 | OHLCV、VWAP，少数需要指数 open/close | 外部生成后并入 panel | 本仓库不重写公式。不同实现的 `SMA`、`DECAYLINEAR` 和缺失值处理需要固定版本。 |
+| Alpha158 local baseline | `alpha158_*` | 158 | `open/high/low/close/vwap` 优先使用复权列，`volume` 不复权，`amount` 可选 | `moneytree.factors.qlib.build_alpha158_features` | Qlib-style 工程特征基线，不承诺和 Qlib 原生 handler 逐列完全一致。 |
+| Alpha360 local baseline | `alpha360_{field}_lag{00..59}` | 360 | `open/high/low/close/vwap` 优先使用复权列，`volume` 不复权 | `moneytree.factors.qlib.build_alpha360_features` | 6 个字段 x 60 lag。价格类字段按当前 `close` 归一，`volume` 按当前 `volume` 归一。 |
+| TuShare daily_basic 派生字段 | `turnover_rate`、`volume_ratio`、`total_mv`、`circ_mv` 等 | 随数据源字段变化 | TuShare `daily_basic` | 数据拉取层并入 panel | 这些是候选模型特征或过滤/诊断字段，不属于 Alpha101/191/158/360 公式家族。 |
+
+### 本地 Alpha158 结构
+
+`alpha158_*` 当前由 4 组特征组成：
+
+| 组别 | 列名示例/规则 | 数量 | 含义 |
+| --- | --- | ---: | --- |
+| K 线形态 | `alpha158_kmid`、`alpha158_klen`、`alpha158_kup`、`alpha158_klow` 等 | 9 | 单日实体、影线、振幅和收盘相对位置。 |
+| 价格相对 lag | `alpha158_open_lag00_rel_close` 到 `alpha158_vwap_lag19_rel_close` | 80 | `open/high/low/vwap` 的 20 日 lag 相对当前 `close` 的偏离。 |
+| 滚动窗口特征 | `alpha158_roc_20`、`alpha158_ma_20`、`alpha158_rank_20`、`alpha158_vma_20` 等 | 65 | 使用 5、10、20、30、60 日窗口计算动量、均值、波动、分位、区间位置和成交量/成交额特征。 |
+| 杂项价量特征 | `alpha158_vwap_rel_close`、`alpha158_high_low_spread` 等 | 4 | VWAP、日内振幅、收盘相对最高/最低价。 |
+
+默认 `build_alpha158_features(..., adjusted=True)` 会优先使用 `open_adj/high_adj/low_adj/close_adj/vwap_adj`；如果不存在复权列，则退回未复权字段。`volume` 始终使用原始成交量，`amount` 缺失时用 `close * volume` 近似。
+
+### 本地 Alpha360 结构
+
+`alpha360_*` 是固定展开的日频序列特征：
+
+```text
+alpha360_open_lag00 ... alpha360_open_lag59
+alpha360_high_lag00 ... alpha360_high_lag59
+alpha360_low_lag00 ... alpha360_low_lag59
+alpha360_close_lag00 ... alpha360_close_lag59
+alpha360_vwap_lag00 ... alpha360_vwap_lag59
+alpha360_volume_lag00 ... alpha360_volume_lag59
+```
+
+其中 `lag00` 表示当日值，`lag59` 表示同一股票向前 59 个交易日的值。价格类字段计算为 `shift(field, lag) / current_close - 1`，成交量字段计算为 `shift(volume, lag) / current_volume - 1`。
+
+### 模型使用边界
+
+所有进入模型的特征还会经过训练配置里的 `feature_lag_periods` 处理。默认 `feature_lag_periods=1`，表示 T 日收盘后已知的因子信号滞后一日使用，避免直接用 T 日特征交易 T 日收益。
+
 ## 如何获取因子
 
 ### Alpha101

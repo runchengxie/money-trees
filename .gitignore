@@ -223,3 +223,6 @@ full_project_source.txt
 
 # Codec 
 .codex
+
+# Local datasets and API caches
+data/
