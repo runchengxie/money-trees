@@ -102,6 +102,25 @@ def test_standardize_tushare_cn_daily_panel_builds_contract() -> None:
     assert bool(panel.loc[(pd.Timestamp("2021-01-04"), "000002.SZ"), "is_st"]) is True
 
 
+def test_standardize_tushare_cn_daily_panel_deduplicates_suspend_records() -> None:
+    suspend = pd.DataFrame(
+        {
+            "ts_code": ["000001.SZ", "000001.SZ"],
+            "trade_date": ["20210104", "20210104"],
+            "suspend_type": ["R", "S"],
+        }
+    )
+
+    panel = standardize_tushare_cn_daily_panel(
+        daily=_daily(),
+        benchmark_daily=_benchmark(),
+        suspend=suspend,
+    )
+
+    assert not panel.index.has_duplicates
+    assert bool(panel.loc[(pd.Timestamp("2021-01-04"), "000001.SZ"), "is_suspended"]) is True
+
+
 def test_standardize_tushare_local_factors_default_to_float32() -> None:
     panel = standardize_tushare_cn_daily_panel(
         daily=_daily(),

@@ -641,6 +641,7 @@ def _add_suspend_flags(panel: pd.DataFrame, suspend: pd.DataFrame | None) -> pd.
     suspended = _normalize_merge_frame(suspend, date_col=date_col)
     if suspended.empty:
         return out
+    suspended = suspended.loc[~suspended.index.duplicated(keep="last")]
     marker = pd.Series(True, index=suspended.index, name="_suspend_marker")
     out = out.join(marker, how="left")
     out["is_suspended"] = out["_suspend_marker"].fillna(False).astype(bool)
