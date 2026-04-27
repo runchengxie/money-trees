@@ -31,6 +31,8 @@ moneytree-tushare = "moneytree.cli.tushare:main"
 moneytrees-tushare = "moneytree.cli.tushare:main"
 moneytree-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
 moneytrees-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
+moneytree-factor-store = "moneytree.cli.factor_store:main"
+moneytrees-factor-store = "moneytree.cli.factor_store:main"
 
 [dependency-groups]
 dev = ["pytest", "ruff", "optuna"]

@@ -24,23 +24,54 @@ Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cook
 uv sync --dev --extra research
 ```
 
-2. 刷新 TuShare raw cache 并生成本地 Alpha158/360。
+2. 刷新 TuShare raw cache 并生成基础 `date, ticker` 面板。
 
 ```bash
 uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_alpha158_360.parquet \
+  --output data/cn_daily_raw.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
   --progress \
   --benchmark 000300.SH \
-  --factor-family alpha158 \
-  --factor-family alpha360 \
-  --factor-dtype float32
+  --sanity-check warn
 ```
 
-3. 可选：离线生成外部 Alpha101/191。
+3. 按需生成本地 Alpha158/360 factor store。
+
+```bash
+uv run moneytrees-factor-store \
+  --input data/cn_daily_raw.parquet \
+  --output-dir data/factor_store/cn_daily \
+  --factor-family alpha158 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --progress
+```
+
+需要 Alpha360 时可再次运行同一输出目录，只追加缺失的因子族：
+
+```bash
+uv run moneytrees-factor-store \
+  --input data/cn_daily_raw.parquet \
+  --output-dir data/factor_store/cn_daily \
+  --factor-family alpha360 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --progress
+```
+
+回测入口可以直接读取 factor store manifest，并按配置只加载需要的因子族：
+
+```bash
+uv run moneytrees \
+  --data data/factor_store/cn_daily/manifest.json \
+  --output-dir artifacts/alpha158-only \
+  --set 'features.include_factor_families=["alpha158"]'
+```
+
+4. 可选：离线生成外部 Alpha101/191。
 
 Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
 
@@ -48,7 +79,7 @@ Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。�
 uv sync --dev --extra external-alphas
 
 uv run moneytrees-dolphindb-alphas \
-  --input data/cn_daily_alpha158_360.parquet \
+  --input data/cn_daily_raw.parquet \
   --output data/cn_daily_alpha_all.parquet \
   --host 127.0.0.1 \
   --port 8848 \
@@ -120,6 +151,7 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cach
 当前默认策略：
 
 - TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成路径默认把 `alpha101_`、`alpha191_`、`alpha158_`、`alpha360_` 因子列保存为 `float32`。
+- 推荐先用 `moneytrees-tushare` 生成基础面板，再用 `moneytrees-factor-store` 按需生成 `alpha158` 或 `alpha360` 分族因子文件。
 - 需要精度敏感复核时，生成命令显式传 `--factor-dtype float64`。
 - 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。
 - `output.export_parquet` 会额外保存预处理后的面板，只建议用于调试和复现实验。

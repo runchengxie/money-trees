@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from moneytree.config import BacktestSettings, load_backtest_settings
+from moneytree.factor_store import write_factor_store
 from moneytree.markets import get_market_profile
 from moneytree.models import get_model_adapter
 from moneytree.runner import (
@@ -554,6 +555,46 @@ def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_p
     assert "alpha360_noise" not in segment_a_features
     assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
     assert run_config["factor_selection"]["column_pruned"] is True
+
+
+def test_moneytree_cli_loads_factor_store_manifest_with_selected_families(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    store_dir = tmp_path / "factor_store"
+    out_dir = tmp_path / "factor_store_artifacts"
+    frame = _build_smoke_dataset()
+    frame["alpha158_signal"] = frame["f_signal"]
+    frame["alpha360_noise"] = frame["f_rank"]
+    write_factor_store(frame, store_dir)
+
+    subprocess.run(
+        _cli_cmd(
+            data_path=store_dir / "manifest.json",
+            output_dir=out_dir,
+            extra_args=[
+                "--set",
+                "model.feature_selection=none",
+                "--set",
+                "model.n_trials=0",
+                "--set",
+                "backtest.segment1_windows=1",
+                "--set",
+                "backtest.segment2_windows=1",
+                "--set",
+                'features.include_factor_families=["alpha158"]',
+            ],
+        ),
+        cwd=root,
+        env=_cli_env(root),
+        check=True,
+    )
+
+    segment_a_features = (out_dir / "segment_a_features.txt").read_text(encoding="utf-8")
+    run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
+
+    assert "alpha158_signal" in segment_a_features
+    assert "alpha360_noise" not in segment_a_features
+    assert run_config["factor_selection"]["source"] == "factor_store"
+    assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
 
 
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:

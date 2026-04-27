@@ -21,6 +21,7 @@ from moneytree.config import BacktestSettings
 from moneytree.data import (
     apply_feature_lag,
     build_xy_target_returns,
+    filter_factor_columns,
     fill_missing_with_reference,
     get_feature_columns,
     load_market_data,
@@ -28,6 +29,7 @@ from moneytree.data import (
     save_market_data,
     slice_by_date,
 )
+from moneytree.factor_store import load_factor_store
 from moneytree.markets import get_market_profile
 from moneytree.metadata import (
     OUTPUT_SCHEMA_VERSION,
@@ -39,6 +41,46 @@ from moneytree.model import count_active_names, profit_with_estimated_turnover
 from moneytree.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _is_factor_store_manifest(path: str | Path) -> bool:
+    file_path = Path(path)
+    if file_path.suffix.lower() != ".json" or not file_path.exists():
+        return False
+    try:
+        payload = json.loads(file_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return payload.get("kind") == "moneytree_factor_store"
+
+
+def _load_backtest_data(settings: BacktestSettings) -> pd.DataFrame:
+    if _is_factor_store_manifest(settings.data):
+        frame = load_factor_store(
+            settings.data,
+            include_factor_prefixes=settings.include_factor_prefixes,
+        )
+        if settings.exclude_factor_prefixes:
+            selected, summary = filter_factor_columns(
+                frame.columns,
+                exclude_factor_prefixes=settings.exclude_factor_prefixes,
+            )
+            frame = frame.loc[:, selected]
+        else:
+            summary = {
+                "include_factor_prefixes": list(settings.include_factor_prefixes),
+                "exclude_factor_prefixes": [],
+                "column_pruned": True,
+            }
+        summary["source"] = "factor_store"
+        summary["manifest"] = str(settings.data)
+        frame.attrs["factor_selection"] = summary
+        return frame
+    return load_market_data(
+        settings.data,
+        include_factor_prefixes=settings.include_factor_prefixes,
+        exclude_factor_prefixes=settings.exclude_factor_prefixes,
+    )
 
 
 @dataclass
@@ -918,11 +960,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     market_profile = get_market_profile(settings.market_profile)
     portfolio_cfg = build_portfolio_config(settings)
 
-    raw = load_market_data(
-        settings.data,
-        include_factor_prefixes=settings.include_factor_prefixes,
-        exclude_factor_prefixes=settings.exclude_factor_prefixes,
-    )
+    raw = _load_backtest_data(settings)
     factor_load_info = dict(raw.attrs.get("factor_selection", {}))
     frame = preprocess_data(
         raw,

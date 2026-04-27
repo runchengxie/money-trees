@@ -4,11 +4,13 @@ import pandas as pd
 import pytest
 
 from moneytree.data import load_market_data
+from moneytree.cli.factor_store import build_parser, run_generation
 from moneytree.factor_store import (
     FactorStoreValidationError,
     load_factor_store,
     validate_factor_store_keys,
     write_factor_store,
+    write_local_factor_store,
 )
 
 
@@ -24,6 +26,30 @@ def _panel() -> pd.DataFrame:
             "alpha360_close_lag00": [0.0, 0.0],
         }
     )
+
+
+def _base_panel(days: int = 30) -> pd.DataFrame:
+    dates = pd.date_range("2021-01-04", periods=days, freq="B")
+    rows: list[dict[str, object]] = []
+    for i, date in enumerate(dates):
+        for j, ticker in enumerate(["000001.SZ", "000002.SZ"]):
+            base = 10.0 + i * 0.1 + j
+            rows.append(
+                {
+                    "date": date,
+                    "ticker": ticker,
+                    "open": base,
+                    "high": base + 0.3,
+                    "low": base - 0.2,
+                    "close": base + 0.1,
+                    "vwap": base + 0.05,
+                    "volume": 1000.0 + i * 10.0 + j,
+                    "amount": (1000.0 + i * 10.0 + j) * (base + 0.05),
+                    "next_period_return": 0.001,
+                    "benchmark_next_period_return": 0.0,
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def test_write_factor_store_creates_manifest_and_family_files(tmp_path) -> None:
@@ -73,6 +99,77 @@ def test_load_factor_store_joins_only_requested_families(tmp_path) -> None:
     assert "alpha158_kmid" in out.columns
     assert "alpha360_close_lag00" not in out.columns
     assert out.index.names == ["date", "ticker"]
+
+
+def test_write_local_factor_store_generates_partitioned_family(tmp_path) -> None:
+    manifest = write_local_factor_store(
+        _base_panel(),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=10,
+    )
+
+    entry = manifest["factor_families"]["alpha158"]
+    assert entry["partitioned"] is True
+    assert len(entry["paths"]) == 3
+    assert entry["rows"] == 60
+    assert entry["columns"] == 158
+    assert (tmp_path / "store" / "base.parquet").exists()
+    assert (tmp_path / "store" / entry["paths"][0]).exists()
+
+    out = load_factor_store(tmp_path / "store" / "manifest.json", include_factor_families=["alpha158"])
+
+    assert len(out) == 60
+    assert "open" in out.columns
+    assert "alpha158_kmid" in out.columns
+    assert str(out["alpha158_kmid"].dtype) == "float32"
+
+
+def test_write_local_factor_store_can_add_missing_family_incrementally(tmp_path) -> None:
+    write_local_factor_store(
+        _base_panel(days=12),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=6,
+    )
+
+    manifest = write_local_factor_store(
+        _base_panel(days=12),
+        tmp_path / "store",
+        families=["alpha158", "alpha360"],
+        adjusted=False,
+        chunk_trade_dates=6,
+    )
+
+    assert set(manifest["factor_families"]) == {"alpha158", "alpha360"}
+    assert manifest["local_generation"]["families_skipped"] == ["alpha158"]
+    assert manifest["local_generation"]["families_generated"] == ["alpha360"]
+
+
+def test_factor_store_cli_generates_local_store(tmp_path) -> None:
+    input_path = tmp_path / "base.parquet"
+    _base_panel(days=8).to_parquet(input_path, index=False)
+
+    args = build_parser().parse_args(
+        [
+            "--input",
+            str(input_path),
+            "--output-dir",
+            str(tmp_path / "store"),
+            "--factor-family",
+            "alpha158",
+            "--raw-features",
+            "--chunk-trade-dates",
+            "4",
+        ]
+    )
+    result = run_generation(args)
+
+    assert result.manifest_path.exists()
+    assert result.base_rows == 16
+    assert result.factor_families == ("alpha158",)
 
 
 def test_wide_panel_load_remains_independent_of_factor_store(tmp_path) -> None:

@@ -56,49 +56,65 @@ uv run moneytrees-tushare \
 
 `--cache-dir` 会缓存 `daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 的原始返回。重复拉取同一区间时，已有交易日会读本地 parquet。长区间全市场任务建议加 `--progress`，观察每个接口的交易日进度、累计行数、cache 命中和实际请求次数。
 
-## 3. 生成本地 Alpha158/360，共 518 个特征
+## 3. 按需生成本地 Alpha158/360 factor store
 
 ```bash
 uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_alpha158_360.parquet \
+  --output data/cn_daily_raw.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
   --progress \
   --benchmark 000300.SH \
+  --sanity-check warn
+```
+
+基础面板生成后，再按需生成本地因子族。factor store 会把基础面板和因子族分开保存，避免把所有列写进单个超宽 parquet。
+
+```bash
+uv run moneytrees-factor-store \
+  --input data/cn_daily_raw.parquet \
+  --output-dir data/factor_store/cn_daily \
   --factor-family alpha158 \
-  --factor-family alpha360 \
-  --factor-dtype float32
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --progress
 ```
 
 默认优先使用复权价格生成本地 Alpha 特征，并把生成的 `alpha158_`、`alpha360_` 列保存为 `float32`。需要保留双精度时传 `--factor-dtype float64`。使用未复权价格：
 
 ```bash
-uv run moneytrees-tushare \
-  --start-date 20200101 \
-  --end-date 20241231 \
-  --output data/cn_daily_alpha_raw.parquet \
-  --cache-dir data/raw/tushare \
-  --refresh-recent-days 20 \
-  --progress \
+uv run moneytrees-factor-store \
+  --input data/cn_daily_raw.parquet \
+  --output-dir data/factor_store/cn_daily_raw_factor \
   --factor-family alpha158 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --progress \
   --raw-features
 ```
 
-`--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量，也不会跳过因子计算。
+`--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量。
+
+回测时可直接把 factor store manifest 作为数据入口，并用配置限定实际加载的因子族：
+
+```bash
+uv run moneytrees \
+  --data data/factor_store/cn_daily/manifest.json \
+  --output-dir artifacts/ridge-alpha158-only \
+  --set 'features.include_factor_families=["alpha158"]'
+```
 
 轻量调试时只生成 Alpha158：
 
 ```bash
-uv run moneytrees-tushare \
-  --start-date 20240101 \
-  --end-date 20241231 \
-  --output data/debug_alpha158.parquet \
-  --cache-dir data/raw/tushare \
-  --refresh-recent-days 20 \
-  --progress \
-  --factor-family alpha158
+uv run moneytrees-factor-store \
+  --input data/cn_daily_raw.parquet \
+  --output-dir data/factor_store/debug_alpha158 \
+  --factor-family alpha158 \
+  --chunk-trade-dates 20 \
+  --progress
 ```
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
