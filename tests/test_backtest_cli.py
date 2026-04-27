@@ -498,6 +498,64 @@ def test_template_smoke_preset_resolves_local_run_values() -> None:
     assert settings.benchmark_name == "000300.SH"
 
 
+def test_backtest_settings_resolves_factor_selection_from_config() -> None:
+    settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+        ],
+        data_path="dummy.parquet",
+        overrides=[
+            'features.include_factor_families=["alpha158"]',
+            "features.exclude_factor_prefixes=alpha360_",
+        ],
+    )
+
+    assert settings.include_factor_prefixes == ("alpha158_",)
+    assert settings.exclude_factor_prefixes == ("alpha360_",)
+
+
+def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "factor_selection.parquet"
+    out_dir = tmp_path / "factor_selection_artifacts"
+    frame = _build_smoke_dataset()
+    frame["alpha158_signal"] = frame["f_signal"]
+    frame["alpha360_noise"] = frame["f_rank"]
+    frame.to_parquet(data_path, index=False)
+
+    subprocess.run(
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=out_dir,
+            extra_args=[
+                "--set",
+                "model.feature_selection=none",
+                "--set",
+                "model.n_trials=0",
+                "--set",
+                "backtest.segment1_windows=1",
+                "--set",
+                "backtest.segment2_windows=1",
+                "--set",
+                'features.include_factor_prefixes=["alpha158_"]',
+            ],
+        ),
+        cwd=root,
+        env=_cli_env(root),
+        check=True,
+    )
+
+    segment_a_features = (out_dir / "segment_a_features.txt").read_text(encoding="utf-8")
+    run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
+
+    assert "alpha158_signal" in segment_a_features
+    assert "alpha360_noise" not in segment_a_features
+    assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
+    assert run_config["factor_selection"]["column_pruned"] is True
+
+
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:
     first = pd.Series(
         [1.0, 1.1],
@@ -653,6 +711,27 @@ def test_moneytree_cli_rejects_negative_feature_lag(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "--feature-lag-periods must be >= 0." in result.stderr
+
+
+def test_moneytree_cli_rejects_missing_factor_prefix(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    data_path = tmp_path / "missing_prefix.parquet"
+    _build_smoke_dataset().to_parquet(data_path, index=False)
+
+    result = subprocess.run(
+        _cli_cmd(
+            data_path=data_path,
+            output_dir=tmp_path / "unused",
+            extra_args=["--set", 'features.include_factor_prefixes=["alpha101_"]'],
+        ),
+        cwd=root,
+        env=_cli_env(root),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Requested factor prefixes are missing from input data: alpha101_" in result.stderr
 
 
 def test_build_holdout_result_rejects_inverted_holdout_span() -> None:

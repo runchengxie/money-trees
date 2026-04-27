@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from moneytree.data import normalize_factor_prefixes
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
@@ -49,6 +51,16 @@ def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str
         else:
             merged[key] = value
     return merged
+
+
+def _as_str_tuple(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(part.strip() for part in value.split(",") if part.strip())
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(part).strip() for part in value if str(part).strip())
+    raise ValueError(f"Expected a string or list of strings, got {type(value).__name__}.")
 
 
 def _load_mapping(path: str | Path) -> dict[str, Any]:
@@ -130,6 +142,8 @@ class BacktestSettings:
     min_features: int = 2
     max_selection_steps: int = 200
     random_seed: int = 123
+    include_factor_prefixes: tuple[str, ...] = ()
+    exclude_factor_prefixes: tuple[str, ...] = ()
     feature_lag_periods: int = 1
     train_months: int = 60
     gap_months: int = 3
@@ -171,6 +185,7 @@ def load_backtest_settings(
         _set_nested(mapping, key.strip(), _parse_scalar(value.strip()))
 
     market = mapping.get("market", {})
+    features = mapping.get("features", {})
     model = mapping.get("model", {})
     portfolio = mapping.get("portfolio", {})
     backtest = mapping.get("backtest", {})
@@ -243,6 +258,14 @@ def load_backtest_settings(
         min_features=int(model.get("min_features", 2)),
         max_selection_steps=int(model.get("max_selection_steps", 200)),
         random_seed=int(model.get("random_seed", 123)),
+        include_factor_prefixes=normalize_factor_prefixes(
+            _as_str_tuple(features.get("include_factor_prefixes")),
+            families=_as_str_tuple(features.get("include_factor_families")),
+        ),
+        exclude_factor_prefixes=normalize_factor_prefixes(
+            _as_str_tuple(features.get("exclude_factor_prefixes")),
+            families=_as_str_tuple(features.get("exclude_factor_families")),
+        ),
         feature_lag_periods=int(market.get("feature_lag_periods", 1)),
         train_months=int(backtest.get("train_months", 60)),
         gap_months=int(backtest.get("gap_months", 3)),

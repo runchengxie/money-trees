@@ -5,13 +5,19 @@ import pandas as pd
 import pytest
 
 from moneytree.data import (
+    FACTOR_PREFIXES,
     NON_FEATURE_COLUMNS,
     apply_feature_lag,
+    coerce_factor_columns,
     ensure_date_ticker_index,
+    factor_columns,
+    filter_factor_columns,
     fill_missing_with_reference,
     get_feature_columns,
     load_market_data,
     make_labels,
+    normalize_factor_dtype,
+    normalize_factor_prefixes,
     preprocess_data,
 )
 
@@ -65,6 +71,55 @@ def test_get_feature_columns_excludes_non_feature_columns() -> None:
         assert col not in features
 
 
+def test_factor_column_helpers_identify_and_normalize_alpha_columns() -> None:
+    columns = ["alpha101_001", "alpha158_kmid", "feature", "alpha360_close_lag00"]
+
+    assert FACTOR_PREFIXES == ("alpha101_", "alpha191_", "alpha158_", "alpha360_")
+    assert factor_columns(columns) == ["alpha101_001", "alpha158_kmid", "alpha360_close_lag00"]
+    assert normalize_factor_prefixes(["alpha158"], families=["alpha101"]) == (
+        "alpha101_",
+        "alpha158_",
+    )
+
+
+def test_coerce_factor_columns_only_changes_alpha_dtypes() -> None:
+    frame = pd.DataFrame(
+        {
+            "alpha158_kmid": pd.Series([1.0, 2.0], dtype="float64"),
+            "alpha360_close_lag00": pd.Series([0.1, 0.2], dtype="float64"),
+            "feature_num": pd.Series([3.0, 4.0], dtype="float64"),
+            "flag": [True, False],
+        }
+    )
+
+    out = coerce_factor_columns(frame, "float32")
+
+    assert str(out["alpha158_kmid"].dtype) == "float32"
+    assert str(out["alpha360_close_lag00"].dtype) == "float32"
+    assert str(out["feature_num"].dtype) == "float64"
+    assert str(out["flag"].dtype) == "bool"
+
+
+def test_normalize_factor_dtype_rejects_unsupported_value() -> None:
+    assert normalize_factor_dtype(" FLOAT64 ") == "float64"
+    with pytest.raises(ValueError, match="Unsupported factor dtype"):
+        normalize_factor_dtype("float16")
+
+
+def test_filter_factor_columns_preserves_non_factors_and_reports_missing_prefix() -> None:
+    selected, summary = filter_factor_columns(
+        ["date", "ticker", "alpha158_kmid", "alpha360_close_lag00", "feature_num"],
+        include_factor_prefixes=["alpha158_"],
+    )
+
+    assert selected == ["date", "ticker", "alpha158_kmid", "feature_num"]
+    assert summary["selected_factor_columns"] == 1
+    assert summary["dropped_factor_columns"] == 1
+
+    with pytest.raises(ValueError, match="alpha101_"):
+        filter_factor_columns(["date", "ticker", "alpha158_kmid"], include_factor_prefixes=["alpha101"])
+
+
 def test_fill_missing_with_reference_uses_reference_statistics_only() -> None:
     reference = pd.DataFrame(
         {
@@ -106,6 +161,27 @@ def test_load_market_data_unsupported_suffix_raises_value_error(tmp_path) -> Non
 
     with pytest.raises(ValueError, match="Unsupported data format"):
         load_market_data(bad_path)
+
+
+def test_load_market_data_prunes_parquet_factor_columns(tmp_path) -> None:
+    data_path = tmp_path / "panel.parquet"
+    pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2021-01-01", "2021-01-02"]),
+            "ticker": ["A", "A"],
+            "alpha158_kmid": [0.1, 0.2],
+            "alpha360_close_lag00": [0.0, 0.0],
+            "next_period_return": [0.01, 0.02],
+            "benchmark_next_period_return": [0.0, 0.0],
+        }
+    ).to_parquet(data_path, index=False)
+
+    out = load_market_data(data_path, include_factor_prefixes=["alpha158_"])
+
+    assert "alpha158_kmid" in out.columns
+    assert "alpha360_close_lag00" not in out.columns
+    assert "next_period_return" in out.columns
+    assert out.attrs["factor_selection"]["column_pruned"] is True
 
 
 def test_apply_feature_lag_shifts_by_ticker_and_drops_all_missing_rows() -> None:

@@ -36,7 +36,8 @@ uv run moneytrees-tushare \
   --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
-  --factor-family alpha360
+  --factor-family alpha360 \
+  --factor-dtype float32
 ```
 
 3. 可选：离线生成外部 Alpha101/191。
@@ -55,6 +56,7 @@ uv run moneytrees-dolphindb-alphas \
   --password 123456 \
   --alpha101 \
   --alpha191 \
+  --factor-dtype float32 \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
   --moneytree-alpha-module-version <your-wrapper-version>
@@ -103,6 +105,53 @@ uv run ruff check .
 - `wq101alpha`、`gtja191Alpha` 和 `moneytreeAlpha` 模块版本已记录。
 - 输出 `.factor_manifest.json` 已保存并归档。
 - 回测输入使用合并后的 `data/cn_daily_alpha_all.parquet`。
+
+## 存储压力与因子数据管理
+
+完整 Alpha101、Alpha191、Alpha158 和 Alpha360 合计 810 个因子列。以 5 年约 1200 个交易日、全市场约 5000 只股票估算，单个因子矩阵约有 600 万行：
+
+```text
+6000000 * 810 * 8 bytes  ~= 38.9 GB  # float64 裸数据
+6000000 * 810 * 4 bytes  ~= 19.4 GB  # float32 裸数据
+```
+
+Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cache、基础行情列、`daily_basic`、可交易过滤、基准列、`cn_daily_alpha158_360.parquet`、`cn_daily_alpha_all.parquet`、`export_parquet` 和多次实验产物。完整 810 因子全市场多年运行应按几十 GB 到上百 GB 的本地空间规划。
+
+当前默认策略：
+
+- TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成路径默认把 `alpha101_`、`alpha191_`、`alpha158_`、`alpha360_` 因子列保存为 `float32`。
+- 需要精度敏感复核时，生成命令显式传 `--factor-dtype float64`。
+- 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。
+- `output.export_parquet` 会额外保存预处理后的面板，只建议用于调试和复现实验。
+
+建议把数据分成四层理解：
+
+```text
+data/raw/tushare/       TuShare 原始接口缓存，可重建标准面板
+data/panel/             清洗后的基础 date,ticker 面板
+data/factors/           Alpha101/191/158/360 分族因子文件
+artifacts/              回测指标、信号、持仓、配置和 manifest
+```
+
+raw cache、基础面板、factor store 和 experiment artifacts 的保留周期不同。不要自动删除这些目录；清理前先 dry-run 检查体积和文件列表。
+
+### 存储检查 dry-run
+
+以下命令只读取目录大小，不删除文件：
+
+```bash
+du -sh data/raw/tushare data/panel data/factors artifacts 2>/dev/null
+```
+
+查看较大的 parquet 文件：
+
+```bash
+find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
+  | sort -nr \
+  | head -20
+```
+
+如果后续增加 `gc` 或清理命令，默认必须是 dry-run：先打印候选文件、大小和原因，只有显式传入非 dry-run 参数后才允许删除。不要对 `data/`、`artifacts/`、raw TuShare cache 或 factor store 做隐式清理。
 
 ## TuShare token 排查
 

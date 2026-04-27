@@ -838,6 +838,7 @@ def build_run_config(
     segment_b_spec: SegmentSpec,
     experiment_manifest: dict[str, Any] | None = None,
     holdout_result: HoldoutResult | None = None,
+    factor_load_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved_at_utc = (
         str(experiment_manifest["run"]["resolved_at_utc"])
@@ -862,6 +863,11 @@ def build_run_config(
         "segment_specs": {
             "segment_a": asdict(segment_a_spec),
             "segment_b": asdict(segment_b_spec),
+        },
+        "factor_selection": {
+            "include_factor_prefixes": list(settings.include_factor_prefixes),
+            "exclude_factor_prefixes": list(settings.exclude_factor_prefixes),
+            **(factor_load_info or {}),
         },
     }
     if experiment_manifest is not None:
@@ -912,7 +918,12 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     market_profile = get_market_profile(settings.market_profile)
     portfolio_cfg = build_portfolio_config(settings)
 
-    raw = load_market_data(settings.data)
+    raw = load_market_data(
+        settings.data,
+        include_factor_prefixes=settings.include_factor_prefixes,
+        exclude_factor_prefixes=settings.exclude_factor_prefixes,
+    )
+    factor_load_info = dict(raw.attrs.get("factor_selection", {}))
     frame = preprocess_data(
         raw,
         market_profile=market_profile,
@@ -1111,6 +1122,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         segment_b_spec=segment_b_spec,
         experiment_manifest=experiment_manifest,
         holdout_result=holdout_result,
+        factor_load_info=factor_load_info,
     )
     run_summary_text = build_run_summary_text(
         benchmark_name=settings.benchmark_name,

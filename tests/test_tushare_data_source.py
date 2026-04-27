@@ -99,6 +99,27 @@ def test_standardize_tushare_cn_daily_panel_builds_contract() -> None:
     assert bool(panel.loc[(pd.Timestamp("2021-01-04"), "000002.SZ"), "is_st"]) is True
 
 
+def test_standardize_tushare_local_factors_default_to_float32() -> None:
+    panel = standardize_tushare_cn_daily_panel(
+        daily=_daily(),
+        benchmark_daily=_benchmark(),
+        factor_families=("alpha158",),
+    )
+
+    assert str(panel["alpha158_kmid"].dtype) == "float32"
+
+
+def test_standardize_tushare_local_factors_can_keep_float64() -> None:
+    panel = standardize_tushare_cn_daily_panel(
+        daily=_daily(),
+        benchmark_daily=_benchmark(),
+        factor_families=("alpha158",),
+        factor_dtype="float64",
+    )
+
+    assert str(panel["alpha158_kmid"].dtype) == "float64"
+
+
 def test_resolve_tushare_token_reads_env_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
     env_path = tmp_path / ".env"
@@ -334,6 +355,8 @@ def test_tushare_cli_accepts_cache_args() -> None:
             "--progress",
             "--progress-every",
             "10",
+            "--factor-dtype",
+            "float64",
         ]
     )
 
@@ -342,3 +365,4 @@ def test_tushare_cli_accepts_cache_args() -> None:
     assert args.refresh_recent_days == 20
     assert args.progress is True
     assert args.progress_every == 10
+    assert args.factor_dtype == "float64"

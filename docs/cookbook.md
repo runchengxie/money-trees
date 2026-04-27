@@ -68,10 +68,11 @@ uv run moneytrees-tushare \
   --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
-  --factor-family alpha360
+  --factor-family alpha360 \
+  --factor-dtype float32
 ```
 
-默认优先使用复权价格生成本地 Alpha 特征。使用未复权价格：
+默认优先使用复权价格生成本地 Alpha 特征，并把生成的 `alpha158_`、`alpha360_` 列保存为 `float32`。需要保留双精度时传 `--factor-dtype float64`。使用未复权价格：
 
 ```bash
 uv run moneytrees-tushare \
@@ -86,6 +87,19 @@ uv run moneytrees-tushare \
 ```
 
 `--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量，也不会跳过因子计算。
+
+轻量调试时只生成 Alpha158：
+
+```bash
+uv run moneytrees-tushare \
+  --start-date 20240101 \
+  --end-date 20241231 \
+  --output data/debug_alpha158.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
+  --progress \
+  --factor-family alpha158
+```
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
 
@@ -109,6 +123,7 @@ uv run moneytrees-dolphindb-alphas \
   --password 123456 \
   --alpha101 \
   --alpha191 \
+  --factor-dtype float32 \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
   --moneytree-alpha-module-version <your-wrapper-version>
@@ -134,6 +149,29 @@ uv run moneytrees \
 ```
 
 `xgb_regressor` 训练目标是 `rel_return`，输出连续 score 后进入组合构建。
+
+调试模型时可以只读取某个因子族，避免把完整 810 因子都读入内存：
+
+```bash
+uv run moneytrees \
+  --config configs/market/cn.yaml \
+  --config configs/model/ridge.yaml \
+  --config configs/backtest/default.yaml \
+  --data data/cn_daily_alpha_all.parquet \
+  --output-dir artifacts/ridge-alpha158-only \
+  --set 'features.include_factor_families=["alpha158"]'
+```
+
+也可以直接用前缀：
+
+```bash
+uv run moneytrees \
+  --data data/cn_daily_alpha_all.parquet \
+  --output-dir artifacts/debug-alpha360 \
+  --set 'features.include_factor_prefixes=["alpha360_"]' \
+  --set model.feature_selection=none \
+  --set model.n_trials=0
+```
 
 ## 6. 单因子 IC / RankIC 诊断
 

@@ -57,6 +57,18 @@ rel_performance in {-1, 0, 1}
 
 Alpha101/191 的公式实现由上游系统维护。研究时要固定行业、市值、VWAP、停牌、涨跌停、缺失值和复权口径。
 
+## 存储 dtype 策略
+
+Money Trees 的生成型 CLI 默认把 `alpha101_`、`alpha191_`、`alpha158_` 和 `alpha360_` 因子列保存为 `float32`，以降低完整多年全市场面板的存储和内存压力。非因子列不会因为这个策略被全局降精度。
+
+如需精度敏感复核，可在生成命令中显式使用：
+
+```bash
+--factor-dtype float64
+```
+
+`float32` 可能带来很小的数值差异，但对常见截面排序、树模型和线性模型基线通常比 `float64` 更适合日常迭代。正式复核时建议在 manifest 或 run config 中记录 dtype。
+
 ## 本地 Alpha158
 
 `alpha158_*` 当前由 4 组特征组成：
@@ -120,7 +132,8 @@ uv run moneytrees-tushare \
   --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
-  --factor-family alpha360
+  --factor-family alpha360 \
+  --factor-dtype float32
 ```
 
 运行 XGBoost 回归：

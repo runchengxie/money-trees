@@ -48,6 +48,35 @@ uv run moneytrees \
 
 `--set` 会自动解析布尔值、整数、浮点数和 JSON 字面量。
 
+## 特征读取配置
+
+特征读取字段位于 `features`，用于在回测读取 parquet 时裁剪不需要的 Alpha 因子列：
+
+```yaml
+features:
+  include_factor_families: []
+  exclude_factor_families: []
+  include_factor_prefixes: []
+  exclude_factor_prefixes: []
+```
+
+说明：
+
+- family 可取 `alpha101`、`alpha191`、`alpha158`、`alpha360`，会自动映射到对应列名前缀。
+- prefix 直接匹配列名前缀，例如 `alpha158_`。
+- `include_*` 非空时，只保留匹配的 Alpha 因子列；非因子列会保留，用于标签、基准、可交易过滤和报告。
+- `exclude_*` 会从已选 Alpha 因子列中排除对应前缀。
+- parquet 输入会根据 schema 做列裁剪；pickle 输入会先完整读取，再在内存中过滤。
+
+示例：
+
+```bash
+uv run moneytrees \
+  --data data/cn_daily_alpha_all.parquet \
+  --output-dir artifacts/alpha158-only \
+  --set 'features.include_factor_families=["alpha158"]'
+```
+
 ## 市场配置
 
 文件：`configs/market/cn.yaml`
@@ -183,6 +212,19 @@ output:
 
 - `output_dir` 是产物目录。
 - `export_parquet` 非空时，会额外保存经过预处理、填充和特征滞后的面板。
+
+`export_parquet` 会复制一份处理后的输入面板。完整 810 因子运行时，该文件可能很大，建议只在调试、审计或复现实验时开启。
+
+## 因子生成 CLI 配置
+
+TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成命令都支持：
+
+```bash
+--factor-dtype float32  # 默认
+--factor-dtype float64  # 精度敏感复核
+```
+
+该选项只影响 `alpha101_`、`alpha191_`、`alpha158_` 和 `alpha360_` 因子列，不会全局降精度基础行情、基准、标签或可交易过滤列。
 
 ## 预设配置
 

@@ -52,6 +52,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Use raw prices instead of adjusted prices for local Alpha158/360 generation.",
     )
+    parser.add_argument(
+        "--factor-dtype",
+        default="float32",
+        choices=["float32", "float64"],
+        help="Dtype for generated alpha factor columns in the output parquet.",
+    )
     parser.add_argument("--skip-daily-basic", action="store_true")
     parser.add_argument("--skip-adj-factor", action="store_true")
     parser.add_argument("--skip-limits", action="store_true")
@@ -109,6 +115,7 @@ def main(argv: list[str] | None = None) -> None:
         refresh_recent_days=int(args.refresh_recent_days),
         show_progress=bool(args.progress),
         progress_every=int(args.progress_every),
+        factor_dtype=args.factor_dtype,
     )
     frame = fetch_tushare_cn_daily_panel(config)
     save_market_data(frame, Path(args.output))

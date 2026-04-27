@@ -9,7 +9,7 @@ import sys
 import tempfile
 from typing import Any
 
-from moneytree.data import load_market_data, save_market_data
+from moneytree.data import coerce_factor_columns, load_market_data, normalize_factor_dtype, save_market_data
 from moneytree.factors.external import (
     build_dolphindb_input,
     build_external_alpha_manifest,
@@ -106,6 +106,7 @@ def _server_version(session: Any) -> str | None:
 
 def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -> GenerationResult:
     families = _selected_families(args)
+    factor_dtype = normalize_factor_dtype(getattr(args, "factor_dtype", "float32"))
     input_path = Path(args.input)
     output_path = Path(args.output)
     manifest_path = (
@@ -135,6 +136,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
         result = session.run(f"{function_name}(rawData, startTime, endTime)")
         merged, family_validation = merge_external_alpha_columns(merged, result, [family])
         validation["family_results"][family] = family_validation
+    merged = coerce_factor_columns(merged, factor_dtype)
 
     alpha_columns = [
         column
@@ -176,6 +178,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
             module_versions=_module_versions(args),
         )
         manifest["output_data"]["path"] = str(output_path)
+        manifest["factor_dtype"] = factor_dtype
 
         with tempfile.NamedTemporaryFile(
             prefix=f".{manifest_path.name}.",
@@ -245,6 +248,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wq101-module-version", default="unknown")
     parser.add_argument("--gtja191-module-version", default="unknown")
     parser.add_argument("--moneytree-alpha-module-version", default="unknown")
+    parser.add_argument(
+        "--factor-dtype",
+        default="float32",
+        choices=["float32", "float64"],
+        help="Dtype for generated Alpha101/191 columns in the output parquet.",
+    )
     parser.add_argument("--compression", default="snappy", help="Parquet compression.")
     return parser
 

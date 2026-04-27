@@ -99,6 +99,7 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "wq101_module_version": "wq-test",
         "gtja191_module_version": "gtja-test",
         "moneytree_alpha_module_version": "wrapper-test",
+        "factor_dtype": "float32",
         "compression": "snappy",
     }
     values.update(overrides)
@@ -126,9 +127,11 @@ def test_dolphindb_generation_script_smoke_with_mocked_session(tmp_path: Path) -
     assert manifest_path.exists()
     assert "alpha101_001" in out.columns
     assert "alpha101_101" in out.columns
+    assert str(out["alpha101_001"].dtype) == "float32"
     assert session.connected == ("127.0.0.1", 8848, "admin", "supersecret")
     assert "supersecret" not in json.dumps(manifest, sort_keys=True)
     assert manifest["output_data"]["path"] == str(output_path)
+    assert manifest["factor_dtype"] == "float32"
     assert manifest["module_versions"]["wq101alpha"] == "wq-test"
 
 
@@ -147,6 +150,26 @@ def test_dolphindb_generation_package_cli_smoke_with_mocked_session(tmp_path: Pa
     assert result.alpha_columns == 101
     assert output_path.exists()
     assert output_path.with_suffix(output_path.suffix + ".factor_manifest.json").exists()
+
+
+def test_dolphindb_generation_can_keep_float64_factors(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+
+    dolphindb_alphas.run_generation(
+        _args(input_path, output_path, factor_dtype="float64"),
+        ddb_module=FakeDolphinDB(FakeSession()),
+    )
+
+    out = pd.read_parquet(output_path)
+    manifest = json.loads(
+        output_path.with_suffix(output_path.suffix + ".factor_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert str(out["alpha101_001"].dtype) == "float64"
+    assert manifest["factor_dtype"] == "float64"
 
 
 def test_dolphindb_generation_script_is_compatibility_wrapper() -> None:

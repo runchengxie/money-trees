@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from moneytree.markets.base import BaseMarketProfile
 
 LabelSource = Literal["actual", "pred_rel_return"]
+FactorDtype = Literal["float32", "float64"]
+
+FACTOR_FAMILY_PREFIXES = {
+    "alpha101": "alpha101_",
+    "alpha191": "alpha191_",
+    "alpha158": "alpha158_",
+    "alpha360": "alpha360_",
+}
+FACTOR_PREFIXES = tuple(FACTOR_FAMILY_PREFIXES.values())
+SUPPORTED_FACTOR_DTYPES = ("float32", "float64")
 
 NON_FEATURE_COLUMNS = {
     "date",
@@ -29,15 +39,159 @@ NON_FEATURE_COLUMNS = {
 }
 
 
-def load_market_data(path: str | Path) -> pd.DataFrame:
+def normalize_factor_dtype(value: str) -> FactorDtype:
+    """Return a supported factor dtype or raise a clear ValueError."""
+    normalized = str(value).strip().lower()
+    if normalized not in SUPPORTED_FACTOR_DTYPES:
+        choices = ", ".join(SUPPORTED_FACTOR_DTYPES)
+        raise ValueError(f"Unsupported factor dtype '{value}'. Expected one of: {choices}.")
+    return normalized  # type: ignore[return-value]
+
+
+def normalize_factor_prefixes(
+    prefixes: Iterable[str] | None = None,
+    *,
+    families: Iterable[str] | None = None,
+) -> tuple[str, ...]:
+    """Normalize factor family names and prefixes into alpha column prefixes."""
+    normalized: list[str] = []
+
+    for family in families or ():
+        key = str(family).strip().lower().replace("-", "_")
+        if not key:
+            continue
+        if key not in FACTOR_FAMILY_PREFIXES:
+            choices = ", ".join(sorted(FACTOR_FAMILY_PREFIXES))
+            raise ValueError(f"Unsupported factor family '{family}'. Expected one of: {choices}.")
+        normalized.append(FACTOR_FAMILY_PREFIXES[key])
+
+    for prefix in prefixes or ():
+        text = str(prefix).strip().lower().replace("-", "_")
+        if not text:
+            continue
+        normalized.append(FACTOR_FAMILY_PREFIXES.get(text, text))
+
+    return tuple(dict.fromkeys(normalized))
+
+
+def is_factor_column(column: object, prefixes: Iterable[str] = FACTOR_PREFIXES) -> bool:
+    """Return True when a column belongs to a known alpha factor family."""
+    text = str(column)
+    return any(text.startswith(prefix) for prefix in prefixes)
+
+
+def factor_columns(
+    columns: Iterable[object],
+    prefixes: Iterable[str] = FACTOR_PREFIXES,
+) -> list[str]:
+    """Return known alpha factor columns from an iterable of column names."""
+    return [str(column) for column in columns if is_factor_column(column, prefixes=prefixes)]
+
+
+def coerce_factor_columns(frame: pd.DataFrame, dtype: str = "float32") -> pd.DataFrame:
+    """Cast alpha factor columns to `dtype` without changing non-factor columns."""
+    normalized_dtype = normalize_factor_dtype(dtype)
+    cols = [column for column in frame.columns if is_factor_column(column)]
+    if not cols:
+        return frame.copy()
+
+    out = frame.copy()
+    out[cols] = out[cols].astype(normalized_dtype)
+    return out
+
+
+def filter_factor_columns(
+    columns: Iterable[object],
+    *,
+    include_factor_prefixes: Iterable[str] | None = None,
+    exclude_factor_prefixes: Iterable[str] | None = None,
+) -> tuple[list[str], dict[str, object]]:
+    """Filter known alpha columns while preserving non-factor columns."""
+    include_prefixes = normalize_factor_prefixes(include_factor_prefixes)
+    exclude_prefixes = normalize_factor_prefixes(exclude_factor_prefixes)
+    column_names = [str(column) for column in columns]
+    alpha_columns = factor_columns(column_names)
+
+    missing_include_prefixes = [
+        prefix
+        for prefix in include_prefixes
+        if not any(column.startswith(prefix) for column in alpha_columns)
+    ]
+    if missing_include_prefixes:
+        missing = ", ".join(missing_include_prefixes)
+        raise ValueError(f"Requested factor prefixes are missing from input data: {missing}.")
+
+    selected: list[str] = []
+    selected_factor_count = 0
+    dropped_factor_count = 0
+    for column in column_names:
+        if not is_factor_column(column):
+            selected.append(column)
+            continue
+        included = not include_prefixes or any(column.startswith(prefix) for prefix in include_prefixes)
+        excluded = any(column.startswith(prefix) for prefix in exclude_prefixes)
+        if included and not excluded:
+            selected.append(column)
+            selected_factor_count += 1
+        else:
+            dropped_factor_count += 1
+
+    summary: dict[str, object] = {
+        "include_factor_prefixes": list(include_prefixes),
+        "exclude_factor_prefixes": list(exclude_prefixes),
+        "available_factor_columns": len(alpha_columns),
+        "selected_factor_columns": selected_factor_count,
+        "dropped_factor_columns": dropped_factor_count,
+    }
+    return selected, summary
+
+
+def _parquet_schema_columns(path: Path) -> list[str]:
+    try:
+        import pyarrow.parquet as pq
+    except ModuleNotFoundError as exc:  # pragma: no cover - pyarrow is a core dependency
+        raise RuntimeError("Parquet schema inspection requires the pyarrow dependency.") from exc
+    return [str(name) for name in pq.read_schema(path).names]
+
+
+def load_market_data(
+    path: str | Path,
+    *,
+    include_factor_prefixes: Iterable[str] | None = None,
+    exclude_factor_prefixes: Iterable[str] | None = None,
+) -> pd.DataFrame:
     """Load market data from a pickle/parquet file."""
     file_path = Path(path)
     suffix = file_path.suffix.lower()
+    has_factor_filter = bool(include_factor_prefixes) or bool(exclude_factor_prefixes)
 
     if suffix in {".pkl", ".pickle"}:
-        return pd.read_pickle(file_path)
+        frame = pd.read_pickle(file_path)
+        if has_factor_filter:
+            selected, summary = filter_factor_columns(
+                frame.columns,
+                include_factor_prefixes=include_factor_prefixes,
+                exclude_factor_prefixes=exclude_factor_prefixes,
+            )
+            frame = frame.loc[:, selected]
+            summary["column_pruned"] = False
+            frame.attrs["factor_selection"] = summary
+        return frame
     if suffix == ".parquet":
-        return pd.read_parquet(file_path)
+        columns = None
+        summary: dict[str, object] | None = None
+        if has_factor_filter:
+            schema_columns = _parquet_schema_columns(file_path)
+            columns, summary = filter_factor_columns(
+                schema_columns,
+                include_factor_prefixes=include_factor_prefixes,
+                exclude_factor_prefixes=exclude_factor_prefixes,
+            )
+            summary["column_pruned"] = True
+        frame = pd.read_parquet(file_path, columns=columns)
+        if summary is not None:
+            frame.attrs["factor_selection"] = summary
+        return frame
     raise ValueError(f"Unsupported data format: {file_path}")
 
 
@@ -301,4 +455,3 @@ def build_benchmark_series(
     )
     benchmark.name = resolved_col
     return benchmark
-

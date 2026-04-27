@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from moneytree.data import coerce_factor_columns
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors import add_factor_family_features
 from moneytree.metadata import (
@@ -46,6 +47,7 @@ class TushareDailyConfig:
     refresh_recent_days: int = 0
     show_progress: bool = False
     progress_every: int = 50
+    factor_dtype: str = "float32"
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -545,6 +547,7 @@ def standardize_tushare_cn_daily_panel(
     factor_families: tuple[str, ...] = (),
     complete_calendar: bool = False,
     adjusted_features: bool = True,
+    factor_dtype: str = "float32",
     show_progress: bool = False,
 ) -> pd.DataFrame:
     """Normalize TuShare A-share daily data into the Money Trees date/ticker contract."""
@@ -577,6 +580,7 @@ def standardize_tushare_cn_daily_panel(
             factor_families,
             adjusted=adjusted_features,
         )
+        panel = coerce_factor_columns(panel, factor_dtype)
         _emit_progress(
             (
                 "[tushare:factors] generated "
@@ -725,6 +729,7 @@ def fetch_tushare_cn_daily_panel(
         factor_families=config.factor_families,
         complete_calendar=config.complete_calendar,
         adjusted_features=config.adjusted_features,
+        factor_dtype=config.factor_dtype,
         show_progress=config.show_progress,
     )
     _emit_progress(
