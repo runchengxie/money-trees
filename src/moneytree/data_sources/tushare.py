@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
@@ -7,12 +8,14 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import threading
 from typing import Any
+import warnings
 
 import numpy as np
 import pandas as pd
 
-from moneytree.data import coerce_factor_columns
+from moneytree.data import build_market_data_sanity_report
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors import add_factor_family_features
 from moneytree.metadata import (
@@ -24,6 +27,26 @@ from moneytree.metadata import (
 
 
 TOKEN_ENV_NAMES = ("TUSHARE_TOKEN", "TUSHARE_PRO_TOKEN", "TS_TOKEN", "TUSHARE_API_KEY")
+TUSHARE_PROXY_MODES = ("direct", "env", "proxy")
+TUSHARE_SANITY_CHECK_MODES = ("off", "warn", "error")
+_PROXY_ENV_NAMES = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
+_NO_PROXY_ENV_NAMES = ("NO_PROXY", "no_proxy")
+_TUSHARE_NO_PROXY_HOSTS = ("api.waditu.com", "waditu.com")
+_PROXY_ENV_LOCK = threading.RLock()
+
+
+@dataclass(frozen=True)
+class _TushareApiOptions:
+    proxy_mode: str = "direct"
+    proxy_url: str | None = None
+    fallback_direct: bool = True
 
 
 @dataclass(frozen=True)
@@ -48,6 +71,10 @@ class TushareDailyConfig:
     show_progress: bool = False
     progress_every: int = 50
     factor_dtype: str = "float32"
+    proxy_mode: str = "direct"
+    proxy_url: str | None = None
+    fallback_direct: bool = True
+    sanity_check: str = "warn"
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -129,10 +156,109 @@ def _emit_progress(message: str, *, enabled: bool) -> None:
         print(message, file=sys.stderr, flush=True)
 
 
-def _call_api(pro, api_name: str, **params) -> pd.DataFrame:
+def _merge_no_proxy(*values: str | None) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for part in (value or "").split(","):
+            item = part.strip()
+            key = item.lower()
+            if item and key not in seen:
+                parts.append(item)
+                seen.add(key)
+    return ",".join(parts)
+
+
+def _validate_proxy_settings(mode: str, proxy_url: str | None = None) -> None:
+    if mode not in TUSHARE_PROXY_MODES:
+        choices = ", ".join(TUSHARE_PROXY_MODES)
+        raise ValueError(f"Unsupported TuShare proxy mode '{mode}'. Expected one of: {choices}.")
+    if mode == "proxy" and not proxy_url:
+        raise ValueError("TuShare proxy_url is required when proxy_mode is 'proxy'.")
+
+
+def _validate_sanity_check_mode(mode: str) -> None:
+    if mode not in TUSHARE_SANITY_CHECK_MODES:
+        choices = ", ".join(TUSHARE_SANITY_CHECK_MODES)
+        raise ValueError(f"Unsupported TuShare sanity_check mode '{mode}'. Expected one of: {choices}.")
+
+
+@contextmanager
+def _temporary_proxy_mode(mode: str, proxy_url: str | None = None):
+    _validate_proxy_settings(mode, proxy_url)
+
+    names = (*_PROXY_ENV_NAMES, *_NO_PROXY_ENV_NAMES)
+    with _PROXY_ENV_LOCK:
+        original = {name: os.environ.get(name) for name in names}
+        try:
+            if mode == "direct":
+                for name in _PROXY_ENV_NAMES:
+                    os.environ.pop(name, None)
+                no_proxy = _merge_no_proxy(
+                    os.environ.get("NO_PROXY"),
+                    os.environ.get("no_proxy"),
+                    ",".join(_TUSHARE_NO_PROXY_HOSTS),
+                )
+                os.environ["NO_PROXY"] = no_proxy
+                os.environ["no_proxy"] = no_proxy
+            elif mode == "proxy":
+                for name in _PROXY_ENV_NAMES:
+                    os.environ[name] = str(proxy_url)
+                for name in _NO_PROXY_ENV_NAMES:
+                    os.environ.pop(name, None)
+            yield
+        finally:
+            for name, value in original.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
+
+def _looks_like_proxy_error(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__.lower()
+        text = str(current).lower()
+        if "proxy" in name or "proxy" in text:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _call_api(
+    pro,
+    api_name: str,
+    *,
+    api_options: _TushareApiOptions | None = None,
+    **params,
+) -> pd.DataFrame:
+    options = api_options or _TushareApiOptions()
     method = getattr(pro, api_name)
     clean_params = {key: value for key, value in params.items() if value is not None}
-    out = method(**clean_params)
+    try:
+        with _temporary_proxy_mode(options.proxy_mode, options.proxy_url):
+            out = method(**clean_params)
+    except Exception as exc:
+        if (
+            options.proxy_mode != "direct"
+            and options.fallback_direct
+            and _looks_like_proxy_error(exc)
+        ):
+            warnings.warn(
+                (
+                    f"TuShare API '{api_name}' failed through proxy mode "
+                    f"'{options.proxy_mode}'; retrying direct."
+                ),
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            with _temporary_proxy_mode("direct"):
+                out = method(**clean_params)
+        else:
+            raise
     return out if isinstance(out, pd.DataFrame) else pd.DataFrame(out)
 
 
@@ -254,7 +380,13 @@ def _write_cache_manifest(
         )
 
 
-def _fetch_trade_dates(pro, start_date: str, end_date: str) -> list[str]:
+def _fetch_trade_dates(
+    pro,
+    start_date: str,
+    end_date: str,
+    *,
+    api_options: _TushareApiOptions | None = None,
+) -> list[str]:
     start = _normalize_date_str(start_date)
     end = _normalize_date_str(end_date)
     try:
@@ -265,6 +397,7 @@ def _fetch_trade_dates(pro, start_date: str, end_date: str) -> list[str]:
             start_date=start,
             end_date=end,
             is_open="1",
+            api_options=api_options,
         )
     except Exception:
         calendar = pd.DataFrame()
@@ -299,6 +432,7 @@ def _fetch_by_trade_date(
     refresh_recent_days: int = 0,
     show_progress: bool = False,
     progress_every: int = 50,
+    api_options: _TushareApiOptions | None = None,
     **extra_params,
 ) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
@@ -334,6 +468,7 @@ def _fetch_by_trade_date(
                 api_name,
                 trade_date=trade_date,
                 fields=fields,
+                api_options=api_options,
                 **extra_params,
             )
             fetched += 1
@@ -532,6 +667,94 @@ def _complete_calendar(
     return out
 
 
+def _expected_local_factor_count(families: tuple[str, ...]) -> int:
+    counts = {"alpha158": 158, "alpha360": 360}
+    total = 0
+    for family in families:
+        key = str(family).strip().lower().replace("-", "_")
+        total += counts.get(key, 0)
+    return total
+
+
+def _emit_tushare_sanity_report(
+    panel: pd.DataFrame,
+    *,
+    stage: str,
+    mode: str,
+    show_progress: bool,
+    trade_dates: list[str] | None = None,
+    expected_start: str | None = None,
+    expected_end: str | None = None,
+    factor_families: tuple[str, ...] = (),
+) -> None:
+    if mode == "off":
+        return
+    _validate_sanity_check_mode(mode)
+    required_columns = (
+        "date",
+        "ticker",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "vwap",
+        "next_period_return",
+        "benchmark_cum_ret",
+        "benchmark_next_period_return",
+        "hit_up_limit",
+        "hit_down_limit",
+        "is_suspended",
+        "is_st",
+    )
+    null_check_columns = (
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "vwap",
+        "next_period_return",
+        "benchmark_cum_ret",
+        "benchmark_next_period_return",
+    )
+    report = build_market_data_sanity_report(
+        panel,
+        required_columns=required_columns,
+        null_check_columns=null_check_columns,
+        expected_start=expected_start,
+        expected_end=expected_end,
+        expected_date_count=len(trade_dates) if trade_dates is not None else None,
+    )
+    extra_errors: list[str] = []
+    expected_factor_count = _expected_local_factor_count(factor_families)
+    if expected_factor_count:
+        factor_count = sum(
+            str(column).startswith(("alpha158_", "alpha360_")) for column in panel.columns
+        )
+        if factor_count != expected_factor_count:
+            extra_errors.append(
+                f"local factor columns {factor_count} != expected {expected_factor_count}"
+            )
+
+    for line in report.to_lines(prefix=f"[tushare:sanity:{stage}]"):
+        _emit_progress(line, enabled=show_progress)
+    if extra_errors:
+        _emit_progress(
+            f"[tushare:sanity:{stage}] errors {'; '.join(extra_errors)}",
+            enabled=show_progress,
+        )
+    if report.errors or extra_errors:
+        message = "; ".join((*report.errors, *extra_errors))
+        if mode == "error":
+            raise ValueError(f"TuShare data sanity check failed at stage '{stage}': {message}")
+        warnings.warn(
+            f"TuShare data sanity check reported issues at stage '{stage}': {message}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+
 def standardize_tushare_cn_daily_panel(
     *,
     daily: pd.DataFrame,
@@ -549,6 +772,7 @@ def standardize_tushare_cn_daily_panel(
     adjusted_features: bool = True,
     factor_dtype: str = "float32",
     show_progress: bool = False,
+    sanity_check: str = "off",
 ) -> pd.DataFrame:
     """Normalize TuShare A-share daily data into the Money Trees date/ticker contract."""
     panel = _standardize_daily(daily)
@@ -567,6 +791,16 @@ def standardize_tushare_cn_daily_panel(
     benchmark_frame = _prepare_benchmark(benchmark_daily, benchmark=benchmark)
     panel = panel.join(benchmark_frame, on="date", how="left")
 
+    _emit_tushare_sanity_report(
+        panel,
+        stage="base",
+        mode=sanity_check,
+        show_progress=show_progress,
+        trade_dates=trade_dates,
+        expected_start=trade_dates[0] if trade_dates else None,
+        expected_end=trade_dates[-1] if trade_dates else None,
+    )
+
     if factor_families:
         _emit_progress(
             (
@@ -579,8 +813,8 @@ def standardize_tushare_cn_daily_panel(
             panel,
             factor_families,
             adjusted=adjusted_features,
+            dtype=factor_dtype,
         )
-        panel = coerce_factor_columns(panel, factor_dtype)
         _emit_progress(
             (
                 "[tushare:factors] generated "
@@ -588,10 +822,25 @@ def standardize_tushare_cn_daily_panel(
             ),
             enabled=show_progress,
         )
+
+        _emit_tushare_sanity_report(
+            panel,
+            stage="final",
+            mode=sanity_check,
+            show_progress=show_progress,
+            trade_dates=trade_dates,
+            expected_start=trade_dates[0] if trade_dates else None,
+            expected_end=trade_dates[-1] if trade_dates else None,
+            factor_families=factor_families,
+        )
     return ensure_date_ticker_index(panel).sort_index()
 
 
-def _fetch_stock_basic(pro) -> pd.DataFrame:
+def _fetch_stock_basic(
+    pro,
+    *,
+    api_options: _TushareApiOptions | None = None,
+) -> pd.DataFrame:
     fields = "ts_code,symbol,name,area,industry,market,exchange,list_date,delist_date,list_status,is_hs"
     frames: list[pd.DataFrame] = []
     for status in ("L", "D", "P"):
@@ -603,6 +852,7 @@ def _fetch_stock_basic(pro) -> pd.DataFrame:
                     exchange="",
                     list_status=status,
                     fields=fields,
+                    api_options=api_options,
                 )
             )
         except Exception:
@@ -619,7 +869,14 @@ def fetch_tushare_cn_daily_panel(
     client = pro if pro is not None else create_tushare_client(config.token, env_file=config.env_file)
     start_date = _normalize_date_str(config.start_date)
     end_date = _normalize_date_str(config.end_date)
-    trade_dates = _fetch_trade_dates(client, start_date, end_date)
+    api_options = _TushareApiOptions(
+        proxy_mode=config.proxy_mode,
+        proxy_url=config.proxy_url,
+        fallback_direct=config.fallback_direct,
+    )
+    _validate_proxy_settings(api_options.proxy_mode, api_options.proxy_url)
+    _validate_sanity_check_mode(config.sanity_check)
+    trade_dates = _fetch_trade_dates(client, start_date, end_date, api_options=api_options)
     _emit_progress(
         (
             f"[tushare] trade_dates={len(trade_dates)} "
@@ -635,6 +892,7 @@ def fetch_tushare_cn_daily_panel(
         "refresh_recent_days": int(config.refresh_recent_days),
         "show_progress": bool(config.show_progress),
         "progress_every": int(config.progress_every),
+        "api_options": api_options,
     }
     daily = _fetch_by_trade_date(
         client,
@@ -653,6 +911,7 @@ def fetch_tushare_cn_daily_panel(
         ts_code=config.benchmark,
         start_date=start_date,
         end_date=end_date,
+        api_options=api_options,
     )
     daily_basic = (
         _fetch_by_trade_date(
@@ -707,7 +966,7 @@ def fetch_tushare_cn_daily_panel(
             "[tushare:stock_basic] fetching list_status=L,D,P",
             enabled=config.show_progress,
         )
-        stock_basic = _fetch_stock_basic(client)
+        stock_basic = _fetch_stock_basic(client, api_options=api_options)
     else:
         stock_basic = None
     _emit_progress(
@@ -731,6 +990,7 @@ def fetch_tushare_cn_daily_panel(
         adjusted_features=config.adjusted_features,
         factor_dtype=config.factor_dtype,
         show_progress=config.show_progress,
+        sanity_check=config.sanity_check,
     )
     _emit_progress(
         f"[tushare:done] rows={len(panel)} cols={len(panel.columns)}",

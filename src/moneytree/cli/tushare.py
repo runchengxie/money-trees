@@ -5,6 +5,7 @@ from pathlib import Path
 
 from moneytree.data import save_market_data
 from moneytree.data_sources import TushareDailyConfig, fetch_tushare_cn_daily_panel
+from moneytree.data_sources.tushare import TUSHARE_PROXY_MODES, TUSHARE_SANITY_CHECK_MODES
 
 
 def _parse_tickers(raw: str) -> tuple[str, ...]:
@@ -90,6 +91,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=50,
         help="When --progress is set, print one line every N trade dates.",
     )
+    parser.add_argument(
+        "--proxy-mode",
+        default="direct",
+        choices=TUSHARE_PROXY_MODES,
+        help=(
+            "TuShare proxy mode. 'direct' ignores shell proxy env vars; "
+            "'env' uses them; 'proxy' uses --proxy-url. Default: direct."
+        ),
+    )
+    parser.add_argument(
+        "--proxy-url",
+        default="",
+        help="Explicit TuShare proxy URL, for example http://127.0.0.1:10810.",
+    )
+    parser.add_argument(
+        "--no-fallback-direct",
+        action="store_true",
+        help="Disable one direct retry when env/proxy mode fails with a proxy error.",
+    )
+    parser.add_argument(
+        "--sanity-check",
+        default="warn",
+        choices=TUSHARE_SANITY_CHECK_MODES,
+        help="Post-standardization TuShare panel sanity check mode. Default: warn.",
+    )
     return parser.parse_args(argv)
 
 
@@ -116,6 +142,10 @@ def main(argv: list[str] | None = None) -> None:
         show_progress=bool(args.progress),
         progress_every=int(args.progress_every),
         factor_dtype=args.factor_dtype,
+        proxy_mode="proxy" if args.proxy_url and args.proxy_mode == "direct" else args.proxy_mode,
+        proxy_url=args.proxy_url or None,
+        fallback_direct=not bool(args.no_fallback_direct),
+        sanity_check=args.sanity_check,
     )
     frame = fetch_tushare_cn_daily_panel(config)
     save_market_data(frame, Path(args.output))

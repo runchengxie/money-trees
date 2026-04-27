@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 
 import numpy as np
@@ -10,6 +11,8 @@ import pytest
 from moneytree.cli.tushare import parse_args
 from moneytree.data_sources.tushare import (
     TushareDailyConfig,
+    _TushareApiOptions,
+    _call_api,
     fetch_tushare_cn_daily_panel,
     resolve_tushare_token,
     standardize_tushare_cn_daily_panel,
@@ -180,6 +183,108 @@ class _CountingFakePro(_FakePro):
     def suspend_d(self, **kwargs) -> pd.DataFrame:
         self._record("suspend_d", kwargs)
         return super().suspend_d(**kwargs)
+
+
+class _ProxyEnvProbePro:
+    def __init__(self) -> None:
+        self.seen: dict[str, str | None] = {}
+
+    def daily(self, **kwargs) -> pd.DataFrame:
+        self.seen = {
+            "HTTP_PROXY": os.environ.get("HTTP_PROXY"),
+            "HTTPS_PROXY": os.environ.get("HTTPS_PROXY"),
+            "ALL_PROXY": os.environ.get("ALL_PROXY"),
+            "http_proxy": os.environ.get("http_proxy"),
+            "https_proxy": os.environ.get("https_proxy"),
+            "all_proxy": os.environ.get("all_proxy"),
+            "NO_PROXY": os.environ.get("NO_PROXY"),
+            "no_proxy": os.environ.get("no_proxy"),
+        }
+        return pd.DataFrame({"ok": [1]})
+
+
+class _ProxyError(RuntimeError):
+    pass
+
+
+class _ProxyFallbackPro:
+    def __init__(self) -> None:
+        self.http_proxy_values: list[str | None] = []
+
+    def daily(self, **kwargs) -> pd.DataFrame:
+        self.http_proxy_values.append(os.environ.get("HTTP_PROXY"))
+        if len(self.http_proxy_values) == 1:
+            raise _ProxyError("proxy connection failed")
+        return pd.DataFrame({"ok": [1]})
+
+
+def test_call_api_defaults_to_direct_proxy_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    proxy_url = "http://127.0.0.1:10810"
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        monkeypatch.setenv(name, proxy_url)
+    monkeypatch.setenv("NO_PROXY", "localhost")
+    monkeypatch.setenv("no_proxy", "127.0.0.1")
+
+    pro = _ProxyEnvProbePro()
+    _call_api(pro, "daily")
+
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        assert pro.seen[name] is None
+        assert os.environ[name] == proxy_url
+    assert pro.seen["NO_PROXY"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
+    assert pro.seen["no_proxy"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
+    assert os.environ["NO_PROXY"] == "localhost"
+    assert os.environ["no_proxy"] == "127.0.0.1"
+
+
+def test_call_api_proxy_mode_uses_explicit_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    proxy_url = "http://127.0.0.1:10810"
+    monkeypatch.setenv("HTTP_PROXY", "http://env-proxy:8080")
+    monkeypatch.setenv("NO_PROXY", "api.waditu.com")
+
+    pro = _ProxyEnvProbePro()
+    _call_api(
+        pro,
+        "daily",
+        api_options=_TushareApiOptions(proxy_mode="proxy", proxy_url=proxy_url),
+    )
+
+    assert pro.seen["HTTP_PROXY"] == proxy_url
+    assert pro.seen["HTTPS_PROXY"] == proxy_url
+    assert pro.seen["ALL_PROXY"] == proxy_url
+    assert pro.seen["NO_PROXY"] is None
+    assert os.environ["HTTP_PROXY"] == "http://env-proxy:8080"
+    assert os.environ["NO_PROXY"] == "api.waditu.com"
+
+
+def test_call_api_proxy_error_falls_back_to_direct(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:10810")
+    pro = _ProxyFallbackPro()
+
+    with pytest.warns(RuntimeWarning, match="retrying direct"):
+        frame = _call_api(
+            pro,
+            "daily",
+            api_options=_TushareApiOptions(proxy_mode="env"),
+        )
+
+    assert len(frame) == 1
+    assert pro.http_proxy_values == ["http://127.0.0.1:10810", None]
+    assert os.environ["HTTP_PROXY"] == "http://127.0.0.1:10810"
 
 
 def test_fetch_tushare_cn_daily_panel_accepts_injected_client() -> None:
@@ -357,6 +462,8 @@ def test_tushare_cli_accepts_cache_args() -> None:
             "10",
             "--factor-dtype",
             "float64",
+            "--sanity-check",
+            "error",
         ]
     )
 
@@ -366,3 +473,26 @@ def test_tushare_cli_accepts_cache_args() -> None:
     assert args.progress is True
     assert args.progress_every == 10
     assert args.factor_dtype == "float64"
+    assert args.sanity_check == "error"
+
+
+def test_tushare_cli_accepts_proxy_args() -> None:
+    args = parse_args(
+        [
+            "--start-date",
+            "20210104",
+            "--end-date",
+            "20210105",
+            "--output",
+            "data/cn_daily.parquet",
+            "--proxy-mode",
+            "env",
+            "--proxy-url",
+            "http://127.0.0.1:10810",
+            "--no-fallback-direct",
+        ]
+    )
+
+    assert args.proxy_mode == "env"
+    assert args.proxy_url == "http://127.0.0.1:10810"
+    assert args.no_fallback_direct is True

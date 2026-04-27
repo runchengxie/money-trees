@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Iterable, Literal
@@ -37,6 +38,211 @@ NON_FEATURE_COLUMNS = {
     "is_tradable",
     "tradeable",
 }
+
+
+@dataclass(frozen=True)
+class MarketDataSanityReport:
+    row_count: int
+    column_count: int
+    date_min: str | None
+    date_max: str | None
+    date_count: int
+    ticker_count: int
+    duplicate_key_count: int
+    missing_required_columns: tuple[str, ...]
+    null_rates: dict[str, float]
+    non_positive_price_counts: dict[str, int]
+    negative_volume_count: int
+    inverted_ohlc_count: int
+    warnings: tuple[str, ...]
+    errors: tuple[str, ...]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+    def to_lines(self, *, prefix: str = "[data:sanity]") -> list[str]:
+        status = "ok" if self.ok else "error"
+        lines = [
+            (
+                f"{prefix} status={status} rows={self.row_count} cols={self.column_count} "
+                f"dates={self.date_count} tickers={self.ticker_count} "
+                f"start={self.date_min or 'NA'} end={self.date_max or 'NA'} "
+                f"duplicate_keys={self.duplicate_key_count}"
+            )
+        ]
+        nonzero_nulls = {key: value for key, value in self.null_rates.items() if value > 0}
+        if nonzero_nulls:
+            rendered = ", ".join(f"{key}={value:.4f}" for key, value in nonzero_nulls.items())
+            lines.append(f"{prefix} null_rates {rendered}")
+        nonzero_prices = {
+            key: value for key, value in self.non_positive_price_counts.items() if value > 0
+        }
+        if nonzero_prices:
+            rendered = ", ".join(f"{key}={value}" for key, value in nonzero_prices.items())
+            lines.append(f"{prefix} non_positive_prices {rendered}")
+        if self.negative_volume_count:
+            lines.append(f"{prefix} negative_volume={self.negative_volume_count}")
+        if self.inverted_ohlc_count:
+            lines.append(f"{prefix} high_below_low={self.inverted_ohlc_count}")
+        if self.warnings:
+            lines.append(f"{prefix} warnings {'; '.join(self.warnings)}")
+        if self.errors:
+            lines.append(f"{prefix} errors {'; '.join(self.errors)}")
+        return lines
+
+
+def _has_panel_field(frame: pd.DataFrame, field: str) -> bool:
+    if field in frame.columns:
+        return True
+    return isinstance(frame.index, pd.MultiIndex) and field in frame.index.names
+
+
+def _panel_key_values(frame: pd.DataFrame) -> tuple[pd.Index | None, pd.Index | None]:
+    if isinstance(frame.index, pd.MultiIndex) and {"date", "ticker"}.issubset(
+        set(frame.index.names)
+    ):
+        return frame.index.get_level_values("date"), frame.index.get_level_values("ticker")
+    if {"date", "ticker"}.issubset(frame.columns):
+        return pd.Index(frame["date"]), pd.Index(frame["ticker"])
+    return None, None
+
+
+def _duplicate_key_count(frame: pd.DataFrame) -> int:
+    if isinstance(frame.index, pd.MultiIndex) and {"date", "ticker"}.issubset(
+        set(frame.index.names)
+    ):
+        keyed = frame.index
+        if keyed.names != ["date", "ticker"]:
+            keyed = keyed.reorder_levels(["date", "ticker"])
+        return int(keyed.duplicated().sum())
+    if {"date", "ticker"}.issubset(frame.columns):
+        return int(frame.duplicated(subset=["date", "ticker"]).sum())
+    return 0
+
+
+def _normalize_sanity_date(value: object) -> str | None:
+    if value is None:
+        return None
+    try:
+        parsed = pd.to_datetime(value, format="%Y%m%d", errors="coerce")
+    except (TypeError, ValueError):
+        parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return pd.Timestamp(parsed).date().isoformat()
+
+
+def build_market_data_sanity_report(
+    frame: pd.DataFrame,
+    *,
+    required_columns: Iterable[str] = (),
+    null_check_columns: Iterable[str] = (),
+    price_columns: Iterable[str] = ("open", "high", "low", "close", "vwap"),
+    volume_column: str = "volume",
+    expected_start: object | None = None,
+    expected_end: object | None = None,
+    expected_date_count: int | None = None,
+    max_null_rate: float = 0.05,
+) -> MarketDataSanityReport:
+    """Summarize common date/ticker panel quality checks without mutating the frame."""
+    row_count = int(len(frame))
+    date_values, ticker_values = _panel_key_values(frame)
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    missing_required = tuple(
+        sorted(str(column) for column in required_columns if not _has_panel_field(frame, str(column)))
+    )
+    if missing_required:
+        errors.append(f"missing required columns: {list(missing_required)}")
+
+    if row_count == 0:
+        errors.append("frame is empty")
+
+    if date_values is None or ticker_values is None:
+        errors.append("missing date/ticker key fields")
+        date_min = None
+        date_max = None
+        date_count = 0
+        ticker_count = 0
+    else:
+        dates = pd.to_datetime(pd.Index(date_values), errors="coerce")
+        valid_dates = dates.dropna()
+        date_count = int(valid_dates.nunique())
+        ticker_count = int(pd.Index(ticker_values).nunique(dropna=True))
+        date_min = _normalize_sanity_date(valid_dates.min()) if len(valid_dates) else None
+        date_max = _normalize_sanity_date(valid_dates.max()) if len(valid_dates) else None
+        if date_count == 0:
+            errors.append("date keys are all invalid or missing")
+        if ticker_count == 0:
+            errors.append("ticker keys are all missing")
+
+    duplicate_count = _duplicate_key_count(frame)
+    if duplicate_count:
+        errors.append(f"duplicate date/ticker keys: {duplicate_count}")
+
+    expected_start_text = _normalize_sanity_date(expected_start)
+    expected_end_text = _normalize_sanity_date(expected_end)
+    if expected_start_text and date_min and date_min != expected_start_text:
+        warnings.append(f"observed start {date_min} != expected {expected_start_text}")
+    if expected_end_text and date_max and date_max != expected_end_text:
+        warnings.append(f"observed end {date_max} != expected {expected_end_text}")
+    if expected_date_count is not None and date_count and date_count != int(expected_date_count):
+        warnings.append(f"observed trade dates {date_count} != expected {int(expected_date_count)}")
+
+    null_rates: dict[str, float] = {}
+    for column in dict.fromkeys(str(col) for col in null_check_columns):
+        if column in frame.columns:
+            rate = float(frame[column].isna().mean()) if row_count else 0.0
+            null_rates[column] = rate
+            if rate > float(max_null_rate):
+                warnings.append(f"{column} null_rate {rate:.4f} > {float(max_null_rate):.4f}")
+
+    non_positive_price_counts: dict[str, int] = {}
+    for column in dict.fromkeys(str(col) for col in price_columns):
+        if column in frame.columns:
+            values = pd.to_numeric(frame[column], errors="coerce")
+            count = int((values <= 0).sum())
+            non_positive_price_counts[column] = count
+            if count:
+                warnings.append(f"{column} has {count} non-positive values")
+
+    if volume_column in frame.columns:
+        volume = pd.to_numeric(frame[volume_column], errors="coerce")
+        negative_volume_count = int((volume < 0).sum())
+        if negative_volume_count:
+            warnings.append(f"{volume_column} has {negative_volume_count} negative values")
+    else:
+        negative_volume_count = 0
+
+    if {"high", "low"}.issubset(frame.columns):
+        high = pd.to_numeric(frame["high"], errors="coerce")
+        low = pd.to_numeric(frame["low"], errors="coerce")
+        inverted_ohlc_count = int((high < low).sum())
+        if inverted_ohlc_count:
+            warnings.append(f"high is below low in {inverted_ohlc_count} rows")
+    else:
+        inverted_ohlc_count = 0
+
+    return MarketDataSanityReport(
+        row_count=row_count,
+        column_count=int(len(frame.columns)),
+        date_min=date_min,
+        date_max=date_max,
+        date_count=date_count,
+        ticker_count=ticker_count,
+        duplicate_key_count=duplicate_count,
+        missing_required_columns=missing_required,
+        null_rates=null_rates,
+        non_positive_price_counts=non_positive_price_counts,
+        negative_volume_count=negative_volume_count,
+        inverted_ohlc_count=inverted_ohlc_count,
+        warnings=tuple(warnings),
+        errors=tuple(errors),
+    )
 
 
 def normalize_factor_dtype(value: str) -> FactorDtype:
