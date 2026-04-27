@@ -61,7 +61,6 @@ EXCLUDE_DIRS_ROOT_ONLY: Set[str] = {
     ".git/",
     "__pycache__/",
     "artifacts",
-    "configs",
     ".github",
     ".githooks",
 }
@@ -113,8 +112,16 @@ EXCLUDE_FILES: Set[str] = {
 }
 
 
-def is_config_metadata_text_file(filepath: Path) -> bool:
-    """Returns True for tracked config metadata that should ship with source."""
+TEXT_ASSET_ALLOWLIST: Set[Path] = {
+    Path("docs/factor_catalog.csv"),
+}
+
+
+def is_repository_text_asset(filepath: Path) -> bool:
+    """Return True for tracked non-code text assets that should ship with source."""
+    normalized = Path(*filepath.parts[-2:]) if len(filepath.parts) >= 2 else filepath
+    if normalized in TEXT_ASSET_ALLOWLIST:
+        return True
     return filepath.suffix.lower() == ".csv" and "configs" in filepath.parts
 
 
@@ -158,7 +165,7 @@ def is_likely_text_file(filepath: Path) -> bool:
     Checks if a file is likely to be a text file by checking its extension
     and sniffing the first 1024 bytes for null characters.
     """
-    if is_config_metadata_text_file(filepath):
+    if is_repository_text_asset(filepath):
         return True
     if filepath.suffix.lower() in EXCLUDE_EXTENSIONS:
         return False
@@ -194,8 +201,8 @@ def get_archive_file_status(
         return False, "explicitly excluded filename"
     if filepath.suffix.lower() == ".ipynb":
         return True, "notebook"
-    if is_config_metadata_text_file(filepath):
-        return True, "config metadata text file"
+    if is_repository_text_asset(filepath):
+        return True, "repository text asset"
     if filepath.suffix.lower() in EXCLUDE_EXTENSIONS:
         return False, "excluded extension"
     if is_likely_text_file(filepath):

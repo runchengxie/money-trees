@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+
 import pandas as pd
 import pytest
 
@@ -28,6 +30,8 @@ def test_linear_model_rejects_unsupported_feature_selection_and_tuning() -> None
 
 
 def test_xgboost_adapter_reports_missing_optional_dependency() -> None:
+    if importlib.util.find_spec("xgboost") is not None:
+        pytest.skip("xgboost is installed in this environment")
     adapter = get_model_adapter("xgboost")
     with pytest.raises(RuntimeError, match="optional xgboost dependency"):
         adapter.fit(
@@ -39,6 +43,8 @@ def test_xgboost_adapter_reports_missing_optional_dependency() -> None:
 
 
 def test_xgboost_regressor_reports_missing_optional_dependency() -> None:
+    if importlib.util.find_spec("xgboost") is not None:
+        pytest.skip("xgboost is installed in this environment")
     adapter = get_model_adapter("xgboost_regressor")
     with pytest.raises(RuntimeError, match="optional xgboost dependency"):
         adapter.fit(

@@ -13,6 +13,12 @@ import pandas as pd
 
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors import add_factor_family_features
+from moneytree.metadata import (
+    dataframe_content_hash,
+    dataframe_schema_hash,
+    stable_json_dumps,
+    stable_json_hash,
+)
 
 
 TOKEN_ENV_NAMES = ("TUSHARE_TOKEN", "TUSHARE_PRO_TOKEN", "TS_TOKEN", "TUSHARE_API_KEY")
@@ -144,6 +150,42 @@ def _relative_cache_path(cache_dir: Path, cache_path: Path) -> str:
         return str(cache_path)
 
 
+def _ensure_raw_cache_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS raw_cache (
+            source TEXT NOT NULL,
+            api_name TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            path TEXT NOT NULL,
+            rows INTEGER NOT NULL,
+            columns_json TEXT NOT NULL,
+            request_hash TEXT NOT NULL DEFAULT '',
+            params_json TEXT NOT NULL DEFAULT '{}',
+            schema_hash TEXT NOT NULL DEFAULT '',
+            content_hash TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (source, api_name, trade_date)
+        )
+        """
+    )
+    existing = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(raw_cache)").fetchall()
+    }
+    columns = {
+        "request_hash": "TEXT NOT NULL DEFAULT ''",
+        "params_json": "TEXT NOT NULL DEFAULT '{}'",
+        "schema_hash": "TEXT NOT NULL DEFAULT ''",
+        "content_hash": "TEXT NOT NULL DEFAULT ''",
+        "updated_at_utc": "TEXT NOT NULL DEFAULT ''",
+    }
+    for name, definition in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE raw_cache ADD COLUMN {name} {definition}")
+
+
 def _write_cache_manifest(
     *,
     cache_dir: Path,
@@ -151,33 +193,39 @@ def _write_cache_manifest(
     trade_date: str,
     cache_path: Path,
     frame: pd.DataFrame,
+    request_params: dict[str, Any],
 ) -> None:
     manifest_path = cache_dir / "manifest.sqlite"
     columns_json = json.dumps(
         [str(column) for column in frame.columns],
         ensure_ascii=False,
     )
+    params_payload = {
+        "api_name": api_name,
+        "params": request_params,
+        "source": "tushare",
+    }
+    params_json = stable_json_dumps(params_payload)
+    now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(manifest_path) as conn:
+        _ensure_raw_cache_table(conn)
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS raw_cache (
-                source TEXT NOT NULL,
-                api_name TEXT NOT NULL,
-                trade_date TEXT NOT NULL,
-                path TEXT NOT NULL,
-                rows INTEGER NOT NULL,
-                columns_json TEXT NOT NULL,
-                created_at_utc TEXT NOT NULL,
-                PRIMARY KEY (source, api_name, trade_date)
+            INSERT INTO raw_cache (
+                source, api_name, trade_date, path, rows, columns_json,
+                request_hash, params_json, schema_hash, content_hash,
+                created_at_utc, updated_at_utc
             )
-            """
-        )
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO raw_cache (
-                source, api_name, trade_date, path, rows, columns_json, created_at_utc
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source, api_name, trade_date) DO UPDATE SET
+                path = excluded.path,
+                rows = excluded.rows,
+                columns_json = excluded.columns_json,
+                request_hash = excluded.request_hash,
+                params_json = excluded.params_json,
+                schema_hash = excluded.schema_hash,
+                content_hash = excluded.content_hash,
+                updated_at_utc = excluded.updated_at_utc
             """,
             (
                 "tushare",
@@ -186,7 +234,12 @@ def _write_cache_manifest(
                 _relative_cache_path(cache_dir, cache_path),
                 int(len(frame)),
                 columns_json,
-                datetime.now(timezone.utc).isoformat(),
+                stable_json_hash(params_payload),
+                params_json,
+                dataframe_schema_hash(frame),
+                dataframe_content_hash(frame),
+                now,
+                now,
             ),
         )
 
@@ -250,6 +303,14 @@ def _fetch_by_trade_date(
         if cache_path is not None and cache_path.exists() and not should_refresh:
             frame = pd.read_parquet(cache_path)
         else:
+            request_params = {
+                "trade_date": trade_date,
+                "fields": fields,
+                **extra_params,
+            }
+            request_params = {
+                key: value for key, value in request_params.items() if value is not None
+            }
             frame = _call_api(
                 pro,
                 api_name,
@@ -266,6 +327,7 @@ def _fetch_by_trade_date(
                     trade_date=trade_date,
                     cache_path=cache_path,
                     frame=frame,
+                    request_params=request_params,
                 )
         frames.append(_filter_tickers(frame, tickers))
     return _concat(frames)

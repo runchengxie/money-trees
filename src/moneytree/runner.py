@@ -29,6 +29,11 @@ from moneytree.data import (
     slice_by_date,
 )
 from moneytree.markets import get_market_profile
+from moneytree.metadata import (
+    OUTPUT_SCHEMA_VERSION,
+    build_experiment_manifest,
+    stable_json_hash,
+)
 from moneytree.models import get_model_adapter
 from moneytree.model import count_active_names, profit_with_estimated_turnover
 from moneytree.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
@@ -668,6 +673,7 @@ def write_outputs(
     segment_b: SegmentFitResult,
     metrics: dict[str, float],
     run_config: dict[str, Any],
+    experiment_manifest: dict[str, Any],
     run_summary_text: str,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -723,6 +729,10 @@ def write_outputs(
     )
     (out_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
+    (out_dir / "experiment_manifest.json").write_text(
+        json.dumps(experiment_manifest, indent=2),
+        encoding="utf-8",
+    )
     (out_dir / "run_summary.txt").write_text(run_summary_text + "\n", encoding="utf-8")
     (out_dir / "segment_a_features.txt").write_text("\n".join(segment_a.feature_columns), encoding="utf-8")
     (out_dir / "segment_b_features.txt").write_text("\n".join(segment_b.feature_columns), encoding="utf-8")
@@ -805,6 +815,8 @@ def write_holdout_outputs(
         ),
         encoding="utf-8",
     )
+
+
 def resolve_git_commit(root: Path) -> str | None:
     try:
         out = subprocess.check_output(
@@ -824,11 +836,23 @@ def build_run_config(
     settings: BacktestSettings,
     segment_a_spec: SegmentSpec,
     segment_b_spec: SegmentSpec,
+    experiment_manifest: dict[str, Any] | None = None,
     holdout_result: HoldoutResult | None = None,
 ) -> dict[str, Any]:
+    resolved_at_utc = (
+        str(experiment_manifest["run"]["resolved_at_utc"])
+        if experiment_manifest is not None
+        else datetime.now(timezone.utc).isoformat()
+    )
+    git_commit = (
+        experiment_manifest["run"]["git_commit"]
+        if experiment_manifest is not None
+        else resolve_git_commit(ROOT)
+    )
     config: dict[str, Any] = {
-        "resolved_at_utc": datetime.now(timezone.utc).isoformat(),
-        "git_commit": resolve_git_commit(ROOT),
+        "resolved_at_utc": resolved_at_utc,
+        "git_commit": git_commit,
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
         "arguments": settings.to_display_config(),
         "benchmark": {
             "name": settings.benchmark_name,
@@ -840,6 +864,17 @@ def build_run_config(
             "segment_b": asdict(segment_b_spec),
         },
     }
+    if experiment_manifest is not None:
+        config["reproducibility"] = {
+            "dataset_version": experiment_manifest["dataset"]["dataset_version"],
+            "input_data_sha256": experiment_manifest["input_data"]["sha256"],
+            "raw_input_schema_hash": experiment_manifest["schemas"]["raw_input"]["schema_hash"],
+            "model_frame_schema_hash": experiment_manifest["schemas"]["model_frame"]["schema_hash"],
+            "config_files_hash": experiment_manifest["config"]["files_hash"],
+            "resolved_config_hash": experiment_manifest["config"]["resolved_config_hash"],
+            "experiment_manifest_path": "experiment_manifest.json",
+            "experiment_manifest_hash": stable_json_hash(experiment_manifest),
+        }
     if holdout_result is not None:
         config["holdout"] = {
             "enabled": True,
@@ -914,6 +949,20 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
                 lag_periods=int(settings.feature_lag_periods),
             )
         save_market_data(export_frame, settings.export_parquet)
+
+    resolved_at_utc = datetime.now(timezone.utc).isoformat()
+    git_commit = resolve_git_commit(ROOT)
+    out_dir = Path(settings.output_dir)
+    experiment_manifest = build_experiment_manifest(
+        settings=settings,
+        raw_frame=raw,
+        model_frame=frame,
+        model_id=model_adapter.model_id,
+        model_target_column=model_adapter.training_target_column,
+        output_dir=out_dir,
+        git_commit=git_commit,
+        resolved_at_utc=resolved_at_utc,
+    )
 
     segment_a_spec = SegmentSpec(
         name="segment_a",
@@ -1060,6 +1109,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         settings=settings,
         segment_a_spec=segment_a_spec,
         segment_b_spec=segment_b_spec,
+        experiment_manifest=experiment_manifest,
         holdout_result=holdout_result,
     )
     run_summary_text = build_run_summary_text(
@@ -1074,7 +1124,6 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         tuning_cv_folds=settings.tuning_cv_folds,
         holdout_result=holdout_result,
     )
-    out_dir = Path(settings.output_dir)
     write_outputs(
         out_dir=out_dir,
         benchmark_name=settings.benchmark_name,
@@ -1094,6 +1143,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         segment_b=segment_b,
         metrics=metrics,
         run_config=run_config,
+        experiment_manifest=experiment_manifest,
         run_summary_text=run_summary_text,
     )
     if holdout_result is not None:

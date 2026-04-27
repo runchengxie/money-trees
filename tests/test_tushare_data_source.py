@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 import numpy as np
@@ -186,7 +187,8 @@ def test_fetch_tushare_cn_daily_panel_uses_trade_date_cache(tmp_path) -> None:
     with sqlite3.connect(tmp_path / "raw-cache" / "manifest.sqlite") as conn:
         manifest_row = conn.execute(
             """
-            SELECT rows, path, columns_json
+            SELECT rows, path, columns_json, request_hash, params_json, schema_hash,
+                   content_hash, created_at_utc, updated_at_utc
             FROM raw_cache
             WHERE source = 'tushare' AND api_name = 'daily' AND trade_date = '20210104'
             """
@@ -195,6 +197,15 @@ def test_fetch_tushare_cn_daily_panel_uses_trade_date_cache(tmp_path) -> None:
     assert manifest_row[0] == 2
     assert manifest_row[1] == "daily/trade_date=20210104.parquet"
     assert "ts_code" in manifest_row[2]
+    assert len(manifest_row[3]) == 64
+    params = json.loads(manifest_row[4])
+    assert params["source"] == "tushare"
+    assert params["api_name"] == "daily"
+    assert params["params"]["trade_date"] == "20210104"
+    assert len(manifest_row[5]) == 64
+    assert len(manifest_row[6]) == 64
+    assert manifest_row[7]
+    assert manifest_row[8]
 
     second_client = _CountingFakePro()
     second_panel = fetch_tushare_cn_daily_panel(config, pro=second_client)
@@ -234,6 +245,47 @@ def test_fetch_tushare_cn_daily_panel_refreshes_recent_cached_dates(tmp_path) ->
     )
 
     assert refresh_client.calls == [("daily", "20210105")]
+
+
+def test_fetch_tushare_cn_daily_panel_upgrades_legacy_manifest_schema(tmp_path) -> None:
+    cache_dir = tmp_path / "raw-cache"
+    cache_dir.mkdir()
+    with sqlite3.connect(cache_dir / "manifest.sqlite") as conn:
+        conn.execute(
+            """
+            CREATE TABLE raw_cache (
+                source TEXT NOT NULL,
+                api_name TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                path TEXT NOT NULL,
+                rows INTEGER NOT NULL,
+                columns_json TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                PRIMARY KEY (source, api_name, trade_date)
+            )
+            """
+        )
+
+    fetch_tushare_cn_daily_panel(
+        TushareDailyConfig(
+            start_date="20210104",
+            end_date="20210105",
+            cache_dir=cache_dir,
+            include_daily_basic=False,
+            include_adj_factor=False,
+            include_limits=False,
+            include_suspend=False,
+            include_stock_basic=False,
+        ),
+        pro=_CountingFakePro(),
+    )
+
+    with sqlite3.connect(cache_dir / "manifest.sqlite") as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(raw_cache)").fetchall()}
+
+    assert {"request_hash", "params_json", "schema_hash", "content_hash", "updated_at_utc"}.issubset(
+        columns
+    )
 
 
 def test_tushare_cli_accepts_cache_args() -> None:

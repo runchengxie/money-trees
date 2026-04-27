@@ -166,6 +166,7 @@ def test_moneytree_cli_smoke(tmp_path: Path) -> None:
         "notebook_residual_distribution.csv",
         "metrics.json",
         "run_config.json",
+        "experiment_manifest.json",
         "run_summary.txt",
         "segment_a_features.txt",
         "segment_b_features.txt",
@@ -201,6 +202,21 @@ def test_moneytree_cli_smoke(tmp_path: Path) -> None:
     assert "segment_specs" in config
     assert "holdout" in config
     assert config["holdout"]["enabled"] is True
+    assert config["output_schema_version"] == "1.0"
+    assert config["reproducibility"]["experiment_manifest_path"] == "experiment_manifest.json"
+    assert config["reproducibility"]["input_data_sha256"]
+    assert config["reproducibility"]["raw_input_schema_hash"]
+    assert config["reproducibility"]["model_frame_schema_hash"]
+    assert config["reproducibility"]["resolved_config_hash"]
+    manifest = json.loads((out_dir / "experiment_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["manifest_schema_version"] == "1.0"
+    assert manifest["dataset"]["dataset_version"] == config["reproducibility"]["dataset_version"]
+    assert manifest["input_data"]["sha256"] == config["reproducibility"]["input_data_sha256"]
+    assert manifest["schemas"]["raw_input"]["schema_hash"]
+    assert manifest["schemas"]["model_frame"]["schema_hash"]
+    assert manifest["config"]["files_hash"]
+    assert manifest["config"]["resolved_config_hash"]
+    assert manifest["runtime"]["python"]
     metrics = json.loads((out_dir / "metrics.json").read_text(encoding="utf-8"))
     assert "strategy_annualized_return" in metrics
     assert "strategy_max_drawdown" in metrics

@@ -61,7 +61,9 @@ def test_template_smoke_config_stack_runs(tmp_path: Path) -> None:
     run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
     assert run_config["arguments"]["config_paths"] == config_paths
     assert run_config["holdout"]["enabled"] is True
+    assert run_config["reproducibility"]["experiment_manifest_path"] == "experiment_manifest.json"
     assert (out_dir / "metrics.json").exists()
+    assert (out_dir / "experiment_manifest.json").exists()
     assert (out_dir / "benchmark_nav.csv").exists()
     assert (out_dir / "benchmark_returns.csv").exists()
     assert (out_dir / "holdout/metrics.json").exists()

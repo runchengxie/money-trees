@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -12,6 +15,7 @@ from moneytree.factors import (
     summarize_factor_ic,
 )
 from moneytree.factors.ops import cs_rank, decay_linear
+from project_tools.generate_factor_catalog import FIELDNAMES, build_rows
 
 
 def _panel() -> pd.DataFrame:
@@ -78,6 +82,29 @@ def test_factor_ic_summary() -> None:
 def test_factor_catalog_describes_external_and_local_generation() -> None:
     assert get_factor_family("alpha101").local_generation == "external"
     assert "build_alpha158_features" in get_factor_family("alpha158").local_generation
+
+
+def test_factor_catalog_csv_is_generated_and_formula_status_is_explicit() -> None:
+    catalog_path = Path(__file__).resolve().parents[1] / "docs" / "factor_catalog.csv"
+    with catalog_path.open(newline="", encoding="utf-8") as handle:
+        csv_rows = list(csv.DictReader(handle))
+
+    generated_rows = build_rows()
+
+    assert list(csv_rows[0].keys()) == FIELDNAMES
+    assert csv_rows == generated_rows
+    assert len(csv_rows) == 810
+
+    alpha101 = next(row for row in csv_rows if row["column"] == "alpha101_001")
+    alpha158 = next(row for row in csv_rows if row["column"] == "alpha158_kmid")
+    alpha360 = next(row for row in csv_rows if row["column"] == "alpha360_volume_lag59")
+
+    assert alpha101["formula_status"] == "external_not_stored"
+    assert "Precompute WQAlpha1" in alpha101["formula_or_rule"]
+    assert alpha158["formula_status"] == "implemented_local"
+    assert alpha158["formula_or_rule"] == "(close - open) / open"
+    assert alpha360["formula_status"] == "implemented_local"
+    assert alpha360["formula_or_rule"] == "shift(volume, 59) / current_volume - 1"
 
 
 def test_ops_rank_and_decay_linear() -> None:
