@@ -50,6 +50,6 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Run `uv run pytest -q tests/test_factors.py tests/test_tushare_data_source.py tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py`.
-- [ ] 7.2 Run `uv run pytest -q tests/test_backtest_cli.py tests/test_data.py`.
-- [ ] 7.3 Run `uv run ruff check .`.
+- [x] 7.1 Run `uv run pytest -q tests/test_factors.py tests/test_tushare_data_source.py tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py`.
+- [x] 7.2 Run `uv run pytest -q tests/test_backtest_cli.py tests/test_data.py`.
+- [x] 7.3 Run `uv run ruff check .`.
