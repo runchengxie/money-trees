@@ -1,6 +1,6 @@
 # DolphinDB Alpha101/191 外部因子生产
 
-本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。`money-tree` 仍然只消费最终 parquet 面板，不在回测过程中实时调用 DolphinDB。
+本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费最终 parquet 面板，不在回测过程中实时调用 DolphinDB。
 
 ## 当前边界
 
@@ -21,7 +21,7 @@
 TuShare / 标准日频面板
 -> DolphinDB 离线计算 Alpha101/191
 -> 输出带 alpha101_* / alpha191_* 的 parquet
--> moneytree 使用该 parquet 正常回测
+-> moneytrees 使用该 parquet 正常回测
 ```
 
 所有进入模型的特征仍受市场配置档中的 `feature_lag_periods` 约束。默认 `feature_lag_periods=1`。
@@ -37,7 +37,7 @@ Windows Docker Desktop
 -> DolphinDB 单节点容器
 ```
 
-项目代码建议放在 WSL 文件系统内，例如 `~/code/money-tree`，不要放在 `/mnt/c/...` 下。
+项目代码建议放在 WSL 文件系统内，例如 `~/code/money-trees`，不要放在 `/mnt/c/...` 下。
 
 安装和检查顺序：
 
@@ -130,9 +130,9 @@ Python 脚本只负责上传标准化输入、调用包装函数、下载结果�
 
 ## 字段映射
 
-脚本会把 `money-tree` 面板映射成 DolphinDB 输入：
+CLI 会把 Money Trees 面板映射成 DolphinDB 输入：
 
-| DolphinDB 字段 | money-tree 字段 |
+| DolphinDB 字段 | Money Trees 字段 |
 | --- | --- |
 | `tradetime` | `date` |
 | `securityid` | `ticker` |
@@ -151,16 +151,16 @@ Alpha191 请求会要求 `benchmark_open` 和 `benchmark_close` 存在。Alpha10
 
 ## 运行生成
 
-DolphinDB Python client 不在核心依赖中。需要生成外部因子时，在当前环境安装：
+DolphinDB Python client 不在核心依赖中。需要生成外部因子时，在当前环境安装 external-alpha 依赖：
 
 ```bash
-uv pip install dolphindb
+uv sync --dev --extra external-alphas
 ```
 
 先生成基础或本地 Alpha158/360 面板：
 
 ```bash
-uv run moneytree-tushare \
+uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
   --output data/cn_daily_alpha158_360.parquet \
@@ -174,7 +174,7 @@ uv run moneytree-tushare \
 再生成并合并 Alpha101/191：
 
 ```bash
-uv run python scripts/build_dolphindb_alphas.py \
+uv run moneytrees-dolphindb-alphas \
   --input data/cn_daily_alpha158_360.parquet \
   --output data/cn_daily_alpha_all.parquet \
   --host 127.0.0.1 \
@@ -188,6 +188,8 @@ uv run python scripts/build_dolphindb_alphas.py \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
+`scripts/build_dolphindb_alphas.py` 仍保留为兼容 wrapper，新的正式入口是 `moneytrees-dolphindb-alphas`。
+
 输出：
 
 ```text
@@ -198,7 +200,7 @@ data/cn_daily_alpha_all.parquet.factor_manifest.json
 然后正常回测：
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \

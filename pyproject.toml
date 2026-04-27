@@ -3,14 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "money-tree"
+name = "money-trees"
 version = "0.1.0"
-description = "A-share cross-sectional equity research and backtesting toolkit."
+description = "A-share classic-alpha cross-sectional research and backtesting toolkit."
 requires-python = ">=3.10"
 dependencies = [
   "matplotlib",
   "numpy",
-  "optuna",
   "pandas",
   "PyYAML",
   "pyarrow",
@@ -21,14 +20,28 @@ dependencies = [
 [project.optional-dependencies]
 xgboost = ["xgboost"]
 tushare = ["tushare"]
-research = ["tushare", "xgboost"]
+external-alphas = ["dolphindb"]
+tuning = ["optuna"]
+research = ["tushare", "xgboost", "dolphindb", "optuna"]
 
 [project.scripts]
 moneytree = "moneytree.cli.backtest:main"
+moneytrees = "moneytree.cli.backtest:main"
 moneytree-tushare = "moneytree.cli.tushare:main"
+moneytrees-tushare = "moneytree.cli.tushare:main"
+moneytree-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
+moneytrees-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "ruff", "optuna"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
 
 [tool.uv]
 package = true

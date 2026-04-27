@@ -124,7 +124,7 @@ class BacktestSettings:
     portfolio_qp_solver_max_iter: int = 300
     portfolio_qp_solver_ftol: float = 1e-9
     portfolio_qp_fallback_to_heuristic: str = "on"
-    n_trials: int = 50
+    n_trials: int = 0
     tuning_cv_folds: int = 1
     feature_selection: str = "importance"
     min_features: int = 2
@@ -237,7 +237,7 @@ def load_backtest_settings(
         portfolio_qp_fallback_to_heuristic="on"
         if bool(portfolio.get("qp_fallback_to_heuristic", True))
         else "off",
-        n_trials=int(model.get("n_trials", 50)),
+        n_trials=int(model.get("n_trials", 0)),
         tuning_cv_folds=int(model.get("tuning_cv_folds", 1)),
         feature_selection=str(model.get("feature_selection", "importance")),
         min_features=int(model.get("min_features", 2)),

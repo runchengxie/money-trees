@@ -1,6 +1,6 @@
 # A 股日频 Alpha 因子研究
 
-本文说明 `money-tree` 当前如何承接 A 股日频 Alpha101、Alpha191、Alpha158 和 Alpha360 研究。数据契约见 [data_contract.md](data_contract.md)，TuShare 拉取示例见 [cookbook.md](cookbook.md)，运行排障见 [runbook.md](runbook.md)。
+本文说明 Money Trees 当前如何承接 A 股日频 Alpha101、Alpha191、Alpha158 和 Alpha360 研究。数据契约见 [data_contract.md](data_contract.md)，TuShare 拉取示例见 [cookbook.md](cookbook.md)，运行排障见 [runbook.md](runbook.md)。
 
 ## 研究链路
 
@@ -111,10 +111,10 @@ alpha360 = build_alpha360_features(panel)
 在 TuShare CLI 中追加：
 
 ```bash
-uv run moneytree-tushare \
+uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_alpha.parquet \
+  --output data/cn_daily_alpha158_360.parquet \
   --benchmark 000300.SH \
   --factor-family alpha158 \
   --factor-family alpha360
@@ -125,11 +125,11 @@ uv run moneytree-tushare \
 ```bash
 uv sync --dev --extra research
 
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha.parquet \
+  --data data/cn_daily_alpha158_360.parquet \
   --output-dir artifacts/xgb-alpha-daily
 ```
 

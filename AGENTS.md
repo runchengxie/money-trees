@@ -2,21 +2,26 @@
 
 ## Project
 
-`money-tree` is an A-share cross-sectional equity research and backtesting toolkit. The current built-in market profile is `cn`.
+`money-trees` / Money Trees is an A-share classic-alpha cross-sectional equity research and backtesting toolkit. The current built-in market profile is `cn`. The Python import package remains `moneytree`.
+
+The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column contract: Alpha158/360 are 518 locally generated features, while Alpha101/191 are 292 externally generated columns merged into the canonical `date, ticker` panel.
 
 ## Commands
 
 - Install dev dependencies: `uv sync --dev`
 - Install research extras: `uv sync --dev --extra research`
 - Run all tests: `uv run pytest -q`
+- Run lint: `uv run ruff check .`
 - Run CLI smoke: `uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py`
 - Run TuShare data-source tests: `uv run pytest -q tests/test_tushare_data_source.py`
+- Run DolphinDB external-alpha tests: `uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py`
 
 ## Important Paths
 
 - Core package: `src/moneytree/`
 - Backtest CLI: `src/moneytree/cli/backtest.py`
 - TuShare CLI: `src/moneytree/cli/tushare.py`
+- DolphinDB external Alpha CLI: `src/moneytree/cli/dolphindb_alphas.py`
 - Configs: `configs/`
 - Docs: `docs/`
 - Tests: `tests/`
@@ -29,7 +34,9 @@
 - Treat `date, ticker` as the canonical panel shape.
 - Keep A-share market assumptions in `src/moneytree/markets/cn.py` and `configs/market/cn.yaml`.
 - Add or update tests when changing data contracts, output files, model adapters, portfolio logic, config parsing, or TuShare cache behavior.
-- Preserve optional dependency behavior: XGBoost and TuShare should fail with clear messages when their extras are not installed.
+- Preserve optional dependency behavior: XGBoost, TuShare, DolphinDB, and Optuna should fail with clear messages when their extras are not installed.
+- Keep DolphinDB out of core dependencies. Alpha101/191 production must remain an external-alpha path with manifest validation.
+- Treat `configs/preset/legacy_notebook_compat.yaml` as a legacy reproduction preset, not the default research path.
 - Avoid absolute local paths in documentation.
 
 ## Data Safety

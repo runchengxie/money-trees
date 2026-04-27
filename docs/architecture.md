@@ -1,6 +1,6 @@
 # 架构设计
 
-本文说明 `money-tree` 当前实现的分层、数据流和保存策略。项目定位是 A 股截面选股研究与回测工具，核心目标是把数据契约、模型选择、组合构建和结果输出拆开维护。
+本文说明 Money Trees 当前实现的分层、数据流和保存策略。项目定位是 A 股经典 Alpha 截面选股研究与回测工具，核心目标是把 810 因子列契约、数据契约、模型选择、组合构建和结果输出拆开维护。
 
 ## 总览
 
@@ -77,11 +77,11 @@ configs/backtest/default.yaml
 
 职责：
 
-- 生成本地 Alpha158-style 和 Alpha360-style 日频特征。
-- 维护 Alpha101、Alpha191、Alpha158、Alpha360 的列名和接入口径。
+- 生成本地 Alpha158-style 和 Alpha360-style 日频特征，共 518 列。
+- 维护 Alpha101、Alpha191、Alpha158、Alpha360 共 810 列的列名和接入口径。
 - 计算单因子 IC 和 RankIC。
 
-Alpha101 和 Alpha191 的公式值由外部实现生成后并入面板。本仓库维护列名约定、输入字段和治理提醒。
+Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后并入面板。本仓库维护列名约定、输入字段、校验、manifest 和治理提醒，不在回测过程中实时调用 DolphinDB。
 
 ## 模型层
 
@@ -108,6 +108,8 @@ Alpha101 和 Alpha191 的公式值由外部实现生成后并入面板。本仓�
 - 训练方法。
 - 输出分数、离散预测和概率。
 - 支持的调参与特征选择能力。
+
+默认模型配置不启用 Optuna 调参。需要调参时叠加 `configs/preset/tuning.yaml`，并安装 `tuning` 或 `research` extra。
 
 ## 组合层
 

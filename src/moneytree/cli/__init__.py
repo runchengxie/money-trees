@@ -1,1 +1,1 @@
-"""CLI entrypoints for Money Tree."""
+"""CLI entrypoints for Money Trees."""

@@ -13,7 +13,7 @@ DEFAULT_CONFIG_PATHS = [
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a Money Tree backtest from config.")
+    parser = argparse.ArgumentParser(description="Run a Money Trees backtest from config.")
     parser.add_argument(
         "--config",
         action="append",

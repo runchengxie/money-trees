@@ -2,6 +2,20 @@
 
 Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cookbook.md](cookbook.md)。
 
+## 运行模式
+
+### 模式 A：最小回测
+
+只需要已有标准 `date, ticker` 面板，不需要 TuShare、XGBoost、DolphinDB 或 Optuna。
+
+### 模式 B：本地 518 因子
+
+使用 TuShare 拉取日频数据，并追加本地 Alpha158/360。
+
+### 模式 C：完整 810 因子
+
+在模式 B 的基础上，用 DolphinDB 离线生成 Alpha101/191，合并到标准面板后再回测。
+
 ## 日常运行顺序
 
 1. 更新依赖。
@@ -10,13 +24,13 @@ Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cook
 uv sync --dev --extra research
 ```
 
-2. 刷新 TuShare raw cache。
+2. 刷新 TuShare raw cache 并生成本地 Alpha158/360。
 
 ```bash
-uv run moneytree-tushare \
+uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_alpha.parquet \
+  --output data/cn_daily_alpha158_360.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
   --benchmark 000300.SH \
@@ -29,10 +43,10 @@ uv run moneytree-tushare \
 Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
 
 ```bash
-uv pip install dolphindb
+uv sync --dev --extra external-alphas
 
-uv run python scripts/build_dolphindb_alphas.py \
-  --input data/cn_daily_alpha.parquet \
+uv run moneytrees-dolphindb-alphas \
+  --input data/cn_daily_alpha158_360.parquet \
   --output data/cn_daily_alpha_all.parquet \
   --host 127.0.0.1 \
   --port 8848 \
@@ -55,33 +69,39 @@ test -f data/cn_daily_alpha_all.parquet.factor_manifest.json
 4. 跑主回测。
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha.parquet \
-  --output-dir artifacts/xgb-alpha-daily
-```
-
-如果使用外部 Alpha101/191，把 `--data` 改成生成后的面板：
-
-```text
-data/cn_daily_alpha_all.parquet
+  --data data/cn_daily_alpha_all.parquet \
+  --output-dir artifacts/xgb-alpha-all
 ```
 
 5. 检查输出。
 
 ```bash
-test -f artifacts/xgb-alpha-daily/metrics.json
-test -f artifacts/xgb-alpha-daily/run_config.json
-test -f artifacts/xgb-alpha-daily/run_summary.txt
+test -f artifacts/xgb-alpha-all/metrics.json
+test -f artifacts/xgb-alpha-all/run_config.json
+test -f artifacts/xgb-alpha-all/run_summary.txt
 ```
 
-6. 跑测试。
+6. 跑测试和 lint。
 
 ```bash
 uv run pytest -q
+uv run ruff check .
 ```
+
+## 完整 810 因子运行前检查
+
+- 标准面板包含 `date, ticker`。
+- Alpha191 所需的 `benchmark_open` 和 `benchmark_close` 存在。
+- Alpha101 所需的 `circ_mv` 或 `total_mv`、`industry` 字段已准备。
+- 行业字段最好是 point-in-time 口径，避免历史回测未来信息污染。
+- DolphinDB wrapper 函数版本已记录。
+- `wq101alpha`、`gtja191Alpha` 和 `moneytreeAlpha` 模块版本已记录。
+- 输出 `.factor_manifest.json` 已保存并归档。
+- 回测输入使用合并后的 `data/cn_daily_alpha_all.parquet`。
 
 ## TuShare token 排查
 
@@ -130,7 +150,7 @@ sqlite3 data/raw/tushare/manifest.sqlite \
 近期数据回填时使用：
 
 ```bash
-uv run moneytree-tushare \
+uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
   --output data/cn_daily.parquet \
@@ -216,9 +236,23 @@ uv sync --dev --extra xgboost
 uv sync --dev --extra research
 ```
 
-### Notebook 兼容预设缺列
+### Optuna 依赖缺失
 
-`configs/preset/notebook_compat.yaml` 依赖：
+只有显式设置 `model.n_trials > 0` 时才需要 Optuna。缺依赖时安装：
+
+```bash
+uv sync --dev --extra tuning
+```
+
+或安装研究依赖：
+
+```bash
+uv sync --dev --extra research
+```
+
+### Legacy notebook 兼容预设缺列
+
+`configs/preset/legacy_notebook_compat.yaml` 只用于复现早期 notebook 结果，依赖：
 
 ```text
 pred_rel_return
@@ -227,7 +261,7 @@ pred_rel_return
 处理：
 
 - 补齐该列。
-- 移除 `configs/preset/notebook_compat.yaml`。
+- 移除 legacy preset。
 - 改回 `market.label_source=actual`。
 
 ### DolphinDB Python client 缺失
@@ -241,10 +275,10 @@ Missing optional DolphinDB Python client
 处理：
 
 ```bash
-uv pip install dolphindb
+uv sync --dev --extra external-alphas
 ```
 
-普通 `moneytree` 回测不需要该依赖；只有运行 `scripts/build_dolphindb_alphas.py` 时才需要。
+普通 `moneytrees` 回测不需要该依赖；只有运行 `moneytrees-dolphindb-alphas` 时才需要。
 
 ### Alpha101/191 输出列不完整
 

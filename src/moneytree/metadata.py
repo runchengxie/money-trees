@@ -175,7 +175,7 @@ def _package_version(name: str) -> str | None:
 
 def runtime_metadata() -> dict[str, Any]:
     packages = [
-        "money-tree",
+        "money-trees",
         "numpy",
         "pandas",
         "scikit-learn",

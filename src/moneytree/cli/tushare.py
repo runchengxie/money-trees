@@ -15,7 +15,7 @@ def _parse_tickers(raw: str) -> tuple[str, ...]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch TuShare A-share daily data into the Money Tree panel contract."
+        description="Fetch TuShare A-share daily data into the Money Trees panel contract."
     )
     parser.add_argument("--start-date", required=True, help="Start date, YYYYMMDD or YYYY-MM-DD.")
     parser.add_argument("--end-date", required=True, help="End date, YYYYMMDD or YYYY-MM-DD.")

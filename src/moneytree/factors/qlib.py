@@ -119,7 +119,7 @@ def build_alpha158_features(
 
     This is intentionally a local baseline with the same daily OHLCV spirit and 158-column
     footprint. For byte-for-byte Qlib reproduction, generate Alpha158 in Qlib and merge
-    the resulting columns into the Money Tree panel.
+    the resulting columns into the Money Trees panel.
     """
     panel = ensure_date_ticker_index(frame)
     open_ = _series(panel, "open", adjusted=adjusted)

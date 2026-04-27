@@ -39,7 +39,7 @@ f_signal
 ## 3. 运行 smoke 配置
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/smoke.yaml \
@@ -64,7 +64,7 @@ artifacts/smoke/holdout/metrics.json
 `configs/preset/template_smoke.yaml` 内置了本地数据路径和输出目录：
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/smoke.yaml \
@@ -88,11 +88,11 @@ uv run moneytree \
 如果输入数据已经包含外部生成的 `pred_rel_return`，可以使用：
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/default.yaml \
-  --config configs/preset/notebook_compat.yaml \
+  --config configs/preset/legacy_notebook_compat.yaml \
   --data ./data_small.parquet \
   --output-dir ./artifacts/notebook-compat
 ```

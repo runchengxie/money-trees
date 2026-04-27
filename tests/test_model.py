@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import builtins
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from moneytree.model import (
     estimate_turnover,
@@ -157,6 +160,29 @@ def test_tune_random_forest_supports_time_series_cv() -> None:
         best_params.keys()
     )
     assert np.isfinite(best_value)
+
+
+def test_tune_random_forest_reports_missing_optional_optuna(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args, **kwargs):
+        if name == "optuna":
+            raise ModuleNotFoundError("missing optuna")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(RuntimeError, match="extra tuning"):
+        tune_random_forest(
+            train_x=pd.DataFrame({"f1": [1.0, 2.0]}),
+            train_y=np.array([1, -1]),
+            train_returns=np.array([0.01, -0.01]),
+            valid_x=pd.DataFrame({"f1": [1.5]}),
+            valid_returns=np.array([0.0]),
+            n_trials=1,
+        )
 
 
 def test_tune_random_forest_notebook_search_space_uses_notebook_ranges() -> None:

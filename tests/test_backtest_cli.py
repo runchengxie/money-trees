@@ -400,7 +400,7 @@ def test_notebook_compat_preset_resolves_expected_overrides() -> None:
             "configs/market/cn.yaml",
             "configs/model/rf.yaml",
             "configs/backtest/default.yaml",
-            "configs/preset/notebook_compat.yaml",
+            "configs/preset/legacy_notebook_compat.yaml",
         ],
         data_path="dummy.parquet",
     )
@@ -412,6 +412,74 @@ def test_notebook_compat_preset_resolves_expected_overrides() -> None:
     assert settings.n_trials == 200
     assert settings.tuning_cv_folds == 1
     assert np.isclose(settings.cost_bps, 0.0)
+
+
+def test_transitional_notebook_compat_preset_remains_available() -> None:
+    legacy = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+            "configs/preset/legacy_notebook_compat.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+    transitional = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+            "configs/preset/notebook_compat.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+
+    assert transitional.feature_selection == legacy.feature_selection
+    assert transitional.n_trials == legacy.n_trials
+    assert transitional.feature_lag_periods == legacy.feature_lag_periods
+
+
+def test_default_model_configs_disable_tuning() -> None:
+    rf_settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+    xgb_settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/xgb.yaml",
+            "configs/backtest/default.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+
+    assert rf_settings.n_trials == 0
+    assert rf_settings.tuning_cv_folds == 1
+    assert xgb_settings.n_trials == 0
+    assert xgb_settings.tuning_cv_folds == 1
+    get_model_adapter("xgboost").validate_configuration(
+        feature_selection=xgb_settings.feature_selection,
+        n_trials=xgb_settings.n_trials,
+    )
+
+
+def test_tuning_preset_enables_explicit_tuning() -> None:
+    settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+            "configs/preset/tuning.yaml",
+        ],
+        data_path="dummy.parquet",
+    )
+
+    assert settings.n_trials == 25
+    assert settings.tuning_cv_folds == 3
 
 
 def test_template_smoke_preset_resolves_local_run_values() -> None:

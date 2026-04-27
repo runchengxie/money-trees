@@ -1,10 +1,10 @@
 # 数据契约
 
-本文说明 `money-tree` 运行回测时需要的数据形状、必需列、可选列和标签口径。
+本文说明 Money Trees 运行回测时需要的数据形状、必需列、可选列和标签口径。
 
 ## 文件格式
 
-`moneytree` 支持两类输入：
+`moneytrees` 支持两类输入：
 
 - pickle：`.pkl`、`.pickle`
 - parquet：`.parquet`
@@ -75,7 +75,7 @@ rel_performance = sign_bucket(rel_return, threshold=label_threshold)
 
 回归模型训练目标是 `rel_return`。
 
-`configs/preset/notebook_compat.yaml` 会切到 `label_source: pred_rel_return`。此时输入文件必须包含：
+`configs/preset/legacy_notebook_compat.yaml` 会切到 `label_source: pred_rel_return`。此时输入文件必须包含：
 
 ```text
 pred_rel_return
@@ -119,7 +119,7 @@ market:
   feature_lag_periods: 0
 ```
 
-Notebook 兼容预设会关闭额外滞后。
+Legacy notebook 兼容预设会关闭额外滞后。正式 Alpha101/191/158/360 研究路径不建议关闭默认滞后，除非输入数据已经做过严格 point-in-time 对齐。
 
 ## 缺失值处理
 
@@ -139,7 +139,7 @@ Notebook 兼容预设会关闭额外滞后。
 
 ## TuShare 标准面板
 
-`moneytree-tushare` 输出 parquet 会尽量生成以下列：
+`moneytrees-tushare` 输出 parquet 会尽量生成以下列：
 
 ```text
 open, high, low, close, pre_close
@@ -185,5 +185,5 @@ open_adj, high_adj, low_adj, close_adj, vwap_adj
 - 缺 `benchmark_next_period_return`：默认标签来源需要它计算相对收益。
 - 缺 `benchmark_cum_ret`：无法生成基准净值。
 - 开启 ST 或停牌过滤但缺对应列：`cn` 市场配置档会立即报错。
-- 使用 `notebook_compat` 但缺 `pred_rel_return`：该预设依赖外部预测收益列。
+- 使用 legacy notebook 兼容预设但缺 `pred_rel_return`：该预设依赖外部预测收益列。
 - 特征滞后后样本为空：检查每只股票是否至少有两期特征数据。

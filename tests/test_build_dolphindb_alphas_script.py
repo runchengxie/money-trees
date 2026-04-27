@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from moneytree.factors.external import external_alpha_columns
+from moneytree.cli import dolphindb_alphas
 from scripts import build_dolphindb_alphas
 
 
@@ -131,6 +132,65 @@ def test_dolphindb_generation_script_smoke_with_mocked_session(tmp_path: Path) -
     assert manifest["module_versions"]["wq101alpha"] == "wq-test"
 
 
+def test_dolphindb_generation_package_cli_smoke_with_mocked_session(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession()
+
+    result = dolphindb_alphas.run_generation(
+        _args(input_path, output_path),
+        ddb_module=FakeDolphinDB(session),
+    )
+
+    assert result.rows == 2
+    assert result.alpha_columns == 101
+    assert output_path.exists()
+    assert output_path.with_suffix(output_path.suffix + ".factor_manifest.json").exists()
+
+
+def test_dolphindb_generation_script_is_compatibility_wrapper() -> None:
+    assert build_dolphindb_alphas.run_generation is dolphindb_alphas.run_generation
+    assert build_dolphindb_alphas.main is dolphindb_alphas.main
+
+
+def test_dolphindb_generation_cli_main_prints_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "out.parquet"
+    manifest_path = tmp_path / "out.parquet.factor_manifest.json"
+
+    def fake_run_generation(args: argparse.Namespace) -> dolphindb_alphas.GenerationResult:
+        assert args.input == "input.parquet"
+        assert args.output == str(output_path)
+        return dolphindb_alphas.GenerationResult(
+            output_path=output_path,
+            manifest_path=manifest_path,
+            rows=12,
+            alpha_columns=101,
+        )
+
+    monkeypatch.setattr(dolphindb_alphas, "run_generation", fake_run_generation)
+
+    exit_code = dolphindb_alphas.main(
+        [
+            "--input",
+            "input.parquet",
+            "--output",
+            str(output_path),
+            "--alpha101",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert f"Saved panel: {output_path}" in captured.out
+    assert "Rows: 12" in captured.out
+    assert "Alpha columns: 101" in captured.out
+
+
 def test_dolphindb_generation_script_removes_temp_files_on_validation_failure(
     tmp_path: Path,
 ) -> None:
@@ -162,5 +222,5 @@ def test_load_dolphindb_client_reports_optional_dependency(monkeypatch: pytest.M
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(RuntimeError, match="uv pip install dolphindb"):
+    with pytest.raises(RuntimeError, match="external-alphas"):
         build_dolphindb_alphas.load_dolphindb_client()

@@ -8,6 +8,6 @@ model:
   feature_selection: importance
   min_features: 2
   max_selection_steps: 200
-  n_trials: 25
-  tuning_cv_folds: 3
+  n_trials: 0
+  tuning_cv_folds: 1
   random_seed: 123

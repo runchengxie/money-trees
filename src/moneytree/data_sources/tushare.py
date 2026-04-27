@@ -519,7 +519,7 @@ def standardize_tushare_cn_daily_panel(
     complete_calendar: bool = False,
     adjusted_features: bool = True,
 ) -> pd.DataFrame:
-    """Normalize TuShare A-share daily data into the Money Tree date/ticker contract."""
+    """Normalize TuShare A-share daily data into the Money Trees date/ticker contract."""
     panel = _standardize_daily(daily)
     panel = _merge_optional(panel, daily_basic)
     panel = _merge_optional(panel, adj_factor)

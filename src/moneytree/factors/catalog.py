@@ -21,7 +21,7 @@ FACTOR_FAMILIES: dict[str, FactorFamily] = {
         local_generation="external",
         required_inputs=("open", "high", "low", "close", "volume", "vwap", "cap", "indclass"),
         notes=(
-            "Money Tree expects generated alpha columns to be merged into the daily panel. "
+            "Money Trees expects generated alpha columns to be merged into the daily panel. "
             "Industry-aware factors need point-in-time industry and market-cap inputs."
         ),
     ),
@@ -32,7 +32,7 @@ FACTOR_FAMILIES: dict[str, FactorFamily] = {
         local_generation="external",
         required_inputs=("open", "high", "low", "close", "volume", "vwap", "index_open", "index_close"),
         notes=(
-            "Money Tree expects generated alpha columns to be merged into the daily panel. "
+            "Money Trees expects generated alpha columns to be merged into the daily panel. "
             "Some formulas use benchmark index open/close series."
         ),
     ),

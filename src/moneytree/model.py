@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import optuna
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
@@ -21,6 +20,18 @@ DEFAULT_RF_PARAMS: dict[str, Any] = {
 class FeatureSelectionResult:
     selected_features: list[str]
     history: pd.DataFrame | None = None
+
+
+def _load_optuna():
+    try:
+        import optuna
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Hyperparameter tuning requires the optional optuna dependency. "
+            "Install it with `uv sync --dev --extra tuning` or "
+            "`uv sync --dev --extra research`."
+        ) from exc
+    return optuna
 
 
 def build_random_forest(
@@ -236,7 +247,7 @@ def _build_time_series_cv_splits(
 
 
 def _suggest_random_forest_params(
-    trial: optuna.trial.Trial,
+    trial: Any,
     *,
     search_space: str,
 ) -> dict[str, Any]:
@@ -269,11 +280,12 @@ def tune_random_forest(
 ) -> tuple[dict[str, Any], float]:
     """Tune RF hyperparameters with trading profit as objective."""
 
+    optuna = _load_optuna()
     sampler = optuna.samplers.TPESampler(seed=random_state)
     study = optuna.create_study(direction="maximize", sampler=sampler)
     cv_splits = _build_time_series_cv_splits(train_x.index, tuning_cv_folds)
 
-    def objective(trial: optuna.trial.Trial) -> float:
+    def objective(trial: Any) -> float:
         params = _suggest_random_forest_params(trial, search_space=search_space)
         if tuning_cv_folds > 1:
             fold_scores: list[float] = []

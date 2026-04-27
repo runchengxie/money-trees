@@ -1,6 +1,6 @@
 # 配置说明
 
-`moneytree` 使用多个 YAML、JSON 或 TOML 配置文件叠加生成一次运行配置。推荐把市场、模型、回测和本地预设拆开维护。
+`moneytrees` 使用多个 YAML、JSON 或 TOML 配置文件叠加生成一次运行配置。推荐把市场、模型、回测和本地预设拆开维护。旧的 `moneytree` CLI 仍然可用。
 
 ## 默认配置栈
 
@@ -15,7 +15,7 @@ configs/backtest/default.yaml
 等价命令：
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/rf.yaml \
   --config configs/backtest/default.yaml \
@@ -37,7 +37,7 @@ uv run moneytree \
 示例：
 
 ```bash
-uv run moneytree \
+uv run moneytrees \
   --data data_small.parquet \
   --output-dir artifacts/debug \
   --set model.n_trials=0 \
@@ -109,12 +109,12 @@ model:
   feature_selection: importance
   min_features: 2
   max_selection_steps: 200
-  n_trials: 25
-  tuning_cv_folds: 3
+  n_trials: 0
+  tuning_cv_folds: 1
   random_seed: 123
 ```
 
-模型适配器会校验自己支持的调参和特征选择能力。线性模型和 XGBoost 当前只支持 `feature_selection: none`，随机森林支持 `none`、`importance`、`sequential` 和 `notebook_compat`。
+模型适配器会校验自己支持的调参和特征选择能力。线性模型和 XGBoost 当前只支持 `feature_selection: none`，随机森林支持 `none`、`importance`、`sequential` 和 `notebook_compat`。默认配置关闭调参；需要 Optuna 时叠加 `configs/preset/tuning.yaml` 并安装 `tuning` 或 `research` extra。
 
 ## 组合配置
 
@@ -191,6 +191,8 @@ output:
 当前预设：
 
 - `template_smoke.yaml`: 写入本地 `data_path` 和 `output_dir`，方便本地 smoke 运行。
-- `notebook_compat.yaml`: 使用 `pred_rel_return`、关闭特征滞后、切换到 notebook 兼容的随机森林调参和特征选择路径。
+- `tuning.yaml`: 显式开启随机森林 Optuna 调参。
+- `legacy_notebook_compat.yaml`: 只用于复现早期 notebook 结果，使用 `pred_rel_return`、关闭特征滞后、切换到 notebook 兼容的随机森林调参和特征选择路径。
+- `notebook_compat.yaml`: 过渡兼容路径，后续文档应优先使用 `legacy_notebook_compat.yaml`。
 
 预设应放在配置列表最后，让它覆盖前面的基础配置。
