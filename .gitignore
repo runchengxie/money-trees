@@ -210,13 +210,23 @@ __marimo__/
 # Data
 data_small.pkl
 data_small.parquet
+data/
+cache/
+*.factor_manifest.json
 
 # Debugging purpose
 full_project_source.txt
 
 # Backtest runtime outputs
+artifacts/
 artifacts/backtest/
 artifacts/smoke/
+
+# Local DolphinDB runtime and third-party modules
+infra/dolphindb/data/
+infra/dolphindb/logs/
+infra/dolphindb/modules/*.dos
+infra/dolphindb/modules/*.dom
 
 # Debugging purpose
 full_project_source.txt

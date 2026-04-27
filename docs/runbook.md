@@ -24,7 +24,35 @@ uv run moneytree-tushare \
   --factor-family alpha360
 ```
 
-3. 跑主回测。
+3. 可选：离线生成外部 Alpha101/191。
+
+Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+
+```bash
+uv pip install dolphindb
+
+uv run python scripts/build_dolphindb_alphas.py \
+  --input data/cn_daily_alpha.parquet \
+  --output data/cn_daily_alpha_all.parquet \
+  --host 127.0.0.1 \
+  --port 8848 \
+  --user admin \
+  --password 123456 \
+  --alpha101 \
+  --alpha191 \
+  --wq101-module-version <your-wq101-version> \
+  --gtja191-module-version <your-gtja191-version> \
+  --moneytree-alpha-module-version <your-wrapper-version>
+```
+
+生成后检查：
+
+```bash
+test -f data/cn_daily_alpha_all.parquet
+test -f data/cn_daily_alpha_all.parquet.factor_manifest.json
+```
+
+4. 跑主回测。
 
 ```bash
 uv run moneytree \
@@ -35,7 +63,13 @@ uv run moneytree \
   --output-dir artifacts/xgb-alpha-daily
 ```
 
-4. 检查输出。
+如果使用外部 Alpha101/191，把 `--data` 改成生成后的面板：
+
+```text
+data/cn_daily_alpha_all.parquet
+```
+
+5. 检查输出。
 
 ```bash
 test -f artifacts/xgb-alpha-daily/metrics.json
@@ -43,7 +77,7 @@ test -f artifacts/xgb-alpha-daily/run_config.json
 test -f artifacts/xgb-alpha-daily/run_summary.txt
 ```
 
-5. 跑测试。
+6. 跑测试。
 
 ```bash
 uv run pytest -q
@@ -196,6 +230,38 @@ pred_rel_return
 - 移除 `configs/preset/notebook_compat.yaml`。
 - 改回 `market.label_source=actual`。
 
+### DolphinDB Python client 缺失
+
+生成 Alpha101/191 时如果报：
+
+```text
+Missing optional DolphinDB Python client
+```
+
+处理：
+
+```bash
+uv pip install dolphindb
+```
+
+普通 `moneytree` 回测不需要该依赖；只有运行 `scripts/build_dolphindb_alphas.py` 时才需要。
+
+### Alpha101/191 输出列不完整
+
+报错通常包含：
+
+```text
+missing columns
+unexpected alpha columns
+```
+
+处理：
+
+- 检查 DolphinDB `moneytreeAlpha.dos` 包装函数是否返回宽表。
+- 检查列名是否严格为 `alpha101_001...alpha101_101` 或 `alpha191_001...alpha191_191`。
+- 检查是否只请求了一个 family，但 DolphinDB 返回了另一个 family 的 `alpha*_` 列。
+- 检查 manifest 中记录的模块版本和字段映射。
+
 ## 结果归档检查
 
 归档一次重要实验前，至少检查：
@@ -208,6 +274,7 @@ pred_rel_return
 - `oos_period_diagnostics.csv` 行数符合预期。
 - 使用 holdout 时，`holdout/metrics.json` 和 `holdout/holdout_config.json` 存在。
 - 数据输入文件和配置文件路径写入实验记录。
+- 使用外部 Alpha101/191 时，保存对应 `.factor_manifest.json` 的 hash 和版本标签。
 
 ## 数据保存元数据
 

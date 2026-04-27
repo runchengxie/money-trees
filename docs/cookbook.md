@@ -117,7 +117,51 @@ uv run moneytree \
 
 `xgb_regressor` 训练目标是 `rel_return`，输出连续 score 后进入组合构建。
 
-## 6. 切换线性模型基准
+## 6. 追加外部 Alpha101/191
+
+Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再并入标准 `date, ticker` 面板。详细环境和口径见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+
+安装 DolphinDB Python client：
+
+```bash
+uv pip install dolphindb
+```
+
+生成并合并 Alpha101/191：
+
+```bash
+uv run python scripts/build_dolphindb_alphas.py \
+  --input data/cn_daily_alpha.parquet \
+  --output data/cn_daily_alpha_all.parquet \
+  --host 127.0.0.1 \
+  --port 8848 \
+  --user admin \
+  --password 123456 \
+  --alpha101 \
+  --alpha191 \
+  --wq101-module-version <your-wq101-version> \
+  --gtja191-module-version <your-gtja191-version> \
+  --moneytree-alpha-module-version <your-wrapper-version>
+```
+
+然后直接把合并后的 parquet 交给回测：
+
+```bash
+uv run moneytree \
+  --config configs/market/cn.yaml \
+  --config configs/model/xgb_regressor.yaml \
+  --config configs/backtest/default.yaml \
+  --data data/cn_daily_alpha_all.parquet \
+  --output-dir artifacts/xgb-alpha-all
+```
+
+旁路 manifest 默认写到：
+
+```text
+data/cn_daily_alpha_all.parquet.factor_manifest.json
+```
+
+## 7. 切换线性模型基准
 
 Ridge：
 
@@ -139,7 +183,7 @@ configs/model/elasticnet.yaml
 
 线性模型训练目标是 `rel_return`，当前不支持调参和特征选择。
 
-## 7. 使用 signal-risk QP 组合
+## 8. 使用 signal-risk QP 组合
 
 默认组合方法是 `heuristic`。切到 QP：
 
@@ -154,7 +198,7 @@ uv run moneytree \
 
 QP 会用训练窗口 `next_period_return` 估计协方差。求解失败时默认回退到启发式权重。
 
-## 8. 跑最终 holdout
+## 9. 跑最终 holdout
 
 ```bash
 uv run moneytree \
@@ -171,7 +215,7 @@ holdout 结果写到：
 artifacts/holdout-check/holdout/
 ```
 
-## 9. Notebook 兼容路径
+## 10. Notebook 兼容路径
 
 Notebook 兼容预设会：
 
@@ -194,7 +238,7 @@ uv run moneytree \
 
 输入数据必须包含 `pred_rel_return`。
 
-## 10. 单因子 IC 诊断
+## 11. 单因子 IC 诊断
 
 ```python
 import pandas as pd
