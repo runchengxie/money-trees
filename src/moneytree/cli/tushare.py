@@ -13,6 +13,13 @@ def _parse_tickers(raw: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _positive_int(raw: str) -> int:
+    value = int(raw)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Fetch TuShare A-share daily data into the Money Trees panel contract."
@@ -66,6 +73,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0,
         help="When caching, refresh the last N trade dates even if cache files exist.",
     )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print TuShare fetch and factor-generation progress to stderr.",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=_positive_int,
+        default=50,
+        help="When --progress is set, print one line every N trade dates.",
+    )
     return parser.parse_args(argv)
 
 
@@ -89,6 +107,8 @@ def main(argv: list[str] | None = None) -> None:
         cache_dir=args.cache_dir or None,
         refresh_cache=bool(args.refresh_cache),
         refresh_recent_days=int(args.refresh_recent_days),
+        show_progress=bool(args.progress),
+        progress_every=int(args.progress_every),
     )
     frame = fetch_tushare_cn_daily_panel(config)
     save_market_data(frame, Path(args.output))

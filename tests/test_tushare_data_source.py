@@ -247,6 +247,35 @@ def test_fetch_tushare_cn_daily_panel_refreshes_recent_cached_dates(tmp_path) ->
     assert refresh_client.calls == [("daily", "20210105")]
 
 
+def test_fetch_tushare_cn_daily_panel_reports_progress(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    panel = fetch_tushare_cn_daily_panel(
+        TushareDailyConfig(
+            start_date="20210104",
+            end_date="20210105",
+            include_daily_basic=False,
+            include_adj_factor=False,
+            include_limits=False,
+            include_suspend=False,
+            include_stock_basic=False,
+            show_progress=True,
+            progress_every=1,
+        ),
+        pro=_CountingFakePro(),
+    )
+
+    captured = capsys.readouterr()
+
+    assert len(panel) == 4
+    assert captured.out == ""
+    assert "[tushare] trade_dates=2 start=20210104 end=20210105" in captured.err
+    assert "[tushare:daily] 1/2 trade_dates rows=2 cache_hits=0 fetched=1" in captured.err
+    assert "[tushare:daily] 2/2 trade_dates rows=4 cache_hits=0 fetched=2" in captured.err
+    assert "[tushare:standardize] building canonical date,ticker panel" in captured.err
+    assert "[tushare:done] rows=4" in captured.err
+
+
 def test_fetch_tushare_cn_daily_panel_upgrades_legacy_manifest_schema(tmp_path) -> None:
     cache_dir = tmp_path / "raw-cache"
     cache_dir.mkdir()
@@ -302,9 +331,14 @@ def test_tushare_cli_accepts_cache_args() -> None:
             "--refresh-cache",
             "--refresh-recent-days",
             "20",
+            "--progress",
+            "--progress-every",
+            "10",
         ]
     )
 
     assert args.cache_dir == "data/raw/tushare"
     assert args.refresh_cache is True
     assert args.refresh_recent_days == 20
+    assert args.progress is True
+    assert args.progress_every == 10

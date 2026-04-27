@@ -50,10 +50,11 @@ uv run moneytrees-tushare \
   --output data/cn_daily.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
+  --progress \
   --benchmark 000300.SH
 ```
 
-`--cache-dir` 会缓存 `daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 的原始返回。重复拉取同一区间时，已有交易日会读本地 parquet。
+`--cache-dir` 会缓存 `daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 的原始返回。重复拉取同一区间时，已有交易日会读本地 parquet。长区间全市场任务建议加 `--progress`，观察每个接口的交易日进度、累计行数、cache 命中和实际请求次数。
 
 ## 3. 生成本地 Alpha158/360，共 518 个特征
 
@@ -64,6 +65,7 @@ uv run moneytrees-tushare \
   --output data/cn_daily_alpha158_360.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
+  --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
   --factor-family alpha360
@@ -76,9 +78,14 @@ uv run moneytrees-tushare \
   --start-date 20200101 \
   --end-date 20241231 \
   --output data/cn_daily_alpha_raw.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
+  --progress \
   --factor-family alpha158 \
   --raw-features
 ```
+
+`--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量，也不会跳过因子计算。
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
 

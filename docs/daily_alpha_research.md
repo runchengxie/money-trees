@@ -115,6 +115,9 @@ uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
   --output data/cn_daily_alpha158_360.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
+  --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
   --factor-family alpha360

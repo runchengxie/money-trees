@@ -33,6 +33,7 @@ uv run moneytrees-tushare \
   --output data/cn_daily_alpha158_360.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
+  --progress \
   --benchmark 000300.SH \
   --factor-family alpha158 \
   --factor-family alpha360
@@ -155,10 +156,40 @@ uv run moneytrees-tushare \
   --end-date 20241231 \
   --output data/cn_daily.parquet \
   --cache-dir data/raw/tushare \
-  --refresh-recent-days 20
+  --refresh-recent-days 20 \
+  --progress
 ```
 
 接口字段口径变化或 cache 明显损坏时，可以对特定 API 或日期做定向清理后重拉。清理前先确认没有其他实验依赖同一缓存目录。
+
+## TuShare 长任务性能与排障
+
+长区间全市场拉取会按交易日调用多个 TuShare 接口。`daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 都可能循环覆盖全部交易日；5 年全 A 股日频面板通常会产生数百万行，首次运行较慢是正常情况。本地 Alpha158/360 还会在标准面板上追加滚动、滞后和截面特征，写 parquet 前也需要额外时间。
+
+建议：
+
+- 正式拉取始终设置 `--cache-dir data/raw/tushare`。
+- 重复运行时搭配 `--refresh-recent-days 20` 刷新近期交易日。
+- 长任务加 `--progress`；需要更频繁输出时使用 `--progress-every 10`。
+- 调试时先限制日期范围和股票池，例如 `--tickers 000001.SZ,600000.SH`。
+- 只定位 TuShare/API 连通性时，先不加 `--factor-family`。
+- 只定位基础接口时，可临时使用 `--skip-daily-basic`、`--skip-adj-factor`、`--skip-limits`、`--skip-suspend` 和 `--skip-stock-basic`，但正式回测通常需要这些列支撑可交易过滤。
+- `--raw-features` 只改变本地 Alpha158/360 使用复权价格还是未复权价格，不会减少拉取量，也不是快速模式。
+
+小范围调试示例：
+
+```bash
+uv run moneytrees-tushare \
+  --start-date 20241201 \
+  --end-date 20241231 \
+  --tickers 000001.SZ,600000.SH \
+  --output data/debug_alpha_raw.parquet \
+  --cache-dir data/raw/tushare \
+  --refresh-recent-days 20 \
+  --progress \
+  --factor-family alpha158 \
+  --raw-features
+```
 
 ## 常见失败
 

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import sys
 from typing import Any
 
 import numpy as np
@@ -43,6 +44,8 @@ class TushareDailyConfig:
     cache_dir: str | Path | None = None
     refresh_cache: bool = False
     refresh_recent_days: int = 0
+    show_progress: bool = False
+    progress_every: int = 50
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -117,6 +120,11 @@ def _concat(frames: list[pd.DataFrame]) -> pd.DataFrame:
     if not non_empty:
         return pd.DataFrame()
     return pd.concat(non_empty, ignore_index=True).drop_duplicates()
+
+
+def _emit_progress(message: str, *, enabled: bool) -> None:
+    if enabled:
+        print(message, file=sys.stderr, flush=True)
 
 
 def _call_api(pro, api_name: str, **params) -> pd.DataFrame:
@@ -287,13 +295,20 @@ def _fetch_by_trade_date(
     cache_dir: str | Path | None = None,
     refresh_cache: bool = False,
     refresh_recent_days: int = 0,
+    show_progress: bool = False,
+    progress_every: int = 50,
     **extra_params,
 ) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     resolved_cache_dir = _resolve_cache_dir(cache_dir)
     recent_dates = _recent_trade_dates(trade_dates, refresh_recent_days)
+    total = len(trade_dates)
+    interval = max(1, int(progress_every))
+    rows = 0
+    cache_hits = 0
+    fetched = 0
 
-    for trade_date in trade_dates:
+    for idx, trade_date in enumerate(trade_dates, start=1):
         cache_path = (
             _trade_date_cache_path(resolved_cache_dir, api_name, trade_date)
             if resolved_cache_dir is not None
@@ -302,6 +317,7 @@ def _fetch_by_trade_date(
         should_refresh = refresh_cache or trade_date in recent_dates
         if cache_path is not None and cache_path.exists() and not should_refresh:
             frame = pd.read_parquet(cache_path)
+            cache_hits += 1
         else:
             request_params = {
                 "trade_date": trade_date,
@@ -318,6 +334,7 @@ def _fetch_by_trade_date(
                 fields=fields,
                 **extra_params,
             )
+            fetched += 1
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 frame.to_parquet(cache_path, index=False)
@@ -329,7 +346,17 @@ def _fetch_by_trade_date(
                     frame=frame,
                     request_params=request_params,
                 )
-        frames.append(_filter_tickers(frame, tickers))
+        filtered = _filter_tickers(frame, tickers)
+        frames.append(filtered)
+        rows += len(filtered)
+        if show_progress and (idx == 1 or idx % interval == 0 or idx == total):
+            _emit_progress(
+                (
+                    f"[tushare:{api_name}] {idx}/{total} trade_dates "
+                    f"rows={rows} cache_hits={cache_hits} fetched={fetched}"
+                ),
+                enabled=show_progress,
+            )
     return _concat(frames)
 
 
@@ -518,6 +545,7 @@ def standardize_tushare_cn_daily_panel(
     factor_families: tuple[str, ...] = (),
     complete_calendar: bool = False,
     adjusted_features: bool = True,
+    show_progress: bool = False,
 ) -> pd.DataFrame:
     """Normalize TuShare A-share daily data into the Money Trees date/ticker contract."""
     panel = _standardize_daily(daily)
@@ -537,10 +565,24 @@ def standardize_tushare_cn_daily_panel(
     panel = panel.join(benchmark_frame, on="date", how="left")
 
     if factor_families:
+        _emit_progress(
+            (
+                "[tushare:factors] generating "
+                f"families={','.join(factor_families)} rows={len(panel)}"
+            ),
+            enabled=show_progress,
+        )
         panel = add_factor_family_features(
             panel,
             factor_families,
             adjusted=adjusted_features,
+        )
+        _emit_progress(
+            (
+                "[tushare:factors] generated "
+                f"families={','.join(factor_families)} cols={len(panel.columns)}"
+            ),
+            enabled=show_progress,
         )
     return ensure_date_ticker_index(panel).sort_index()
 
@@ -574,12 +616,21 @@ def fetch_tushare_cn_daily_panel(
     start_date = _normalize_date_str(config.start_date)
     end_date = _normalize_date_str(config.end_date)
     trade_dates = _fetch_trade_dates(client, start_date, end_date)
+    _emit_progress(
+        (
+            f"[tushare] trade_dates={len(trade_dates)} "
+            f"start={start_date} end={end_date}"
+        ),
+        enabled=config.show_progress,
+    )
 
     tickers = tuple(str(ticker).strip() for ticker in config.tickers if str(ticker).strip())
     cache_kwargs = {
         "cache_dir": config.cache_dir,
         "refresh_cache": bool(config.refresh_cache),
         "refresh_recent_days": int(config.refresh_recent_days),
+        "show_progress": bool(config.show_progress),
+        "progress_every": int(config.progress_every),
     }
     daily = _fetch_by_trade_date(
         client,
@@ -587,6 +638,10 @@ def fetch_tushare_cn_daily_panel(
         trade_dates,
         tickers=tickers,
         **cache_kwargs,
+    )
+    _emit_progress(
+        f"[tushare:index_daily] fetching benchmark={config.benchmark}",
+        enabled=config.show_progress,
     )
     benchmark_daily = _call_api(
         client,
@@ -643,9 +698,20 @@ def fetch_tushare_cn_daily_panel(
         if config.include_suspend
         else None
     )
-    stock_basic = _fetch_stock_basic(client) if config.include_stock_basic else None
+    if config.include_stock_basic:
+        _emit_progress(
+            "[tushare:stock_basic] fetching list_status=L,D,P",
+            enabled=config.show_progress,
+        )
+        stock_basic = _fetch_stock_basic(client)
+    else:
+        stock_basic = None
+    _emit_progress(
+        "[tushare:standardize] building canonical date,ticker panel",
+        enabled=config.show_progress,
+    )
 
-    return standardize_tushare_cn_daily_panel(
+    panel = standardize_tushare_cn_daily_panel(
         daily=daily,
         benchmark_daily=benchmark_daily,
         benchmark=config.benchmark,
@@ -659,4 +725,10 @@ def fetch_tushare_cn_daily_panel(
         factor_families=config.factor_families,
         complete_calendar=config.complete_calendar,
         adjusted_features=config.adjusted_features,
+        show_progress=config.show_progress,
     )
+    _emit_progress(
+        f"[tushare:done] rows={len(panel)} cols={len(panel.columns)}",
+        enabled=config.show_progress,
+    )
+    return panel
