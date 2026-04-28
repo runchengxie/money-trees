@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import sys
+import time
 from typing import Any, Iterable
 
 import pandas as pd
@@ -25,10 +28,18 @@ from moneytree.metadata import dataframe_schema_hash
 FACTOR_STORE_MANIFEST_VERSION = "1.0"
 LOCAL_FACTOR_FAMILIES = ("alpha158", "alpha360")
 EXTERNAL_FACTOR_FAMILIES = ("alpha101", "alpha191")
+LOCAL_FACTOR_COUNTS = {"alpha158": 158, "alpha360": 360}
 
 
 class FactorStoreValidationError(ValueError):
     """Raised when factor-store files cannot be aligned on date/ticker."""
+
+
+@dataclass(frozen=True)
+class _FamilyWriteStats:
+    entry: dict[str, Any]
+    generated_parts: int
+    skipped_parts: int
 
 
 def _normalize_families(families: Iterable[str] | None) -> tuple[str, ...]:
@@ -90,6 +101,144 @@ def _relative_path(base_dir: Path, path: Path) -> str:
 def _resolve_store_path(root: Path, raw_path: str | Path) -> Path:
     path = Path(raw_path)
     return path if path.is_absolute() else root / path
+
+
+def _format_duration(seconds: float) -> str:
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m{int(remainder):02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours)}h{int(minutes):02d}m"
+
+
+def _progress_bar(current: int, total: int, *, width: int = 20) -> str:
+    if total <= 0:
+        return f"[{'-' * width}]"
+    filled = min(width, max(0, round(width * int(current) / int(total))))
+    return f"[{'#' * filled}{'-' * (width - filled)}]"
+
+
+def _date_value(value: object) -> str:
+    return str(pd.Timestamp(value).date())
+
+
+def _frame_content_hash(frame: pd.DataFrame) -> str:
+    digest = hashlib.sha256()
+    digest.update(dataframe_schema_hash(frame).encode("utf-8"))
+    hashed = pd.util.hash_pandas_object(frame, index=True).to_numpy(dtype="uint64", copy=False)
+    digest.update(hashed.tobytes())
+    return digest.hexdigest()
+
+
+def _read_parquet_index(path: Path) -> pd.Index:
+    frame = pd.read_parquet(path, columns=[])
+    return ensure_date_ticker_index(frame).index
+
+
+def _local_factor_input_columns(frame: pd.DataFrame, family: str, *, adjusted: bool) -> list[str]:
+    price_fields = ("open", "high", "low", "close", "vwap")
+    columns: list[str] = []
+    for field in price_fields:
+        adjusted_name = f"{field}_adj"
+        if adjusted and adjusted_name in frame.columns:
+            columns.append(adjusted_name)
+        elif field in frame.columns:
+            columns.append(field)
+    if "volume" in frame.columns:
+        columns.append("volume")
+    if family == "alpha158" and "amount" in frame.columns:
+        columns.append("amount")
+    return list(dict.fromkeys(columns))
+
+
+def _entry_option(
+    entry: dict[str, Any] | None,
+    manifest: dict[str, Any] | None,
+    key: str,
+    *,
+    local_key: str | None = None,
+) -> Any:
+    if entry is not None and key in entry:
+        return entry[key]
+    local_generation = dict((manifest or {}).get("local_generation", {}))
+    lookup_key = local_key or key
+    if lookup_key in local_generation:
+        return local_generation[lookup_key]
+    return (manifest or {}).get(key)
+
+
+def _normalize_comparable_option(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def _require_local_entry_compatible(
+    entry: dict[str, Any],
+    manifest: dict[str, Any],
+    family: str,
+    *,
+    adjusted: bool,
+    factor_dtype: str,
+    chunk_trade_dates: int,
+    compression: str,
+    compression_level: int | None,
+    row_group_size: int | None,
+) -> None:
+    if not entry.get("partitioned") or not entry.get("paths"):
+        raise FactorStoreValidationError(
+            f"Existing {family} factor entry is not partitioned; use --overwrite to regenerate it."
+        )
+
+    expected = {
+        "factor_dtype": factor_dtype,
+        "adjusted": bool(adjusted),
+        "chunk_trade_dates": int(chunk_trade_dates),
+        "compression": compression,
+        "compression_level": compression_level,
+        "row_group_size": row_group_size,
+    }
+    found = {
+        "factor_dtype": _entry_option(entry, manifest, "factor_dtype"),
+        "adjusted": _entry_option(entry, manifest, "adjusted"),
+        "chunk_trade_dates": _entry_option(entry, manifest, "chunk_trade_dates"),
+        "compression": _entry_option(entry, manifest, "compression"),
+        "compression_level": _entry_option(entry, manifest, "compression_level"),
+        "row_group_size": _entry_option(entry, manifest, "row_group_size"),
+    }
+    if found["chunk_trade_dates"] is not None:
+        found["chunk_trade_dates"] = int(found["chunk_trade_dates"])
+    if found["adjusted"] is not None:
+        found["adjusted"] = bool(found["adjusted"])
+
+    mismatches = [
+        key
+        for key, expected_value in expected.items()
+        if _normalize_comparable_option(found.get(key)) != _normalize_comparable_option(expected_value)
+    ]
+    if mismatches:
+        details = ", ".join(
+            f"{key}: existing={found.get(key)!r} requested={expected[key]!r}"
+            for key in mismatches
+        )
+        raise FactorStoreValidationError(
+            f"Existing {family} factors were generated with different options ({details}); "
+            "use --overwrite to regenerate them."
+        )
+
+
+def _part_metadata_by_path(entry: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    parts = (entry or {}).get("parts", [])
+    if not isinstance(parts, list):
+        return {}
+    return {
+        str(part["path"]): part
+        for part in parts
+        if isinstance(part, dict) and part.get("path")
+    }
 
 
 def _validate_unique_date_ticker(frame: pd.DataFrame, *, source_name: str) -> pd.DataFrame:
@@ -157,6 +306,9 @@ def _write_partitioned_local_family(
     root: Path,
     family: str,
     *,
+    existing_entry: dict[str, Any] | None,
+    existing_base_frame: pd.DataFrame | None,
+    overwrite: bool,
     adjusted: bool,
     factor_dtype: str,
     chunk_trade_dates: int,
@@ -164,7 +316,7 @@ def _write_partitioned_local_family(
     compression_level: int | None,
     row_group_size: int | None,
     show_progress: bool,
-) -> dict[str, Any]:
+) -> _FamilyWriteStats:
     dates = pd.Index(base_frame.index.get_level_values("date").unique()).sort_values()
     chunks = _date_chunks(dates, chunk_trade_dates)
     overlap = _family_overlap(family)
@@ -172,55 +324,148 @@ def _write_partitioned_local_family(
     family_dir.mkdir(parents=True, exist_ok=True)
 
     date_index = base_frame.index.get_level_values("date")
+    existing_date_index = (
+        existing_base_frame.index.get_level_values("date")
+        if existing_base_frame is not None
+        else None
+    )
+    input_columns = _local_factor_input_columns(base_frame, family, adjusted=adjusted)
+    existing_parts = _part_metadata_by_path(existing_entry)
+    started_at = time.perf_counter()
     paths: list[str] = []
+    parts: list[dict[str, Any]] = []
     rows = 0
-    columns = 0
+    columns = int(
+        (existing_entry or {}).get("columns")
+        or LOCAL_FACTOR_COUNTS.get(family, 0)
+    )
+    generated_parts = 0
+    skipped_parts = 0
+
+    if show_progress and len(chunks) > 0:
+        print(
+            (
+                f"[factor-store:{family}] start parts={len(chunks)} "
+                f"rows={len(base_frame)} start={_date_value(dates[0])} "
+                f"end={_date_value(dates[-1])} chunk_trade_dates={int(chunk_trade_dates)}"
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+
     for idx, target_dates in enumerate(chunks, start=1):
+        part_started_at = time.perf_counter()
         target_start = (idx - 1) * max(1, int(chunk_trade_dates))
         calc_start = max(0, target_start - overlap)
         calc_dates = dates[calc_start : target_start + len(target_dates)]
         calc_panel = base_frame.loc[date_index.isin(calc_dates)]
-        features = _build_local_family_features(
-            calc_panel,
-            family,
-            adjusted=adjusted,
-            dtype=factor_dtype,
-        )
-        target_mask = features.index.get_level_values("date").isin(target_dates)
-        target_features = features.loc[target_mask].sort_index()
-
+        target_frame = base_frame.loc[date_index.isin(target_dates)].sort_index()
         part_path = family_dir / f"part-{idx:04d}.parquet"
-        save_market_data(
-            target_features,
-            part_path,
-            compression=compression,
-            compression_level=compression_level,
-            row_group_size=row_group_size,
+        relative_part_path = _relative_path(root, part_path)
+        part_input_hash = _frame_content_hash(calc_panel.loc[:, input_columns])
+        existing_part = existing_parts.get(relative_part_path)
+        can_reuse = False
+
+        if existing_entry is not None and not overwrite and part_path.exists():
+            try:
+                existing_index = _read_parquet_index(part_path)
+                can_reuse = existing_index.equals(target_frame.index)
+                if can_reuse and existing_part and existing_part.get("input_hash"):
+                    can_reuse = str(existing_part["input_hash"]) == part_input_hash
+                elif can_reuse and existing_base_frame is not None and existing_date_index is not None:
+                    existing_calc_panel = existing_base_frame.loc[existing_date_index.isin(calc_dates)]
+                    can_reuse = (
+                        existing_calc_panel.index.equals(calc_panel.index)
+                        and _frame_content_hash(existing_calc_panel.loc[:, input_columns])
+                        == part_input_hash
+                    )
+                else:
+                    can_reuse = False
+            except Exception:
+                can_reuse = False
+
+        if can_reuse:
+            skipped_parts += 1
+            status = "skipped"
+        else:
+            features = _build_local_family_features(
+                calc_panel,
+                family,
+                adjusted=adjusted,
+                dtype=factor_dtype,
+            )
+            target_mask = features.index.get_level_values("date").isin(target_dates)
+            target_features = features.loc[target_mask].sort_index()
+            save_market_data(
+                target_features,
+                part_path,
+                compression=compression,
+                compression_level=compression_level,
+                row_group_size=row_group_size,
+            )
+            columns = int(len(target_features.columns))
+            generated_parts += 1
+            status = "generated"
+
+        part_rows = int(len(target_frame))
+        paths.append(relative_part_path)
+        rows += part_rows
+        parts.append(
+            {
+                "path": relative_part_path,
+                "start_date": _date_value(target_dates[0]),
+                "end_date": _date_value(target_dates[-1]),
+                "rows": part_rows,
+                "columns": columns,
+                "input_hash": part_input_hash,
+            }
         )
-        paths.append(_relative_path(root, part_path))
-        rows += int(len(target_features))
-        columns = int(len(target_features.columns))
 
         if show_progress:
-            start_value = pd.Timestamp(target_dates[0]).date()
-            end_value = pd.Timestamp(target_dates[-1]).date()
+            elapsed = time.perf_counter() - started_at
+            remaining = (elapsed / idx) * (len(chunks) - idx) if idx else 0.0
             print(
                 (
                     f"[factor-store:{family}] part={idx}/{len(chunks)} "
-                    f"rows={rows} start={start_value} end={end_value}"
+                    f"progress={_progress_bar(idx, len(chunks))} "
+                    f"status={status} rows={rows} start={_date_value(target_dates[0])} "
+                    f"end={_date_value(target_dates[-1])} "
+                    f"part_elapsed={_format_duration(time.perf_counter() - part_started_at)} "
+                    f"elapsed={_format_duration(elapsed)} eta={_format_duration(remaining)}"
                 ),
                 file=sys.stderr,
                 flush=True,
             )
 
-    return {
+    if show_progress:
+        print(
+            (
+                f"[factor-store:{family}] done parts={len(chunks)} generated={generated_parts} "
+                f"skipped={skipped_parts} rows={rows} elapsed={_format_duration(time.perf_counter() - started_at)}"
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    entry = {
         "paths": paths,
+        "parts": parts,
         "partitioned": True,
         "prefix": FACTOR_FAMILY_PREFIXES[family],
         "rows": rows,
         "columns": columns,
         "chunk_trade_dates": int(chunk_trade_dates),
+        "factor_dtype": factor_dtype,
+        "adjusted": bool(adjusted),
+        "compression": compression,
+        "compression_level": compression_level,
+        "row_group_size": row_group_size,
     }
+    return _FamilyWriteStats(
+        entry=entry,
+        generated_parts=generated_parts,
+        skipped_parts=skipped_parts,
+    )
 
 
 def write_partitioned_factor_family(
@@ -311,6 +556,7 @@ def write_local_factor_store(
     base_frame = indexed.loc[:, base_columns]
 
     manifest_path = root / "manifest.json"
+    existing_base: pd.DataFrame | None = None
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
@@ -321,10 +567,6 @@ def write_local_factor_store(
                 load_market_data(existing_base_path),
                 source_name="base panel",
             )
-            if not existing_base.index.equals(base_frame.index):
-                raise FactorStoreValidationError(
-                    "Existing factor store base panel index does not match the input panel."
-                )
     else:
         manifest = {
             "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
@@ -338,6 +580,25 @@ def write_local_factor_store(
             "metadata": {},
         }
 
+    factor_entries = dict(manifest.get("factor_families", {}))
+    non_requested_existing = [
+        family
+        for family in factor_entries
+        if family not in requested_families
+    ]
+    base_changed_with_stale_risk = False
+    if existing_base is not None and non_requested_existing:
+        if not existing_base.index.equals(base_frame.index):
+            base_changed_with_stale_risk = True
+        elif not existing_base.equals(base_frame):
+            base_changed_with_stale_risk = True
+    if base_changed_with_stale_risk:
+        raise FactorStoreValidationError(
+            "Existing factor store base panel does not match the input panel. "
+            "Request existing families so they can be incrementally updated, or use a new "
+            f"output directory. Stale families: {', '.join(non_requested_existing)}."
+        )
+
     base_path = root / "base.parquet"
     base_path.parent.mkdir(parents=True, exist_ok=True)
     save_market_data(
@@ -348,17 +609,31 @@ def write_local_factor_store(
         row_group_size=row_group_size,
     )
 
-    factor_entries = dict(manifest.get("factor_families", {}))
     generated: list[str] = []
     skipped: list[str] = []
+    parts_generated: dict[str, int] = {}
+    parts_skipped: dict[str, int] = {}
     for family in requested_families:
-        if family in factor_entries and not overwrite:
-            skipped.append(family)
-            continue
-        factor_entries[family] = _write_partitioned_local_family(
+        existing_entry = factor_entries.get(family)
+        if existing_entry is not None and not overwrite:
+            _require_local_entry_compatible(
+                existing_entry,
+                manifest,
+                family,
+                adjusted=adjusted,
+                factor_dtype=dtype,
+                chunk_trade_dates=chunk_trade_dates,
+                compression=compression,
+                compression_level=compression_level,
+                row_group_size=row_group_size,
+            )
+        result = _write_partitioned_local_family(
             base_frame,
             root,
             family,
+            existing_entry=existing_entry,
+            existing_base_frame=existing_base,
+            overwrite=overwrite,
             adjusted=adjusted,
             factor_dtype=dtype,
             chunk_trade_dates=chunk_trade_dates,
@@ -367,7 +642,13 @@ def write_local_factor_store(
             row_group_size=row_group_size,
             show_progress=show_progress,
         )
-        generated.append(family)
+        factor_entries[family] = result.entry
+        parts_generated[family] = result.generated_parts
+        parts_skipped[family] = result.skipped_parts
+        if result.generated_parts > 0:
+            generated.append(family)
+        else:
+            skipped.append(family)
 
     manifest.update(
         {
@@ -389,6 +670,8 @@ def write_local_factor_store(
                 "families_requested": list(requested_families),
                 "families_generated": generated,
                 "families_skipped": skipped,
+                "parts_generated": parts_generated,
+                "parts_skipped": parts_skipped,
                 "adjusted": bool(adjusted),
                 "chunk_trade_dates": int(chunk_trade_dates),
                 "compression": compression,

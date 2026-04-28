@@ -130,6 +130,99 @@ def test_write_local_factor_store_generates_partitioned_family(tmp_path) -> None
     assert str(out["alpha158_kmid"].dtype) == "float32"
 
 
+def test_write_local_factor_store_progress_reports_part_status(tmp_path, capsys) -> None:
+    write_local_factor_store(
+        _base_panel(days=4),
+        tmp_path / "store",
+        families=["alpha360"],
+        adjusted=False,
+        chunk_trade_dates=2,
+        show_progress=True,
+    )
+
+    err = capsys.readouterr().err
+    assert "[factor-store:alpha360] start parts=2" in err
+    assert "progress=[" in err
+    assert "status=generated" in err
+    assert "elapsed=" in err
+    assert "eta=" in err
+    assert "[factor-store:alpha360] done parts=2 generated=2 skipped=0" in err
+
+
+def test_write_local_factor_store_skips_existing_partitions(tmp_path) -> None:
+    write_local_factor_store(
+        _base_panel(days=6),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=3,
+    )
+
+    manifest = write_local_factor_store(
+        _base_panel(days=6),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=3,
+    )
+
+    assert manifest["local_generation"]["families_generated"] == []
+    assert manifest["local_generation"]["families_skipped"] == ["alpha158"]
+    assert manifest["local_generation"]["parts_generated"] == {"alpha158": 0}
+    assert manifest["local_generation"]["parts_skipped"] == {"alpha158": 2}
+
+
+def test_write_local_factor_store_incrementally_adds_new_date_partitions(tmp_path) -> None:
+    write_local_factor_store(
+        _base_panel(days=6),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=3,
+    )
+
+    manifest = write_local_factor_store(
+        _base_panel(days=9),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=3,
+    )
+
+    entry = manifest["factor_families"]["alpha158"]
+    assert len(entry["paths"]) == 3
+    assert entry["rows"] == 18
+    assert manifest["local_generation"]["families_generated"] == ["alpha158"]
+    assert manifest["local_generation"]["families_skipped"] == []
+    assert manifest["local_generation"]["parts_generated"] == {"alpha158": 1}
+    assert manifest["local_generation"]["parts_skipped"] == {"alpha158": 2}
+
+    out = load_factor_store(tmp_path / "store" / "manifest.json", include_factor_families=["alpha158"])
+    assert len(out) == 18
+    assert "alpha158_kmid" in out.columns
+
+
+def test_write_local_factor_store_rejects_base_change_with_unrequested_existing_family(
+    tmp_path,
+) -> None:
+    write_local_factor_store(
+        _base_panel(days=6),
+        tmp_path / "store",
+        families=["alpha158", "alpha360"],
+        adjusted=False,
+        chunk_trade_dates=3,
+    )
+
+    with pytest.raises(FactorStoreValidationError, match="Stale families: alpha360"):
+        write_local_factor_store(
+            _base_panel(days=9),
+            tmp_path / "store",
+            families=["alpha158"],
+            adjusted=False,
+            chunk_trade_dates=3,
+        )
+
+
 def test_write_local_factor_store_can_add_missing_family_incrementally(tmp_path) -> None:
     write_local_factor_store(
         _base_panel(days=12),
