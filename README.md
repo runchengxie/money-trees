@@ -1,11 +1,11 @@
 # money-trees 摇钱树
 
-> A dollar might turn to a million and we all rich\ 
-> 一块钱也能滚成一百万，兄弟们都能富起来我心里就是这么觉得\ 
-> That's just how I feel\ 
+> A dollar might turn to a million and we all rich
+> 一块钱也能滚成一百万，兄弟们都能富起来我心里就是这么觉得
+> That's just how I feel
 > 我心里就是这么觉得
 > 
-> *Kendrick Lamar - Money Trees*\ 
+> *Kendrick Lamar - Money Trees*
 > *肯德里克·拉马尔 - 摇钱树*
 
 `money-trees` / Money Trees 是一个面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列契约展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征由 DolphinDB 等外部生产器离线生成后并入标准 `date, ticker` 面板。核心链路包括 TuShare 日频数据拉取、因子生成/并入、特征滞后、模型适配器、组合构建、滚动回测、holdout 验证和可复现产物输出。
