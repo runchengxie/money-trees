@@ -30,6 +30,8 @@ def test_console_script_aliases_point_to_expected_entrypoints() -> None:
     assert scripts["moneytrees-dolphindb-alphas"] == "moneytree.cli.dolphindb_alphas:main"
     assert scripts["moneytree-factor-store"] == "moneytree.cli.factor_store:main"
     assert scripts["moneytrees-factor-store"] == "moneytree.cli.factor_store:main"
+    assert scripts["moneytree-parquet-rewrite"] == "moneytree.cli.parquet_rewrite:main"
+    assert scripts["moneytrees-parquet-rewrite"] == "moneytree.cli.parquet_rewrite:main"
 
 
 def test_optional_dependency_groups_expose_research_intent() -> None:

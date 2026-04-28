@@ -62,7 +62,7 @@ uv run moneytrees-tushare \
 uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_raw.parquet \
+  --output data/panel/cn/cn_daily_raw.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
   --progress \
@@ -74,7 +74,7 @@ uv run moneytrees-tushare \
 
 ```bash
 uv run moneytrees-factor-store \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/cn_daily \
   --factor-family alpha158 \
   --factor-dtype float32 \
@@ -86,7 +86,7 @@ uv run moneytrees-factor-store \
 
 ```bash
 uv run moneytrees-factor-store \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/cn_daily_raw_factor \
   --factor-family alpha158 \
   --factor-dtype float32 \
@@ -110,7 +110,7 @@ uv run moneytrees \
 
 ```bash
 uv run moneytrees-factor-store \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/debug_alpha158 \
   --factor-family alpha158 \
   --chunk-trade-dates 20 \

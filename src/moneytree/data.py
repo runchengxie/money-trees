@@ -23,6 +23,8 @@ FACTOR_FAMILY_PREFIXES = {
 }
 FACTOR_PREFIXES = tuple(FACTOR_FAMILY_PREFIXES.values())
 SUPPORTED_FACTOR_DTYPES = ("float32", "float64")
+DEFAULT_PARQUET_COMPRESSION = "zstd"
+DEFAULT_PARQUET_COMPRESSION_LEVEL = 3
 
 NON_FEATURE_COLUMNS = {
     "date",
@@ -404,12 +406,57 @@ def load_market_data(
 def save_market_data(
     frame: pd.DataFrame,
     path: str | Path,
-    compression: str = "snappy",
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
+    row_group_size: int | None = None,
 ) -> None:
     """Persist market data as parquet."""
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(file_path, compression=compression, index=True)
+    frame.to_parquet(
+        file_path,
+        index=True,
+        **parquet_write_options(
+            compression=compression,
+            compression_level=compression_level,
+            row_group_size=row_group_size,
+        ),
+    )
+
+
+def parquet_write_options(
+    *,
+    compression: str | None = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
+    row_group_size: int | None = None,
+) -> dict[str, object]:
+    """Return validated pyarrow parquet write options for project data outputs."""
+    codec = DEFAULT_PARQUET_COMPRESSION if compression is None else str(compression).strip().lower()
+    if not codec:
+        codec = DEFAULT_PARQUET_COMPRESSION
+    options: dict[str, object] = {
+        "compression": None if codec in {"none", "uncompressed"} else codec,
+    }
+
+    level = (
+        DEFAULT_PARQUET_COMPRESSION_LEVEL
+        if compression_level is None and codec == DEFAULT_PARQUET_COMPRESSION
+        else compression_level
+    )
+    if level is not None:
+        if codec in {"none", "uncompressed", "snappy"}:
+            raise ValueError(f"Compression level is not supported for parquet codec '{codec}'.")
+        normalized_level = int(level)
+        if normalized_level < 1:
+            raise ValueError("Parquet compression level must be >= 1.")
+        options["compression_level"] = normalized_level
+
+    if row_group_size is not None:
+        normalized_row_group_size = int(row_group_size)
+        if normalized_row_group_size < 1:
+            raise ValueError("Parquet row group size must be >= 1.")
+        options["row_group_size"] = normalized_row_group_size
+    return options
 
 
 def ensure_date_ticker_index(frame: pd.DataFrame) -> pd.DataFrame:

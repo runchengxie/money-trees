@@ -30,7 +30,7 @@ uv sync --dev --extra research
 uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_raw.parquet \
+  --output data/panel/cn/cn_daily_raw.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
   --progress \
@@ -42,7 +42,7 @@ uv run moneytrees-tushare \
 
 ```bash
 uv run moneytrees-factor-store \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/cn_daily \
   --factor-family alpha158 \
   --factor-dtype float32 \
@@ -54,7 +54,7 @@ uv run moneytrees-factor-store \
 
 ```bash
 uv run moneytrees-factor-store \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/cn_daily \
   --factor-family alpha360 \
   --factor-dtype float32 \
@@ -79,7 +79,7 @@ Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。�
 uv sync --dev --extra external-alphas
 
 uv run moneytrees-dolphindb-alphas \
-  --input data/cn_daily_raw.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
   --output data/cn_daily_alpha_all.parquet \
   --host 127.0.0.1 \
   --port 8848 \
@@ -151,6 +151,7 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cach
 当前默认策略：
 
 - TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成路径默认把 `alpha101_`、`alpha191_`、`alpha158_`、`alpha360_` 因子列保存为 `float32`。
+- 新写入的 Money Trees parquet 输出默认使用 `zstd` 压缩，默认压缩级别为 3；需要兼容旧行为时显式传 `--compression snappy`。
 - 推荐先用 `moneytrees-tushare` 生成基础面板，再用 `moneytrees-factor-store` 按需生成 `alpha158` 或 `alpha360` 分族因子文件。
 - 需要精度敏感复核时，生成命令显式传 `--factor-dtype float64`。
 - 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。
@@ -184,6 +185,19 @@ find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
 ```
 
 如果后续增加 `gc` 或清理命令，默认必须是 dry-run：先打印候选文件、大小和原因，只有显式传入非 dry-run 参数后才允许删除。不要对 `data/`、`artifacts/`、raw TuShare cache 或 factor store 做隐式清理。
+
+### Parquet 压缩迁移
+
+现有面板可以旁路重写为 zstd，不覆盖原文件：
+
+```bash
+uv run moneytrees-parquet-rewrite \
+  --input data/cn_daily_raw.parquet \
+  --output data/panel/cn/cn_daily_raw.parquet \
+  --compression zstd
+```
+
+该命令会拒绝原地重写，并在写入后默认校验行数、列和索引名称。确认新文件可用后，再手工更新后续命令中的 `--data` 或 `--input` 路径。
 
 ## TuShare token 排查
 

@@ -6,6 +6,7 @@ import pytest
 
 from moneytree.data import (
     FACTOR_PREFIXES,
+    DEFAULT_PARQUET_COMPRESSION,
     NON_FEATURE_COLUMNS,
     apply_feature_lag,
     coerce_factor_columns,
@@ -18,7 +19,9 @@ from moneytree.data import (
     make_labels,
     normalize_factor_dtype,
     normalize_factor_prefixes,
+    parquet_write_options,
     preprocess_data,
+    save_market_data,
 )
 
 
@@ -182,6 +185,30 @@ def test_load_market_data_prunes_parquet_factor_columns(tmp_path) -> None:
     assert "alpha360_close_lag00" not in out.columns
     assert "next_period_return" in out.columns
     assert out.attrs["factor_selection"]["column_pruned"] is True
+
+
+def test_save_market_data_defaults_to_zstd(tmp_path) -> None:
+    data_path = tmp_path / "panel.parquet"
+    frame = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2021-01-01"]),
+            "ticker": ["A"],
+            "x": [1.0],
+        }
+    ).set_index(["date", "ticker"])
+
+    save_market_data(frame, data_path)
+
+    import pyarrow.parquet as pq
+
+    parquet = pq.ParquetFile(data_path)
+    assert DEFAULT_PARQUET_COMPRESSION == "zstd"
+    assert parquet.metadata.row_group(0).column(0).compression == "ZSTD"
+
+
+def test_parquet_write_options_rejects_snappy_level() -> None:
+    with pytest.raises(ValueError, match="snappy"):
+        parquet_write_options(compression="snappy", compression_level=3)
 
 
 def test_apply_feature_lag_shifts_by_ticker_and_drops_all_missing_rows() -> None:

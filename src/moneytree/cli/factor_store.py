@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION
 from moneytree.data import load_market_data
 from moneytree.factor_store import LOCAL_FACTOR_FAMILIES, write_local_factor_store
 
@@ -56,8 +57,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--compression",
-        default="snappy",
+        default=DEFAULT_PARQUET_COMPRESSION,
         help="Parquet compression codec.",
+    )
+    parser.add_argument(
+        "--compression-level",
+        type=_positive_int,
+        default=None,
+        help="Parquet compression level. Defaults to 3 for zstd.",
     )
     parser.add_argument(
         "--overwrite",
@@ -88,6 +95,7 @@ def run_generation(args: argparse.Namespace) -> FactorStoreBuildResult:
         factor_dtype=args.factor_dtype,
         chunk_trade_dates=int(args.chunk_trade_dates),
         compression=args.compression,
+        compression_level=args.compression_level,
         overwrite=bool(args.overwrite),
         show_progress=bool(args.progress),
         metadata={

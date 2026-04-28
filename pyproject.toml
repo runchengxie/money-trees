@@ -33,6 +33,8 @@ moneytree-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
 moneytrees-dolphindb-alphas = "moneytree.cli.dolphindb_alphas:main"
 moneytree-factor-store = "moneytree.cli.factor_store:main"
 moneytrees-factor-store = "moneytree.cli.factor_store:main"
+moneytree-parquet-rewrite = "moneytree.cli.parquet_rewrite:main"
+moneytrees-parquet-rewrite = "moneytree.cli.parquet_rewrite:main"
 
 [dependency-groups]
 dev = ["pytest", "ruff", "optuna"]

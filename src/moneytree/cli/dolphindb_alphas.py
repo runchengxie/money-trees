@@ -9,7 +9,13 @@ import sys
 import tempfile
 from typing import Any
 
-from moneytree.data import coerce_factor_columns, load_market_data, normalize_factor_dtype, save_market_data
+from moneytree.data import (
+    DEFAULT_PARQUET_COMPRESSION,
+    coerce_factor_columns,
+    load_market_data,
+    normalize_factor_dtype,
+    save_market_data,
+)
 from moneytree.factors.external import (
     build_dolphindb_input,
     build_external_alpha_manifest,
@@ -157,7 +163,12 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
         ) as handle:
             temp_output = Path(handle.name)
         temp_paths.append(temp_output)
-        save_market_data(merged, temp_output, compression=args.compression)
+        save_market_data(
+            merged,
+            temp_output,
+            compression=args.compression,
+            compression_level=getattr(args, "compression_level", None),
+        )
 
         manifest = build_external_alpha_manifest(
             input_path=input_path,
@@ -178,6 +189,8 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
             module_versions=_module_versions(args),
         )
         manifest["output_data"]["path"] = str(output_path)
+        manifest["output_data"]["compression"] = args.compression
+        manifest["output_data"]["compression_level"] = getattr(args, "compression_level", None)
         manifest["factor_dtype"] = factor_dtype
 
         with tempfile.NamedTemporaryFile(
@@ -254,7 +267,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["float32", "float64"],
         help="Dtype for generated Alpha101/191 columns in the output parquet.",
     )
-    parser.add_argument("--compression", default="snappy", help="Parquet compression.")
+    parser.add_argument(
+        "--compression",
+        default=DEFAULT_PARQUET_COMPRESSION,
+        help="Parquet compression.",
+    )
+    parser.add_argument(
+        "--compression-level",
+        type=int,
+        default=None,
+        help="Parquet compression level. Defaults to 3 for zstd.",
+    )
     return parser
 
 

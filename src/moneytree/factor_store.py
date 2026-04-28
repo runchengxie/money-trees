@@ -9,12 +9,14 @@ from typing import Any, Iterable
 import pandas as pd
 
 from moneytree.data import (
+    DEFAULT_PARQUET_COMPRESSION,
     FACTOR_FAMILY_PREFIXES,
     coerce_factor_columns,
     ensure_date_ticker_index,
     factor_columns,
     load_market_data,
     normalize_factor_dtype,
+    save_market_data,
 )
 from moneytree.factors.qlib import build_alpha158_features, build_alpha360_features
 from moneytree.metadata import dataframe_schema_hash
@@ -151,6 +153,7 @@ def _write_partitioned_local_family(
     factor_dtype: str,
     chunk_trade_dates: int,
     compression: str,
+    compression_level: int | None,
     show_progress: bool,
 ) -> dict[str, Any]:
     dates = pd.Index(base_frame.index.get_level_values("date").unique()).sort_values()
@@ -178,7 +181,12 @@ def _write_partitioned_local_family(
         target_features = features.loc[target_mask].sort_index()
 
         part_path = family_dir / f"part-{idx:04d}.parquet"
-        target_features.to_parquet(part_path, compression=compression, index=True)
+        save_market_data(
+            target_features,
+            part_path,
+            compression=compression,
+            compression_level=compression_level,
+        )
         paths.append(_relative_path(root, part_path))
         rows += int(len(target_features))
         columns = int(len(target_features.columns))
@@ -214,7 +222,8 @@ def write_local_factor_store(
     factor_dtype: str = "float32",
     chunk_trade_dates: int = 60,
     metadata: dict[str, Any] | None = None,
-    compression: str = "snappy",
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
     overwrite: bool = False,
     show_progress: bool = False,
 ) -> dict[str, Any]:
@@ -258,7 +267,12 @@ def write_local_factor_store(
 
     base_path = root / "base.parquet"
     base_path.parent.mkdir(parents=True, exist_ok=True)
-    base_frame.to_parquet(base_path, compression=compression, index=True)
+    save_market_data(
+        base_frame,
+        base_path,
+        compression=compression,
+        compression_level=compression_level,
+    )
 
     factor_entries = dict(manifest.get("factor_families", {}))
     generated: list[str] = []
@@ -275,6 +289,7 @@ def write_local_factor_store(
             factor_dtype=dtype,
             chunk_trade_dates=chunk_trade_dates,
             compression=compression,
+            compression_level=compression_level,
             show_progress=show_progress,
         )
         generated.append(family)
@@ -292,12 +307,16 @@ def write_local_factor_store(
             },
             "factor_families": factor_entries,
             "factor_dtype": dtype,
+            "compression": compression,
+            "compression_level": compression_level,
             "local_generation": {
                 "families_requested": list(requested_families),
                 "families_generated": generated,
                 "families_skipped": skipped,
                 "adjusted": bool(adjusted),
                 "chunk_trade_dates": int(chunk_trade_dates),
+                "compression": compression,
+                "compression_level": compression_level,
             },
             "metadata": {**dict(manifest.get("metadata", {})), **dict(metadata or {})},
         }
@@ -313,7 +332,8 @@ def write_factor_store(
     families: Iterable[str] | None = None,
     factor_dtype: str = "float32",
     metadata: dict[str, Any] | None = None,
-    compression: str = "snappy",
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
 ) -> dict[str, Any]:
     """Write an additive base-panel plus factor-family store and return its manifest."""
     dtype = normalize_factor_dtype(factor_dtype)
@@ -344,12 +364,22 @@ def write_factor_store(
     base_path = root / "base.parquet"
     factors_dir = root / "factors"
     factors_dir.mkdir(parents=True, exist_ok=True)
-    base_frame.to_parquet(base_path, compression=compression, index=True)
+    save_market_data(
+        base_frame,
+        base_path,
+        compression=compression,
+        compression_level=compression_level,
+    )
 
     factor_entries: dict[str, dict[str, Any]] = {}
     for family, frame in factor_frames.items():
         factor_path = factors_dir / f"{family}.parquet"
-        frame.to_parquet(factor_path, compression=compression, index=True)
+        save_market_data(
+            frame,
+            factor_path,
+            compression=compression,
+            compression_level=compression_level,
+        )
         factor_entries[family] = {
             "path": _relative_path(root, factor_path),
             "prefix": FACTOR_FAMILY_PREFIXES[family],
@@ -368,6 +398,8 @@ def write_factor_store(
         },
         "factor_families": factor_entries,
         "factor_dtype": dtype,
+        "compression": compression,
+        "compression_level": compression_level,
         "key_validation": {
             "date_ticker_unique": True,
             "aligned": True,

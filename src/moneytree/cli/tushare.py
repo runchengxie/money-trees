@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION
 from moneytree.data import save_market_data
 from moneytree.data_sources import TushareDailyConfig, fetch_tushare_cn_daily_panel
 from moneytree.data_sources.tushare import TUSHARE_PROXY_MODES, TUSHARE_SANITY_CHECK_MODES
@@ -28,6 +29,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-date", required=True, help="Start date, YYYYMMDD or YYYY-MM-DD.")
     parser.add_argument("--end-date", required=True, help="End date, YYYYMMDD or YYYY-MM-DD.")
     parser.add_argument("--output", required=True, help="Output parquet path.")
+    parser.add_argument(
+        "--compression",
+        default=DEFAULT_PARQUET_COMPRESSION,
+        help="Output parquet compression codec. Default: zstd.",
+    )
+    parser.add_argument(
+        "--compression-level",
+        type=_positive_int,
+        default=None,
+        help="Output parquet compression level. Defaults to 3 for zstd.",
+    )
     parser.add_argument("--benchmark", default="000300.SH", help="Benchmark index code.")
     parser.add_argument(
         "--tickers",
@@ -68,6 +80,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cache-dir",
         default="",
         help="Optional raw TuShare parquet cache directory, partitioned by API and trade date.",
+    )
+    parser.add_argument(
+        "--cache-compression",
+        default=DEFAULT_PARQUET_COMPRESSION,
+        help="Raw TuShare cache parquet compression codec. Default: zstd.",
+    )
+    parser.add_argument(
+        "--cache-compression-level",
+        type=_positive_int,
+        default=None,
+        help="Raw TuShare cache parquet compression level. Defaults to 3 for zstd.",
     )
     parser.add_argument(
         "--refresh-cache",
@@ -146,9 +169,16 @@ def main(argv: list[str] | None = None) -> None:
         proxy_url=args.proxy_url or None,
         fallback_direct=not bool(args.no_fallback_direct),
         sanity_check=args.sanity_check,
+        cache_compression=args.cache_compression,
+        cache_compression_level=args.cache_compression_level,
     )
     frame = fetch_tushare_cn_daily_panel(config)
-    save_market_data(frame, Path(args.output))
+    save_market_data(
+        frame,
+        Path(args.output),
+        compression=args.compression,
+        compression_level=args.compression_level,
+    )
     print(
         "Saved TuShare panel "
         f"rows={len(frame)} cols={len(frame.columns)} "

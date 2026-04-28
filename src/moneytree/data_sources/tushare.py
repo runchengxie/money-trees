@@ -15,8 +15,10 @@ import warnings
 import numpy as np
 import pandas as pd
 
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION
 from moneytree.data import build_market_data_sanity_report
 from moneytree.data import ensure_date_ticker_index
+from moneytree.data import parquet_write_options
 from moneytree.factors import add_factor_family_features
 from moneytree.metadata import (
     dataframe_content_hash,
@@ -75,6 +77,8 @@ class TushareDailyConfig:
     proxy_url: str | None = None
     fallback_direct: bool = True
     sanity_check: str = "warn"
+    cache_compression: str = DEFAULT_PARQUET_COMPRESSION
+    cache_compression_level: int | None = None
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -432,6 +436,8 @@ def _fetch_by_trade_date(
     refresh_recent_days: int = 0,
     show_progress: bool = False,
     progress_every: int = 50,
+    cache_compression: str = DEFAULT_PARQUET_COMPRESSION,
+    cache_compression_level: int | None = None,
     api_options: _TushareApiOptions | None = None,
     **extra_params,
 ) -> pd.DataFrame:
@@ -474,7 +480,14 @@ def _fetch_by_trade_date(
             fetched += 1
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
-                frame.to_parquet(cache_path, index=False)
+                frame.to_parquet(
+                    cache_path,
+                    index=False,
+                    **parquet_write_options(
+                        compression=cache_compression,
+                        compression_level=cache_compression_level,
+                    ),
+                )
                 _write_cache_manifest(
                     cache_dir=resolved_cache_dir,
                     api_name=api_name,
@@ -893,6 +906,8 @@ def fetch_tushare_cn_daily_panel(
         "refresh_recent_days": int(config.refresh_recent_days),
         "show_progress": bool(config.show_progress),
         "progress_every": int(config.progress_every),
+        "cache_compression": config.cache_compression,
+        "cache_compression_level": config.cache_compression_level,
         "api_options": api_options,
     }
     daily = _fetch_by_trade_date(
