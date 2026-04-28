@@ -67,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Parquet compression level. Defaults to 3 for zstd.",
     )
     parser.add_argument(
+        "--row-group-size",
+        type=_positive_int,
+        default=None,
+        help="Optional parquet row group size in rows.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Regenerate requested factor families even when they already exist in the store.",
@@ -96,6 +102,7 @@ def run_generation(args: argparse.Namespace) -> FactorStoreBuildResult:
         chunk_trade_dates=int(args.chunk_trade_dates),
         compression=args.compression,
         compression_level=args.compression_level,
+        row_group_size=args.row_group_size,
         overwrite=bool(args.overwrite),
         show_progress=bool(args.progress),
         metadata={

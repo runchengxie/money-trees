@@ -121,6 +121,7 @@ uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py
 - [docs/minimal_run.md](docs/minimal_run.md): 最小跑通路径和最小数据列。
 - [docs/architecture.md](docs/architecture.md): 数据层、市场层、因子层、模型层、组合层、回测层和输出层设计。
 - [docs/data_contract.md](docs/data_contract.md): 标准面板索引、必需列、可选列、标签和特征口径。
+- [docs/data_status.md](docs/data_status.md): raw cache、基础面板、factor store 和 artifacts 的只读状态检查。
 - [docs/configuration.md](docs/configuration.md): 配置文件分层、合并规则和常用字段。
 - [docs/outputs.md](docs/outputs.md): `metrics.json`、`run_config.json`、CSV 和 holdout 产物说明。
 - [docs/cookbook.md](docs/cookbook.md): 常见研究任务示例。

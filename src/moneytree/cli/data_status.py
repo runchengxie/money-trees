@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+from typing import Sequence
+
+from moneytree.data_quality import DATA_QUALITY_MODES
+from moneytree.data_quality import validate_data_quality_mode
+from moneytree.data_status import build_data_status_report
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Inspect Money Trees data layers without modifying files."
+    )
+    parser.add_argument("--panel", help="Base date,ticker panel parquet or pickle path.")
+    parser.add_argument("--raw-cache", help="TuShare raw cache directory or manifest.sqlite path.")
+    parser.add_argument("--factor-store", help="Factor-store directory or manifest.json path.")
+    parser.add_argument("--artifacts", help="Backtest artifact directory.")
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format. Default: text.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=DATA_QUALITY_MODES,
+        default="warn",
+        help="Exit behavior for reported data errors. Default: warn.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not any((args.panel, args.raw_cache, args.factor_store, args.artifacts)):
+        parser.error(
+            "At least one data layer path is required: --panel, --raw-cache, "
+            "--factor-store, or --artifacts."
+        )
+    mode = validate_data_quality_mode(args.mode)
+    try:
+        report = build_data_status_report(
+            panel=Path(args.panel) if args.panel else None,
+            raw_cache=Path(args.raw_cache) if args.raw_cache else None,
+            factor_store=Path(args.factor_store) if args.factor_store else None,
+            artifacts=Path(args.artifacts) if args.artifacts else None,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.format == "json":
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        for line in report.to_lines():
+            print(line)
+
+    if mode == "error" and not report.ok:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -16,9 +16,12 @@ import numpy as np
 import pandas as pd
 
 from moneytree.data import DEFAULT_PARQUET_COMPRESSION
-from moneytree.data import build_market_data_sanity_report
 from moneytree.data import ensure_date_ticker_index
 from moneytree.data import parquet_write_options
+from moneytree.data_quality import DATA_QUALITY_MODES_WITH_OFF
+from moneytree.data_quality import build_tushare_panel_quality_result
+from moneytree.data_quality import enforce_data_quality_result
+from moneytree.data_quality import validate_data_quality_mode
 from moneytree.factors import add_factor_family_features
 from moneytree.metadata import (
     dataframe_content_hash,
@@ -30,7 +33,7 @@ from moneytree.metadata import (
 
 TOKEN_ENV_NAMES = ("TUSHARE_TOKEN", "TUSHARE_PRO_TOKEN", "TS_TOKEN", "TUSHARE_API_KEY")
 TUSHARE_PROXY_MODES = ("direct", "env", "proxy")
-TUSHARE_SANITY_CHECK_MODES = ("off", "warn", "error")
+TUSHARE_SANITY_CHECK_MODES = DATA_QUALITY_MODES_WITH_OFF
 _PROXY_ENV_NAMES = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -79,6 +82,7 @@ class TushareDailyConfig:
     sanity_check: str = "warn"
     cache_compression: str = DEFAULT_PARQUET_COMPRESSION
     cache_compression_level: int | None = None
+    cache_row_group_size: int | None = None
     extra_query_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -182,9 +186,7 @@ def _validate_proxy_settings(mode: str, proxy_url: str | None = None) -> None:
 
 
 def _validate_sanity_check_mode(mode: str) -> None:
-    if mode not in TUSHARE_SANITY_CHECK_MODES:
-        choices = ", ".join(TUSHARE_SANITY_CHECK_MODES)
-        raise ValueError(f"Unsupported TuShare sanity_check mode '{mode}'. Expected one of: {choices}.")
+    validate_data_quality_mode(mode, allow_off=True, label="TuShare sanity_check mode")
 
 
 @contextmanager
@@ -438,6 +440,7 @@ def _fetch_by_trade_date(
     progress_every: int = 50,
     cache_compression: str = DEFAULT_PARQUET_COMPRESSION,
     cache_compression_level: int | None = None,
+    cache_row_group_size: int | None = None,
     api_options: _TushareApiOptions | None = None,
     **extra_params,
 ) -> pd.DataFrame:
@@ -486,6 +489,7 @@ def _fetch_by_trade_date(
                     **parquet_write_options(
                         compression=cache_compression,
                         compression_level=cache_compression_level,
+                        row_group_size=cache_row_group_size,
                     ),
                 )
                 _write_cache_manifest(
@@ -681,15 +685,6 @@ def _complete_calendar(
     return out
 
 
-def _expected_local_factor_count(families: tuple[str, ...]) -> int:
-    counts = {"alpha158": 158, "alpha360": 360}
-    total = 0
-    for family in families:
-        key = str(family).strip().lower().replace("-", "_")
-        total += counts.get(key, 0)
-    return total
-
-
 def _emit_tushare_sanity_report(
     panel: pd.DataFrame,
     *,
@@ -704,69 +699,21 @@ def _emit_tushare_sanity_report(
     if mode == "off":
         return
     _validate_sanity_check_mode(mode)
-    required_columns = (
-        "date",
-        "ticker",
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "vwap",
-        "next_period_return",
-        "benchmark_cum_ret",
-        "benchmark_next_period_return",
-        "hit_up_limit",
-        "hit_down_limit",
-        "is_suspended",
-        "is_st",
-    )
-    null_check_columns = (
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "vwap",
-        "next_period_return",
-        "benchmark_cum_ret",
-        "benchmark_next_period_return",
-    )
-    report = build_market_data_sanity_report(
+    result = build_tushare_panel_quality_result(
         panel,
-        required_columns=required_columns,
-        null_check_columns=null_check_columns,
         expected_start=expected_start,
         expected_end=expected_end,
-        expected_date_count=len(trade_dates) if trade_dates is not None else None,
+        trade_dates=trade_dates,
+        factor_families=factor_families,
     )
-    extra_errors: list[str] = []
-    expected_factor_count = _expected_local_factor_count(factor_families)
-    if expected_factor_count:
-        factor_count = sum(
-            str(column).startswith(("alpha158_", "alpha360_")) for column in panel.columns
-        )
-        if factor_count != expected_factor_count:
-            extra_errors.append(
-                f"local factor columns {factor_count} != expected {expected_factor_count}"
-            )
-
-    for line in report.to_lines(prefix=f"[tushare:sanity:{stage}]"):
+    for line in result.to_lines(prefix=f"[tushare:sanity:{stage}]"):
         _emit_progress(line, enabled=show_progress)
-    if extra_errors:
-        _emit_progress(
-            f"[tushare:sanity:{stage}] errors {'; '.join(extra_errors)}",
-            enabled=show_progress,
-        )
-    if report.errors or extra_errors:
-        message = "; ".join((*report.errors, *extra_errors))
-        if mode == "error":
-            raise ValueError(f"TuShare data sanity check failed at stage '{stage}': {message}")
-        warnings.warn(
-            f"TuShare data sanity check reported issues at stage '{stage}': {message}",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+    enforce_data_quality_result(
+        result,
+        mode=mode,
+        error_message=f"TuShare data sanity check failed at stage '{stage}'",
+        warning_message=f"TuShare data sanity check reported issues at stage '{stage}'",
+    )
 
 
 def standardize_tushare_cn_daily_panel(
@@ -908,6 +855,7 @@ def fetch_tushare_cn_daily_panel(
         "progress_every": int(config.progress_every),
         "cache_compression": config.cache_compression,
         "cache_compression_level": config.cache_compression_level,
+        "cache_row_group_size": config.cache_row_group_size,
         "api_options": api_options,
     }
     daily = _fetch_by_trade_date(

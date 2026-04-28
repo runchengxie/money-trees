@@ -14,7 +14,7 @@ Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cook
 
 ### 模式 C：完整 810 因子
 
-在模式 B 的基础上，用 DolphinDB 离线生成 Alpha101/191，合并到标准面板后再回测。
+在模式 B 的基础上，用 DolphinDB 离线生成 Alpha101/191，写入同一个 factor store 后再回测。
 
 ## 日常运行顺序
 
@@ -71,16 +71,28 @@ uv run moneytrees \
   --set 'features.include_factor_families=["alpha158"]'
 ```
 
-4. 可选：离线生成外部 Alpha101/191。
+4. 检查数据状态。
 
-Alpha101/191 需要先由 DolphinDB 等外部生产器生成后并入面板。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+```bash
+uv run moneytrees-data-status \
+  --panel data/panel/cn/cn_daily_raw.parquet \
+  --raw-cache data/raw/tushare \
+  --factor-store data/factor_store/cn_daily/manifest.json \
+  --format text \
+  --mode warn
+```
+
+5. 可选：离线生成外部 Alpha101/191。
+
+Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
 
 ```bash
 uv sync --dev --extra external-alphas
 
 uv run moneytrees-dolphindb-alphas \
   --input data/panel/cn/cn_daily_raw.parquet \
-  --output data/cn_daily_alpha_all.parquet \
+  --factor-store-output data/factor_store/cn_daily \
+  --no-wide-output \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
@@ -96,22 +108,24 @@ uv run moneytrees-dolphindb-alphas \
 生成后检查：
 
 ```bash
-test -f data/cn_daily_alpha_all.parquet
-test -f data/cn_daily_alpha_all.parquet.factor_manifest.json
+test -f data/factor_store/cn_daily/manifest.json
+uv run moneytrees-data-status \
+  --factor-store data/factor_store/cn_daily/manifest.json \
+  --mode error
 ```
 
-4. 跑主回测。
+6. 跑主回测。
 
 ```bash
 uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-5. 检查输出。
+7. 检查输出。
 
 ```bash
 test -f artifacts/xgb-alpha-all/metrics.json
@@ -119,7 +133,7 @@ test -f artifacts/xgb-alpha-all/run_config.json
 test -f artifacts/xgb-alpha-all/run_summary.txt
 ```
 
-6. 跑测试和 lint。
+8. 跑测试和 lint。
 
 ```bash
 uv run pytest -q
@@ -134,8 +148,8 @@ uv run ruff check .
 - 行业字段最好是 point-in-time 口径，避免历史回测未来信息污染。
 - DolphinDB wrapper 函数版本已记录。
 - `wq101alpha`、`gtja191Alpha` 和 `moneytreeAlpha` 模块版本已记录。
-- 输出 `.factor_manifest.json` 已保存并归档。
-- 回测输入使用合并后的 `data/cn_daily_alpha_all.parquet`。
+- factor store manifest 已保存并归档。
+- 回测输入优先使用 `data/factor_store/cn_daily/manifest.json`。
 
 ## 存储压力与因子数据管理
 
@@ -146,7 +160,7 @@ uv run ruff check .
 6000000 * 810 * 4 bytes  ~= 19.4 GB  # float32 裸数据
 ```
 
-Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cache、基础行情列、`daily_basic`、可交易过滤、基准列、`cn_daily_alpha158_360.parquet`、`cn_daily_alpha_all.parquet`、`export_parquet` 和多次实验产物。完整 810 因子全市场多年运行应按几十 GB 到上百 GB 的本地空间规划。
+Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cache、基础行情列、`daily_basic`、可交易过滤、基准列、factor store 分片、兼容宽表输出、`export_parquet` 和多次实验产物。完整 810 因子全市场多年运行应按几十 GB 到上百 GB 的本地空间规划。
 
 当前默认策略：
 
@@ -162,7 +176,7 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cach
 ```text
 data/raw/tushare/       TuShare 原始接口缓存，可重建标准面板
 data/panel/             清洗后的基础 date,ticker 面板
-data/factors/           Alpha101/191/158/360 分族因子文件
+data/factor_store/      Alpha101/191/158/360 分族因子文件
 artifacts/              回测指标、信号、持仓、配置和 manifest
 ```
 
@@ -173,7 +187,7 @@ raw cache、基础面板、factor store 和 experiment artifacts 的保留周期
 以下命令只读取目录大小，不删除文件：
 
 ```bash
-du -sh data/raw/tushare data/panel data/factors artifacts 2>/dev/null
+du -sh data/raw/tushare data/panel data/factor_store artifacts 2>/dev/null
 ```
 
 查看较大的 parquet 文件：
@@ -434,7 +448,7 @@ unexpected alpha columns
 - `oos_period_diagnostics.csv` 行数符合预期。
 - 使用 holdout 时，`holdout/metrics.json` 和 `holdout/holdout_config.json` 存在。
 - 数据输入文件和配置文件路径写入实验记录。
-- 使用外部 Alpha101/191 时，保存对应 `.factor_manifest.json` 的 hash 和版本标签。
+- 使用外部 Alpha101/191 时，保存 factor store manifest 或兼容 `.factor_manifest.json` 的 hash 和版本标签。
 
 ## 数据保存元数据
 

@@ -1,0 +1,32 @@
+services:
+  dolphindb:
+    image: ${DOLPHINDB_IMAGE:-dolphindb/dolphindb:latest}
+    ports:
+      - "${DOLPHINDB_PORT:-8848}:8848"
+    volumes:
+      - ./data:/data
+      - ./docker/dolphindb/modules:/opt/dolphindb/server/modules:ro
+      - ./docker/dolphindb/bootstrap:/opt/dolphindb/server/bootstrap:ro
+    environment:
+      DDB_USER: ${DOLPHINDB_USER:-admin}
+      DDB_PASSWORD: ${DOLPHINDB_PASSWORD:-123456}
+
+  moneytrees:
+    build:
+      context: .
+      args:
+        EXTRA: ${MONEYTREES_EXTRA:-research}
+    depends_on:
+      - dolphindb
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./configs:/app/configs:ro
+      - ./docker/dolphindb/modules:/app/docker/dolphindb/modules:ro
+    environment:
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+      DOLPHINDB_HOST: dolphindb
+      DOLPHINDB_PORT: "8848"
+      DOLPHINDB_USER: ${DOLPHINDB_USER:-admin}
+      DOLPHINDB_PASSWORD: ${DOLPHINDB_PASSWORD:-123456}
+    entrypoint: ["bash"]

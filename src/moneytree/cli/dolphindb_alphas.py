@@ -23,6 +23,7 @@ from moneytree.factors.external import (
     normalize_external_families,
     write_external_alpha_manifest,
 )
+from moneytree.factor_store import write_external_factor_store
 
 
 DEFAULT_ALPHA101_FUNCTION = "calcMoneyTreeAlpha101"
@@ -31,10 +32,11 @@ DEFAULT_ALPHA191_FUNCTION = "calcMoneyTreeAlpha191"
 
 @dataclass(frozen=True)
 class GenerationResult:
-    output_path: Path
-    manifest_path: Path
+    output_path: Path | None
+    manifest_path: Path | None
     rows: int
     alpha_columns: int
+    factor_store_manifest_path: Path | None = None
 
 
 def _dolphindb_install_message() -> str:
@@ -110,15 +112,35 @@ def _server_version(session: Any) -> str | None:
     return str(value) if value is not None else None
 
 
+def _positive_int(raw: str) -> int:
+    value = int(raw)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
 def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -> GenerationResult:
     families = _selected_families(args)
     factor_dtype = normalize_factor_dtype(getattr(args, "factor_dtype", "float32"))
     input_path = Path(args.input)
-    output_path = Path(args.output)
+    no_wide_output = bool(getattr(args, "no_wide_output", False))
+    factor_store_output = getattr(args, "factor_store_output", None)
+    if no_wide_output and not factor_store_output:
+        raise ValueError("--no-wide-output requires --factor-store-output.")
+    if no_wide_output and getattr(args, "output", None):
+        raise ValueError("--no-wide-output cannot be combined with --output.")
+    if not getattr(args, "output", None) and not factor_store_output:
+        raise ValueError("At least one output target is required: --output or --factor-store-output.")
+
+    output_path = Path(args.output) if getattr(args, "output", None) and not no_wide_output else None
     manifest_path = (
-        Path(args.manifest_output)
-        if args.manifest_output
-        else output_path.with_suffix(output_path.suffix + ".factor_manifest.json")
+        (
+            Path(args.manifest_output)
+            if args.manifest_output
+            else output_path.with_suffix(output_path.suffix + ".factor_manifest.json")
+        )
+        if output_path is not None
+        else None
     )
 
     panel = load_market_data(input_path)
@@ -150,71 +172,110 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
         if str(column).startswith(("alpha101_", "alpha191_"))
     ]
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    if manifest_path is not None:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
     temp_paths: list[Path] = []
 
     try:
-        with tempfile.NamedTemporaryFile(
-            prefix=f".{output_path.name}.",
-            suffix=".tmp",
-            dir=output_path.parent,
-            delete=False,
-        ) as handle:
-            temp_output = Path(handle.name)
-        temp_paths.append(temp_output)
-        save_market_data(
-            merged,
-            temp_output,
-            compression=args.compression,
-            compression_level=getattr(args, "compression_level", None),
-        )
+        if output_path is not None and manifest_path is not None:
+            with tempfile.NamedTemporaryFile(
+                prefix=f".{output_path.name}.",
+                suffix=".tmp",
+                dir=output_path.parent,
+                delete=False,
+            ) as handle:
+                temp_output = Path(handle.name)
+            temp_paths.append(temp_output)
+            save_market_data(
+                merged,
+                temp_output,
+                compression=args.compression,
+                compression_level=getattr(args, "compression_level", None),
+                row_group_size=getattr(args, "row_group_size", None),
+            )
 
-        manifest = build_external_alpha_manifest(
-            input_path=input_path,
-            output_path=temp_output,
-            input_frame=panel,
-            output_frame=merged,
-            families=families,
-            field_mapping=field_mapping,
-            validation=validation,
-            dolphindb={
-                "host": args.host,
-                "port": int(args.port),
-                "user": args.user,
-                "password": args.password,
-                "server_version": version,
-                "python_client_version": _package_version("dolphindb"),
-            },
-            module_versions=_module_versions(args),
-        )
-        manifest["output_data"]["path"] = str(output_path)
-        manifest["output_data"]["compression"] = args.compression
-        manifest["output_data"]["compression_level"] = getattr(args, "compression_level", None)
-        manifest["factor_dtype"] = factor_dtype
+            manifest = build_external_alpha_manifest(
+                input_path=input_path,
+                output_path=temp_output,
+                input_frame=panel,
+                output_frame=merged,
+                families=families,
+                field_mapping=field_mapping,
+                validation=validation,
+                dolphindb={
+                    "host": args.host,
+                    "port": int(args.port),
+                    "user": args.user,
+                    "password": args.password,
+                    "server_version": version,
+                    "python_client_version": _package_version("dolphindb"),
+                },
+                module_versions=_module_versions(args),
+            )
+            manifest["output_data"]["path"] = str(output_path)
+            manifest["output_data"]["compression"] = args.compression
+            manifest["output_data"]["compression_level"] = getattr(args, "compression_level", None)
+            manifest["output_data"]["row_group_size"] = getattr(args, "row_group_size", None)
+            manifest["factor_dtype"] = factor_dtype
 
-        with tempfile.NamedTemporaryFile(
-            prefix=f".{manifest_path.name}.",
-            suffix=".tmp",
-            dir=manifest_path.parent,
-            delete=False,
-        ) as handle:
-            temp_manifest = Path(handle.name)
-        temp_paths.append(temp_manifest)
-        write_external_alpha_manifest(manifest, temp_manifest)
+            with tempfile.NamedTemporaryFile(
+                prefix=f".{manifest_path.name}.",
+                suffix=".tmp",
+                dir=manifest_path.parent,
+                delete=False,
+            ) as handle:
+                temp_manifest = Path(handle.name)
+            temp_paths.append(temp_manifest)
+            write_external_alpha_manifest(manifest, temp_manifest)
 
-        temp_output.replace(output_path)
-        temp_manifest.replace(manifest_path)
-        temp_paths.clear()
+            temp_output.replace(output_path)
+            temp_manifest.replace(manifest_path)
+            temp_paths.clear()
     finally:
         for path in temp_paths:
             path.unlink(missing_ok=True)
+
+    factor_store_manifest_path: Path | None = None
+    if factor_store_output:
+        store_dir = Path(factor_store_output)
+        write_external_factor_store(
+            panel,
+            merged,
+            store_dir,
+            families=families,
+            factor_dtype=factor_dtype,
+            chunk_trade_dates=int(getattr(args, "chunk_trade_dates", 60)),
+            compression=args.compression,
+            compression_level=getattr(args, "compression_level", None),
+            row_group_size=getattr(args, "row_group_size", None),
+            metadata={
+                "source": "moneytrees-dolphindb-alphas",
+                "input": str(input_path),
+                "families": families,
+                "field_mapping": field_mapping,
+                "validation": validation,
+                "dolphindb": {
+                    "host": args.host,
+                    "port": int(args.port),
+                    "user": args.user,
+                    "server_version": version,
+                    "python_client_version": _package_version("dolphindb"),
+                },
+                "module_versions": _module_versions(args),
+                "row_group_size": getattr(args, "row_group_size", None),
+            },
+            show_progress=bool(getattr(args, "progress", False)),
+        )
+        factor_store_manifest_path = store_dir / "manifest.json"
 
     return GenerationResult(
         output_path=output_path,
         manifest_path=manifest_path,
         rows=int(len(merged)),
         alpha_columns=len(alpha_columns),
+        factor_store_manifest_path=factor_store_manifest_path,
     )
 
 
@@ -226,10 +287,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--input", required=True, help="Input Money Trees panel parquet or pickle.")
-    parser.add_argument("--output", required=True, help="Output merged panel parquet.")
+    parser.add_argument("--output", help="Output merged panel parquet.")
     parser.add_argument(
         "--manifest-output",
         help="Manifest JSON path. Defaults to <output>.factor_manifest.json.",
+    )
+    parser.add_argument(
+        "--factor-store-output",
+        help="Output factor-store directory for generated Alpha101/191 families.",
+    )
+    parser.add_argument(
+        "--no-wide-output",
+        action="store_true",
+        help="Write only --factor-store-output and skip the merged wide panel.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="DolphinDB host.")
     parser.add_argument("--port", type=int, default=8848, help="DolphinDB port.")
@@ -278,6 +348,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Parquet compression level. Defaults to 3 for zstd.",
     )
+    parser.add_argument(
+        "--row-group-size",
+        type=_positive_int,
+        default=None,
+        help="Optional parquet row group size in rows.",
+    )
+    parser.add_argument(
+        "--chunk-trade-dates",
+        type=_positive_int,
+        default=60,
+        help="Number of target trade dates per factor-store partition.",
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print factor-store partition write progress to stderr.",
+    )
     return parser
 
 
@@ -291,8 +378,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Saved panel: {result.output_path}")
-    print(f"Saved manifest: {result.manifest_path}")
+    if result.output_path is not None:
+        print(f"Saved panel: {result.output_path}")
+    if result.manifest_path is not None:
+        print(f"Saved manifest: {result.manifest_path}")
+    if result.factor_store_manifest_path is not None:
+        print(f"Saved factor store: {result.factor_store_manifest_path}")
     print(f"Rows: {result.rows:,}")
     print(f"Alpha columns: {result.alpha_columns:,}")
     return 0

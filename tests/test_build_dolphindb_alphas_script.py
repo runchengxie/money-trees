@@ -101,6 +101,12 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "moneytree_alpha_module_version": "wrapper-test",
         "factor_dtype": "float32",
         "compression": "snappy",
+        "compression_level": None,
+        "row_group_size": None,
+        "factor_store_output": None,
+        "no_wide_output": False,
+        "chunk_trade_dates": 60,
+        "progress": False,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -152,6 +158,60 @@ def test_dolphindb_generation_package_cli_smoke_with_mocked_session(tmp_path: Pa
     assert output_path.with_suffix(output_path.suffix + ".factor_manifest.json").exists()
 
 
+def test_dolphindb_generation_can_write_factor_store_only(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    store_dir = tmp_path / "store"
+    _panel().to_parquet(input_path)
+    session = FakeSession()
+
+    result = dolphindb_alphas.run_generation(
+        _args(
+            input_path,
+            tmp_path / "unused.parquet",
+            output=None,
+            factor_store_output=str(store_dir),
+            no_wide_output=True,
+            chunk_trade_dates=1,
+        ),
+        ddb_module=FakeDolphinDB(session),
+    )
+
+    manifest_path = store_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result.output_path is None
+    assert result.manifest_path is None
+    assert result.factor_store_manifest_path == manifest_path
+    assert result.alpha_columns == 101
+    assert "alpha101" in manifest["factor_families"]
+    assert len(manifest["factor_families"]["alpha101"]["paths"]) == 2
+    assert "supersecret" not in json.dumps(manifest, sort_keys=True)
+
+
+def test_dolphindb_generation_can_write_wide_and_factor_store(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    store_dir = tmp_path / "store"
+    _panel().to_parquet(input_path)
+
+    result = dolphindb_alphas.run_generation(
+        _args(input_path, output_path, factor_store_output=str(store_dir), chunk_trade_dates=1),
+        ddb_module=FakeDolphinDB(FakeSession()),
+    )
+
+    assert result.output_path == output_path
+    assert output_path.exists()
+    assert result.factor_store_manifest_path == store_dir / "manifest.json"
+    assert (store_dir / "manifest.json").exists()
+
+
+def test_dolphindb_generation_requires_an_output_target(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="At least one output target"):
+        dolphindb_alphas.run_generation(
+            _args(tmp_path / "input.parquet", tmp_path / "unused.parquet", output=None),
+            ddb_module=FakeDolphinDB(FakeSession()),
+        )
+
+
 def test_dolphindb_generation_can_keep_float64_factors(tmp_path: Path) -> None:
     input_path = tmp_path / "input.parquet"
     output_path = tmp_path / "output.parquet"
@@ -170,6 +230,24 @@ def test_dolphindb_generation_can_keep_float64_factors(tmp_path: Path) -> None:
     )
     assert str(out["alpha101_001"].dtype) == "float64"
     assert manifest["factor_dtype"] == "float64"
+
+
+def test_dolphindb_generation_records_row_group_size(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+
+    dolphindb_alphas.run_generation(
+        _args(input_path, output_path, row_group_size=1),
+        ddb_module=FakeDolphinDB(FakeSession()),
+    )
+
+    manifest = json.loads(
+        output_path.with_suffix(output_path.suffix + ".factor_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["output_data"]["row_group_size"] == 1
 
 
 def test_dolphindb_generation_script_is_compatibility_wrapper() -> None:

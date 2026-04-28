@@ -211,6 +211,11 @@ def test_parquet_write_options_rejects_snappy_level() -> None:
         parquet_write_options(compression="snappy", compression_level=3)
 
 
+def test_parquet_write_options_rejects_invalid_row_group_size() -> None:
+    with pytest.raises(ValueError, match="row group size"):
+        parquet_write_options(row_group_size=0)
+
+
 def test_apply_feature_lag_shifts_by_ticker_and_drops_all_missing_rows() -> None:
     idx = pd.MultiIndex.from_tuples(
         [

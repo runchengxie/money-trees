@@ -9,10 +9,13 @@ import pandas as pd
 import pytest
 
 from moneytree.cli.tushare import parse_args
+from moneytree.data import MarketDataSanityReport
+from moneytree.data_quality import DataQualityResult
 from moneytree.data_sources.tushare import (
     TushareDailyConfig,
     _TushareApiOptions,
     _call_api,
+    _emit_tushare_sanity_report,
     fetch_tushare_cn_daily_panel,
     resolve_tushare_token,
     standardize_tushare_cn_daily_panel,
@@ -483,6 +486,10 @@ def test_tushare_cli_accepts_cache_args() -> None:
             "float64",
             "--sanity-check",
             "error",
+            "--row-group-size",
+            "1000",
+            "--cache-row-group-size",
+            "500",
         ]
     )
 
@@ -493,6 +500,8 @@ def test_tushare_cli_accepts_cache_args() -> None:
     assert args.progress_every == 10
     assert args.factor_dtype == "float64"
     assert args.sanity_check == "error"
+    assert args.row_group_size == 1000
+    assert args.cache_row_group_size == 500
 
 
 def test_tushare_cli_accepts_proxy_args() -> None:
@@ -515,3 +524,40 @@ def test_tushare_cli_accepts_proxy_args() -> None:
     assert args.proxy_mode == "env"
     assert args.proxy_url == "http://127.0.0.1:10810"
     assert args.no_fallback_direct is True
+
+
+def test_tushare_sanity_wrapper_uses_shared_quality_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_quality_result(*args, **kwargs) -> DataQualityResult:
+        return DataQualityResult(
+            report=MarketDataSanityReport(
+                row_count=1,
+                column_count=2,
+                date_min="2021-01-04",
+                date_max="2021-01-04",
+                date_count=1,
+                ticker_count=1,
+                duplicate_key_count=1,
+                missing_required_columns=(),
+                null_rates={},
+                non_positive_price_counts={},
+                negative_volume_count=0,
+                inverted_ohlc_count=0,
+                warnings=(),
+                errors=("duplicate date/ticker keys: 1",),
+            )
+        )
+
+    monkeypatch.setattr(
+        "moneytree.data_sources.tushare.build_tushare_panel_quality_result",
+        fake_quality_result,
+    )
+
+    with pytest.raises(ValueError, match="duplicate date/ticker"):
+        _emit_tushare_sanity_report(
+            pd.DataFrame({"date": ["20210104"], "ticker": ["000001.SZ"]}),
+            stage="base",
+            mode="error",
+            show_progress=False,
+        )

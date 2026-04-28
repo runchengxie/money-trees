@@ -18,11 +18,13 @@ from moneytree.data import (
     normalize_factor_dtype,
     save_market_data,
 )
+from moneytree.factors.external import external_alpha_columns, sanitize_manifest_metadata
 from moneytree.factors.qlib import build_alpha158_features, build_alpha360_features
 from moneytree.metadata import dataframe_schema_hash
 
 FACTOR_STORE_MANIFEST_VERSION = "1.0"
 LOCAL_FACTOR_FAMILIES = ("alpha158", "alpha360")
+EXTERNAL_FACTOR_FAMILIES = ("alpha101", "alpha191")
 
 
 class FactorStoreValidationError(ValueError):
@@ -70,6 +72,12 @@ def _families_from_columns(columns: Iterable[object]) -> tuple[str, ...]:
 def _family_columns(columns: Iterable[object], family: str) -> list[str]:
     prefix = FACTOR_FAMILY_PREFIXES[family]
     return [str(column) for column in columns if str(column).startswith(prefix)]
+
+
+def _expected_external_family_columns(family: str) -> list[str]:
+    if family not in EXTERNAL_FACTOR_FAMILIES:
+        raise ValueError(f"Unsupported external factor family: {family}")
+    return external_alpha_columns(family)
 
 
 def _relative_path(base_dir: Path, path: Path) -> str:
@@ -154,6 +162,7 @@ def _write_partitioned_local_family(
     chunk_trade_dates: int,
     compression: str,
     compression_level: int | None,
+    row_group_size: int | None,
     show_progress: bool,
 ) -> dict[str, Any]:
     dates = pd.Index(base_frame.index.get_level_values("date").unique()).sort_values()
@@ -186,6 +195,7 @@ def _write_partitioned_local_family(
             part_path,
             compression=compression,
             compression_level=compression_level,
+            row_group_size=row_group_size,
         )
         paths.append(_relative_path(root, part_path))
         rows += int(len(target_features))
@@ -213,6 +223,68 @@ def _write_partitioned_local_family(
     }
 
 
+def write_partitioned_factor_family(
+    factor_frame: pd.DataFrame,
+    root: str | Path,
+    family: str,
+    *,
+    chunk_trade_dates: int = 60,
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
+    row_group_size: int | None = None,
+    show_progress: bool = False,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Write an already-computed factor family frame into date partitions."""
+    family_key = _normalize_families([family])[0]
+    indexed = _validate_unique_date_ticker(factor_frame, source_name=f"{family_key} factors")
+    root_path = Path(root)
+    dates = pd.Index(indexed.index.get_level_values("date").unique()).sort_values()
+    chunks = _date_chunks(dates, chunk_trade_dates)
+    family_dir = root_path / "factors" / family_key
+    family_dir.mkdir(parents=True, exist_ok=True)
+
+    date_index = indexed.index.get_level_values("date")
+    paths: list[str] = []
+    rows = 0
+    columns = int(len(indexed.columns))
+    for idx, target_dates in enumerate(chunks, start=1):
+        target_frame = indexed.loc[date_index.isin(target_dates)].sort_index()
+        part_path = family_dir / f"part-{idx:04d}.parquet"
+        save_market_data(
+            target_frame,
+            part_path,
+            compression=compression,
+            compression_level=compression_level,
+            row_group_size=row_group_size,
+        )
+        paths.append(_relative_path(root_path, part_path))
+        rows += int(len(target_frame))
+        if show_progress:
+            start_value = pd.Timestamp(target_dates[0]).date()
+            end_value = pd.Timestamp(target_dates[-1]).date()
+            print(
+                (
+                    f"[factor-store:{family_key}] part={idx}/{len(chunks)} "
+                    f"rows={rows} start={start_value} end={end_value}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+
+    entry: dict[str, Any] = {
+        "paths": paths,
+        "partitioned": True,
+        "prefix": FACTOR_FAMILY_PREFIXES[family_key],
+        "rows": rows,
+        "columns": columns,
+        "chunk_trade_dates": int(chunk_trade_dates),
+    }
+    if source:
+        entry["source"] = source
+    return entry
+
+
 def write_local_factor_store(
     base_panel: pd.DataFrame,
     output_dir: str | Path,
@@ -224,6 +296,7 @@ def write_local_factor_store(
     metadata: dict[str, Any] | None = None,
     compression: str = DEFAULT_PARQUET_COMPRESSION,
     compression_level: int | None = None,
+    row_group_size: int | None = None,
     overwrite: bool = False,
     show_progress: bool = False,
 ) -> dict[str, Any]:
@@ -272,6 +345,7 @@ def write_local_factor_store(
         base_path,
         compression=compression,
         compression_level=compression_level,
+        row_group_size=row_group_size,
     )
 
     factor_entries = dict(manifest.get("factor_families", {}))
@@ -290,6 +364,7 @@ def write_local_factor_store(
             chunk_trade_dates=chunk_trade_dates,
             compression=compression,
             compression_level=compression_level,
+            row_group_size=row_group_size,
             show_progress=show_progress,
         )
         generated.append(family)
@@ -309,6 +384,7 @@ def write_local_factor_store(
             "factor_dtype": dtype,
             "compression": compression,
             "compression_level": compression_level,
+            "row_group_size": row_group_size,
             "local_generation": {
                 "families_requested": list(requested_families),
                 "families_generated": generated,
@@ -317,12 +393,162 @@ def write_local_factor_store(
                 "chunk_trade_dates": int(chunk_trade_dates),
                 "compression": compression,
                 "compression_level": compression_level,
+                "row_group_size": row_group_size,
             },
             "metadata": {**dict(manifest.get("metadata", {})), **dict(metadata or {})},
         }
     )
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
+
+
+def write_external_factor_store(
+    base_panel: pd.DataFrame,
+    factor_panel: pd.DataFrame,
+    output_dir: str | Path,
+    *,
+    families: Iterable[str],
+    factor_dtype: str = "float32",
+    chunk_trade_dates: int = 60,
+    metadata: dict[str, Any] | None = None,
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
+    row_group_size: int | None = None,
+    overwrite: bool = False,
+    show_progress: bool = False,
+) -> dict[str, Any]:
+    """Write precomputed external Alpha101/191 families into a factor store."""
+    requested_families = _normalize_families(families)
+    unsupported = [family for family in requested_families if family not in EXTERNAL_FACTOR_FAMILIES]
+    if unsupported:
+        choices = ", ".join(EXTERNAL_FACTOR_FAMILIES)
+        raise ValueError(
+            f"Unsupported external factor families: {', '.join(unsupported)}. "
+            f"Expected one of: {choices}."
+        )
+    if not requested_families:
+        raise ValueError("At least one external factor family is required.")
+
+    dtype = normalize_factor_dtype(factor_dtype)
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+
+    indexed_base = _validate_unique_date_ticker(base_panel, source_name="base panel")
+    base_columns = [
+        column for column in indexed_base.columns if column not in factor_columns(indexed_base.columns)
+    ]
+    base_frame = indexed_base.loc[:, base_columns]
+    indexed_factors = _validate_unique_date_ticker(factor_panel, source_name="external factors")
+
+    factor_frames: dict[str, pd.DataFrame] = {}
+    for family in requested_families:
+        expected_columns = _expected_external_family_columns(family)
+        missing = [column for column in expected_columns if column not in indexed_factors.columns]
+        if missing:
+            raise FactorStoreValidationError(
+                f"{family} factors are missing expected columns: {missing}."
+            )
+        factor_frames[family] = coerce_factor_columns(indexed_factors.loc[:, expected_columns], dtype)
+    validate_factor_store_keys(base_frame, factor_frames)
+
+    manifest_path = root / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
+            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        existing_base_path = _resolve_store_path(root, manifest["base_panel"]["path"])
+        if existing_base_path.exists():
+            existing_base = _validate_unique_date_ticker(
+                load_market_data(existing_base_path),
+                source_name="base panel",
+            )
+            if not existing_base.index.equals(base_frame.index):
+                raise FactorStoreValidationError(
+                    "Existing factor store base panel index does not match the input panel."
+                )
+    else:
+        manifest = {
+            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
+            "kind": "moneytree_factor_store",
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "factor_families": {},
+            "key_validation": {
+                "date_ticker_unique": True,
+                "aligned": True,
+            },
+            "metadata": {},
+        }
+
+    base_path = root / "base.parquet"
+    save_market_data(
+        base_frame,
+        base_path,
+        compression=compression,
+        compression_level=compression_level,
+        row_group_size=row_group_size,
+    )
+
+    factor_entries = dict(manifest.get("factor_families", {}))
+    generated: list[str] = []
+    skipped: list[str] = []
+    for family, frame in factor_frames.items():
+        if family in factor_entries and not overwrite:
+            skipped.append(family)
+            continue
+        factor_entries[family] = write_partitioned_factor_family(
+            frame,
+            root,
+            family,
+            chunk_trade_dates=chunk_trade_dates,
+            compression=compression,
+            compression_level=compression_level,
+            row_group_size=row_group_size,
+            show_progress=show_progress,
+            source="dolphindb",
+        )
+        generated.append(family)
+
+    manifest.update(
+        {
+            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
+            "kind": "moneytree_factor_store",
+            "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "base_panel": {
+                "path": _relative_path(root, base_path),
+                "rows": int(len(base_frame)),
+                "columns": int(len(base_frame.columns)),
+                "schema_hash": dataframe_schema_hash(base_frame),
+            },
+            "factor_families": factor_entries,
+            "factor_dtype": dtype,
+            "compression": compression,
+            "compression_level": compression_level,
+            "row_group_size": row_group_size,
+            "key_validation": {
+                "date_ticker_unique": True,
+                "aligned": True,
+            },
+            "external_generation": sanitize_manifest_metadata(
+                {
+                    "families_requested": list(requested_families),
+                    "families_generated": generated,
+                    "families_skipped": skipped,
+                    "source": "dolphindb",
+                    "chunk_trade_dates": int(chunk_trade_dates),
+                    "compression": compression,
+                    "compression_level": compression_level,
+                    "row_group_size": row_group_size,
+                    **dict(metadata or {}),
+                }
+            ),
+            "metadata": sanitize_manifest_metadata(
+                {**dict(manifest.get("metadata", {})), **dict(metadata or {})}
+            ),
+        }
+    )
+    sanitized_manifest = sanitize_manifest_metadata(manifest)
+    manifest_path.write_text(json.dumps(sanitized_manifest, indent=2), encoding="utf-8")
+    return sanitized_manifest
 
 
 def write_factor_store(
@@ -334,6 +560,7 @@ def write_factor_store(
     metadata: dict[str, Any] | None = None,
     compression: str = DEFAULT_PARQUET_COMPRESSION,
     compression_level: int | None = None,
+    row_group_size: int | None = None,
 ) -> dict[str, Any]:
     """Write an additive base-panel plus factor-family store and return its manifest."""
     dtype = normalize_factor_dtype(factor_dtype)
@@ -369,6 +596,7 @@ def write_factor_store(
         base_path,
         compression=compression,
         compression_level=compression_level,
+        row_group_size=row_group_size,
     )
 
     factor_entries: dict[str, dict[str, Any]] = {}
@@ -379,6 +607,7 @@ def write_factor_store(
             factor_path,
             compression=compression,
             compression_level=compression_level,
+            row_group_size=row_group_size,
         )
         factor_entries[family] = {
             "path": _relative_path(root, factor_path),
@@ -400,6 +629,7 @@ def write_factor_store(
         "factor_dtype": dtype,
         "compression": compression,
         "compression_level": compression_level,
+        "row_group_size": row_group_size,
         "key_validation": {
             "date_ticker_unique": True,
             "aligned": True,

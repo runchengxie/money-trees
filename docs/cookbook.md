@@ -119,7 +119,7 @@ uv run moneytrees-factor-store \
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
 
-Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再并入标准 `date, ticker` 面板。详细环境和口径见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个 factor store。详细环境和口径见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
 
 安装外部 Alpha 依赖：
 
@@ -127,12 +127,13 @@ Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成�
 uv sync --dev --extra external-alphas
 ```
 
-生成并合并 Alpha101/191：
+生成 Alpha101/191 并写入 factor store：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
-  --input data/cn_daily_alpha158_360.parquet \
-  --output data/cn_daily_alpha_all.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --factor-store-output data/factor_store/cn_daily \
+  --no-wide-output \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
@@ -145,13 +146,13 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-旁路 manifest 默认写到：
+兼容旧宽表路径时仍可传 `--output data/cn_daily_alpha_all.parquet`。factor store 路径的 manifest 写到：
 
 ```text
-data/cn_daily_alpha_all.parquet.factor_manifest.json
+data/factor_store/cn_daily/manifest.json
 ```
 
-## 5. 使用完整 810 因子面板跑 XGBoost 回归
+## 5. 使用完整 810 因子 factor store 跑 XGBoost 回归
 
 ```bash
 uv sync --dev --extra research
@@ -160,7 +161,7 @@ uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/xgb-alpha-all
 ```
 
@@ -173,7 +174,7 @@ uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/ridge.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/ridge-alpha158-only \
   --set 'features.include_factor_families=["alpha158"]'
 ```
@@ -182,7 +183,7 @@ uv run moneytrees \
 
 ```bash
 uv run moneytrees \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/debug-alpha360 \
   --set 'features.include_factor_prefixes=["alpha360_"]' \
   --set model.feature_selection=none \
@@ -193,9 +194,13 @@ uv run moneytrees \
 
 ```python
 import pandas as pd
+from moneytree.factor_store import load_factor_store
 from moneytree.factors import compute_factor_ic, summarize_factor_ic
 
-frame = pd.read_parquet("data/cn_daily_alpha158_360.parquet")
+frame = load_factor_store(
+    "data/factor_store/cn_daily/manifest.json",
+    include_factor_families=["alpha158"],
+)
 ic = compute_factor_ic(frame, ["alpha158_kmid", "alpha158_roc_20"])
 summary = summarize_factor_ic(ic)
 print(summary)
@@ -212,7 +217,7 @@ uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/ridge.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha158_360.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/ridge-alpha-daily
 ```
 
@@ -237,7 +242,7 @@ uv run moneytrees \
   --config configs/model/rf.yaml \
   --config configs/backtest/default.yaml \
   --config configs/preset/tuning.yaml \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/rf-alpha-all-tuned
 ```
 

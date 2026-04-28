@@ -19,6 +19,7 @@ class RewriteResult:
     columns: int
     compression: str
     compression_level: int | None
+    row_group_size: int | None
 
 
 def _positive_int(raw: str) -> int:
@@ -99,6 +100,7 @@ def run_rewrite(args: argparse.Namespace) -> RewriteResult:
         columns=int(len(frame.columns)),
         compression=str(args.compression),
         compression_level=args.compression_level,
+        row_group_size=args.row_group_size,
     )
 
 
@@ -112,10 +114,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     level = result.compression_level if result.compression_level is not None else "default"
+    row_group = result.row_group_size if result.row_group_size is not None else "default"
     print(
         "Saved parquet "
         f"rows={result.rows} cols={result.columns} "
         f"compression={result.compression} compression_level={level} "
+        f"row_group_size={row_group} "
         f"input={result.input_path} output={result.output_path}"
     )
     return 0

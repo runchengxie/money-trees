@@ -40,6 +40,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Output parquet compression level. Defaults to 3 for zstd.",
     )
+    parser.add_argument(
+        "--row-group-size",
+        type=_positive_int,
+        default=None,
+        help="Optional output parquet row group size in rows.",
+    )
     parser.add_argument("--benchmark", default="000300.SH", help="Benchmark index code.")
     parser.add_argument(
         "--tickers",
@@ -91,6 +97,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=_positive_int,
         default=None,
         help="Raw TuShare cache parquet compression level. Defaults to 3 for zstd.",
+    )
+    parser.add_argument(
+        "--cache-row-group-size",
+        type=_positive_int,
+        default=None,
+        help="Optional raw TuShare cache parquet row group size in rows.",
     )
     parser.add_argument(
         "--refresh-cache",
@@ -171,6 +183,7 @@ def main(argv: list[str] | None = None) -> None:
         sanity_check=args.sanity_check,
         cache_compression=args.cache_compression,
         cache_compression_level=args.cache_compression_level,
+        cache_row_group_size=args.cache_row_group_size,
     )
     frame = fetch_tushare_cn_daily_panel(config)
     save_market_data(
@@ -178,6 +191,7 @@ def main(argv: list[str] | None = None) -> None:
         Path(args.output),
         compression=args.compression,
         compression_level=args.compression_level,
+        row_group_size=args.row_group_size,
     )
     print(
         "Saved TuShare panel "

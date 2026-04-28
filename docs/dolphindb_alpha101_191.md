@@ -1,6 +1,6 @@
 # DolphinDB Alpha101/191 外部因子生产
 
-本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费最终 parquet 面板，不在回测过程中实时调用 DolphinDB。
+本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入 factor store；旧的宽 parquet 面板输出继续保留用于兼容。
 
 ## 当前边界
 
@@ -8,8 +8,8 @@
 
 | 因子族 | 数量 | 项目内计算状态 |
 | --- | ---: | --- |
-| Alpha101 | 101 | 外部生成后并入面板 |
-| Alpha191 | 191 | 外部生成后并入面板 |
+| Alpha101 | 101 | 外部生成后写入 factor store，或兼容并入宽面板 |
+| Alpha191 | 191 | 外部生成后写入 factor store，或兼容并入宽面板 |
 | Alpha158 | 158 | 本地 `build_alpha158_features` 生成 |
 | Alpha360 | 360 | 本地 `build_alpha360_features` 生成 |
 
@@ -20,7 +20,16 @@
 ```text
 TuShare / 标准日频面板
 -> DolphinDB 离线计算 Alpha101/191
--> 输出带 alpha101_* / alpha191_* 的 parquet
+-> 写入 data/factor_store/cn 的 alpha101 / alpha191 分族分片
+-> moneytrees 使用 factor store manifest 正常回测
+```
+
+兼容数据流仍可用：
+
+```text
+TuShare / 标准日频面板
+-> DolphinDB 离线计算 Alpha101/191
+-> 输出带 alpha101_* / alpha191_* 的宽 parquet
 -> moneytrees 使用该 parquet 正常回测
 ```
 
@@ -62,10 +71,19 @@ docker ps
 
 ## DolphinDB 容器
 
+仓库提供了 compose scaffold：
+
+```bash
+docker compose -f docker-compose.alpha.yml run --rm moneytrees \
+  -lc 'moneytrees-dolphindb-alphas --help'
+```
+
+该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。`data/`、`artifacts/` 和 `docker/dolphindb/modules/` 通过 volume 挂载，不会打进镜像。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
+
 在项目根目录创建本地挂载目录：
 
 ```bash
-mkdir -p infra/dolphindb/modules infra/dolphindb/data infra/dolphindb/logs
+mkdir -p docker/dolphindb/modules docker/dolphindb/bootstrap
 ```
 
 启动单节点容器，镜像版本请在本地固定成你实际验证过的版本：
@@ -75,9 +93,8 @@ docker run -itd \
   --name dolphindb-alpha \
   --hostname host1 \
   -p 8848:8848 \
-  -v "$PWD/infra/dolphindb/modules:/data/ddb/server/modules" \
-  -v "$PWD/infra/dolphindb/data:/data/ddb/server/data" \
-  -v "$PWD/infra/dolphindb/logs:/data/ddb/server/log" \
+  -v "$PWD/docker/dolphindb/modules:/data/ddb/server/modules" \
+  -v "$PWD/data:/data" \
   dolphindb/dolphindb:<ddb-version> \
   sh
 ```
@@ -99,7 +116,7 @@ admin / 123456
 把外部获取或本地维护的模块放到：
 
 ```text
-infra/dolphindb/modules/
+docker/dolphindb/modules/
 ```
 
 预期文件：
@@ -126,7 +143,7 @@ tradetime, securityid, alpha101_001, ..., alpha101_101
 tradetime, securityid, alpha191_001, ..., alpha191_191
 ```
 
-Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列并合并回面板。
+Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列，并写入 factor store 或兼容合并回宽面板。
 
 ## 字段映射
 
@@ -171,7 +188,38 @@ uv run moneytrees-tushare \
   --factor-family alpha360
 ```
 
-再生成并合并 Alpha101/191：
+推荐直接写入 factor store：
+
+```bash
+uv run moneytrees-dolphindb-alphas \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --factor-store-output data/factor_store/cn \
+  --no-wide-output \
+  --host 127.0.0.1 \
+  --port 8848 \
+  --user admin \
+  --password "$DOLPHINDB_PASSWORD" \
+  --alpha101 \
+  --alpha191 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --wq101-module-version <your-wq101-version> \
+  --gtja191-module-version <your-gtja191-version> \
+  --moneytree-alpha-module-version <your-wrapper-version>
+```
+
+然后直接从 factor store 回测：
+
+```bash
+uv run moneytrees \
+  --config configs/market/cn.yaml \
+  --config configs/model/xgb_regressor.yaml \
+  --config configs/backtest/default.yaml \
+  --data data/factor_store/cn/manifest.json \
+  --output-dir artifacts/xgb-alpha-all
+```
+
+旧路径仍可生成并合并 Alpha101/191 到宽面板：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -190,7 +238,7 @@ uv run moneytrees-dolphindb-alphas \
 
 `scripts/build_dolphindb_alphas.py` 仍保留为兼容 wrapper，新的正式入口是 `moneytrees-dolphindb-alphas`。
 
-输出：
+旧路径输出：
 
 ```text
 data/cn_daily_alpha_all.parquet
