@@ -3,7 +3,7 @@
 > A dollar might turn to a million and we all rich\ 
 > That's just how I feel
 > 
-> 一块钱也能滚成一百万，兄弟们都能富起来我心里就是这么觉得\ 
+> 一块钱也能滚成一百万，兄弟们都能富起来\ 
 > 我心里就是这么觉得
 > 
 > *Kendrick Lamar - Money Trees*
