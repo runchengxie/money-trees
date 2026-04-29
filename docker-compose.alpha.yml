@@ -1,10 +1,10 @@
 services:
   dolphindb:
-    image: ${DOLPHINDB_IMAGE:-dolphindb/dolphindb:latest}
+    image: ${DOLPHINDB_IMAGE:-dolphindb/dolphindb:v2.00.18}
     ports:
       - "${DOLPHINDB_PORT:-8848}:8848"
     volumes:
-      - ./data:/data
+      - ./data/ddb/server/data:/data/ddb/server/data
       - ./docker/dolphindb/modules:/opt/dolphindb/server/modules:ro
       - ./docker/dolphindb/bootstrap:/opt/dolphindb/server/bootstrap:ro
     environment:

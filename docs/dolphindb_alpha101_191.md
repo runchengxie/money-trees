@@ -78,7 +78,7 @@ docker compose -f docker-compose.alpha.yml run --rm moneytrees \
   -lc 'moneytrees-dolphindb-alphas --help'
 ```
 
-该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。`data/`、`artifacts/` 和 `docker/dolphindb/modules/` 通过 volume 挂载，不会打进镜像。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
+该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。Python runner 挂载 `data/`、`artifacts/` 和 `docker/dolphindb/modules/`；DolphinDB server 只挂载自己的 server data 子目录，避免覆盖镜像内置的 `/data/ddb/server/dolphindb` 启动程序。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
 
 在项目根目录创建本地挂载目录：
 
@@ -94,7 +94,7 @@ docker run -itd \
   --hostname host1 \
   -p 8848:8848 \
   -v "$PWD/docker/dolphindb/modules:/data/ddb/server/modules" \
-  -v "$PWD/data:/data" \
+  -v "$PWD/data/ddb/server/data:/data/ddb/server/data" \
   dolphindb/dolphindb:<ddb-version> \
   sh
 ```
