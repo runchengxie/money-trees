@@ -119,6 +119,14 @@ admin / 123456
 docker/dolphindb/modules/
 ```
 
+使用本仓库 `docker-compose.alpha.yml` 时，该目录会只读挂载到 DolphinDB server 的：
+
+```text
+/opt/dolphindb/server/modules
+```
+
+如果你用下方手工 `docker run` 示例，请确保挂载目标是你所用 DolphinDB 镜像实际读取模块的 server modules 目录。
+
 预期文件：
 
 ```text
@@ -129,7 +137,7 @@ gtja191Prepare.dos
 moneytreeAlpha.dos
 ```
 
-这些 `.dos` 文件不提交到仓库。`moneytreeAlpha.dos` 是本地适配包装模块，建议提供两个函数：
+这些 `.dos` 文件不提交到仓库。`wq101alpha.dos` / `gtja191Alpha.dos` 是外部公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是外部准备模块，生产用 `moneytreeAlpha.dos` 是本地适配包装模块。`moneytreeAlpha.dos` 建议提供两个函数：
 
 ```text
 calcMoneyTreeAlpha101(rawData, startTime, endTime)
@@ -144,6 +152,14 @@ tradetime, securityid, alpha191_001, ..., alpha191_191
 ```
 
 Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列，并写入 factor store 或兼容合并回宽面板。
+
+补齐模块并重启 DolphinDB 后，可以先只验证模块加载：
+
+```bash
+uv run python -c 'import dolphindb as ddb; s=ddb.Session(); s.connect("127.0.0.1",8848,"admin","123456"); print(s.run("use wq101alpha; use prepare101; use gtja191Alpha; use gtja191Prepare; use moneytreeAlpha; 1"))'
+```
+
+返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB 的 `use` 模块名。
 
 ## 字段映射
 
@@ -189,6 +205,48 @@ uv run moneytrees-tushare \
 ```
 
 推荐直接写入 factor store：
+
+首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式 factor store。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
+
+Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
+
+```bash
+uv run moneytrees-dolphindb-alphas \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --factor-store-output data/factor_store/cn-alpha101-check \
+  --no-wide-output \
+  --host 127.0.0.1 \
+  --port 8848 \
+  --user admin \
+  --password "$DOLPHINDB_PASSWORD" \
+  --alpha101 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --wq101-module-version <your-wq101-version> \
+  --gtja191-module-version <your-gtja191-version> \
+  --moneytree-alpha-module-version <your-wrapper-version>
+```
+
+Alpha191 单独验证时只传 `--alpha191`：
+
+```bash
+uv run moneytrees-dolphindb-alphas \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --factor-store-output data/factor_store/cn-alpha191-check \
+  --no-wide-output \
+  --host 127.0.0.1 \
+  --port 8848 \
+  --user admin \
+  --password "$DOLPHINDB_PASSWORD" \
+  --alpha191 \
+  --factor-dtype float32 \
+  --chunk-trade-dates 60 \
+  --wq101-module-version <your-wq101-version> \
+  --gtja191-module-version <your-gtja191-version> \
+  --moneytree-alpha-module-version <your-wrapper-version>
+```
+
+最终同时生成并写入正式 factor store：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \

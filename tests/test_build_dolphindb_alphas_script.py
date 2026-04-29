@@ -4,6 +4,7 @@ import argparse
 import builtins
 import json
 from pathlib import Path
+import re
 from types import ModuleType
 from typing import Any
 
@@ -38,8 +39,21 @@ def _panel() -> pd.DataFrame:
 
 
 class FakeSession:
-    def __init__(self, *, missing_column: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        missing_column: bool = False,
+        missing_modules: set[str] | None = None,
+        missing_functions: set[str] | None = None,
+        function_results: dict[str, str] | None = None,
+    ) -> None:
         self.missing_column = missing_column
+        self.missing_modules = missing_modules or set()
+        self.missing_functions = missing_functions or set()
+        self.function_results = function_results or {
+            "calcMoneyTreeAlpha101": "alpha101",
+            "calcMoneyTreeAlpha191": "alpha191",
+        }
         self.uploaded: dict[str, pd.DataFrame] = {}
         self.connected: tuple[Any, ...] | None = None
         self.scripts: list[str] = []
@@ -52,10 +66,24 @@ class FakeSession:
 
     def run(self, script: str) -> Any:
         self.scripts.append(script)
+        for module_name in self.missing_modules:
+            if f"use {module_name}" in script:
+                raise RuntimeError(f"Can't find module [{module_name}]")
         if script == "version()":
             return "test-ddb"
-        if "calcMoneyTreeAlpha101" in script:
-            return self._alpha_result("alpha101")
+        if "defs(" in script:
+            match = re.search(r'defs\("([^"]+)"\)', script)
+            function_name = match.group(1) if match else ""
+            available = (
+                function_name in self.function_results
+                and function_name not in self.missing_functions
+            )
+            return pd.DataFrame({"name": [function_name] if available else []})
+        for function_name, family in self.function_results.items():
+            if f"{function_name}(rawData" in script:
+                if function_name in self.missing_functions:
+                    raise RuntimeError(f"Unknown function [{function_name}]")
+                return self._alpha_result(family)
         return None
 
     def _alpha_result(self, family: str) -> pd.DataFrame:
@@ -156,6 +184,129 @@ def test_dolphindb_generation_package_cli_smoke_with_mocked_session(tmp_path: Pa
     assert result.alpha_columns == 101
     assert output_path.exists()
     assert output_path.with_suffix(output_path.suffix + ".factor_manifest.json").exists()
+
+
+def test_dolphindb_alpha101_preflight_loads_required_modules(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession()
+
+    dolphindb_alphas.run_generation(
+        _args(input_path, output_path),
+        ddb_module=FakeDolphinDB(session),
+    )
+
+    assert "use wq101alpha\n1" in session.scripts
+    assert "use prepare101\n1" in session.scripts
+    assert "use moneytreeAlpha\n1" in session.scripts
+    calc_index = next(
+        idx
+        for idx, script in enumerate(session.scripts)
+        if "calcMoneyTreeAlpha101(rawData" in script
+    )
+    preflight_indexes = [
+        session.scripts.index("use wq101alpha\n1"),
+        session.scripts.index("use prepare101\n1"),
+        session.scripts.index("use moneytreeAlpha\n1"),
+    ]
+    assert max(preflight_indexes) < calc_index
+
+
+def test_dolphindb_alpha191_preflight_loads_required_modules(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession()
+
+    result = dolphindb_alphas.run_generation(
+        _args(input_path, output_path, alpha101=False, alpha191=True),
+        ddb_module=FakeDolphinDB(session),
+    )
+
+    assert result.alpha_columns == 191
+    assert "use gtja191Alpha\n1" in session.scripts
+    assert "use gtja191Prepare\n1" in session.scripts
+    assert "use moneytreeAlpha\n1" in session.scripts
+    calc_index = next(
+        idx
+        for idx, script in enumerate(session.scripts)
+        if "calcMoneyTreeAlpha191(rawData" in script
+    )
+    preflight_indexes = [
+        session.scripts.index("use gtja191Alpha\n1"),
+        session.scripts.index("use gtja191Prepare\n1"),
+        session.scripts.index("use moneytreeAlpha\n1"),
+    ]
+    assert max(preflight_indexes) < calc_index
+
+
+def test_dolphindb_preflight_reports_missing_module(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession(missing_modules={"prepare101"})
+
+    with pytest.raises(RuntimeError) as exc_info:
+        dolphindb_alphas.run_generation(
+            _args(input_path, output_path),
+            ddb_module=FakeDolphinDB(session),
+        )
+
+    message = str(exc_info.value)
+    assert "prepare101" in message
+    assert "prepare101.dos" in message
+    assert "docker/dolphindb/modules/" in message
+    assert "--wq101-module-version" in message
+    assert session.uploaded == {}
+
+
+def test_dolphindb_preflight_reports_missing_wrapper_function(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession(missing_functions={"calcMoneyTreeAlpha101"})
+
+    with pytest.raises(RuntimeError) as exc_info:
+        dolphindb_alphas.run_generation(
+            _args(input_path, output_path),
+            ddb_module=FakeDolphinDB(session),
+        )
+
+    message = str(exc_info.value)
+    assert "calcMoneyTreeAlpha101" in message
+    assert "moneytreeAlpha.dos" in message
+    assert session.uploaded == {}
+
+
+def test_dolphindb_preflight_uses_custom_wrapper_function_names(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession(
+        function_results={
+            "customAlpha101": "alpha101",
+            "customAlpha191": "alpha191",
+        }
+    )
+
+    result = dolphindb_alphas.run_generation(
+        _args(
+            input_path,
+            output_path,
+            alpha101_function="customAlpha101",
+            alpha191_function="customAlpha191",
+            alpha191=True,
+        ),
+        ddb_module=FakeDolphinDB(session),
+    )
+
+    script_text = "\n---\n".join(session.scripts)
+    assert result.alpha_columns == 292
+    assert 'defs("customAlpha101")' in script_text
+    assert 'defs("customAlpha191")' in script_text
+    assert "customAlpha101(rawData, startTime, endTime)" in session.scripts
+    assert "customAlpha191(rawData, startTime, endTime)" in session.scripts
 
 
 def test_dolphindb_generation_can_write_factor_store_only(tmp_path: Path) -> None:

@@ -28,6 +28,12 @@ from moneytree.factor_store import write_external_factor_store
 
 DEFAULT_ALPHA101_FUNCTION = "calcMoneyTreeAlpha101"
 DEFAULT_ALPHA191_FUNCTION = "calcMoneyTreeAlpha191"
+MODULE_DIR_HINT = "docker/dolphindb/modules/"
+MODULE_VERSION_HINT = (
+    "`--wq101-module-version`, `--gtja191-module-version`, and "
+    "`--moneytree-alpha-module-version` only record manifest metadata; they do not "
+    "change DolphinDB `use` module names."
+)
 
 
 @dataclass(frozen=True)
@@ -87,13 +93,76 @@ def _module_versions(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-def _run_setup_script(session: Any, families: Sequence[str]) -> None:
-    module_lines: list[str] = []
+def _required_modules(families: Sequence[str]) -> list[str]:
+    modules: list[str] = []
     if "alpha101" in families:
-        module_lines.extend(["use wq101alpha", "use prepare101"])
+        modules.extend(["wq101alpha", "prepare101"])
     if "alpha191" in families:
-        module_lines.extend(["use gtja191Alpha", "use gtja191Prepare"])
-    module_lines.append("use moneytreeAlpha")
+        modules.extend(["gtja191Alpha", "gtja191Prepare"])
+    modules.append("moneytreeAlpha")
+    return list(dict.fromkeys(modules))
+
+
+def _dolphindb_string_literal(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _empty_result(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        return len(value) == 0
+    except TypeError:
+        return not bool(value)
+
+
+def _preflight_module_error(module_name: str, exc: Exception) -> RuntimeError:
+    return RuntimeError(
+        "DolphinDB Alpha101/191 preflight failed while loading module "
+        f"[{module_name}]. Expected local module file: "
+        f"{MODULE_DIR_HINT}{module_name}.dos. When using docker-compose.alpha.yml, "
+        "this repository directory is mounted into the DolphinDB server modules "
+        f"directory. {MODULE_VERSION_HINT} Original DolphinDB error: {exc}"
+    )
+
+
+def _preflight_function_error(function_name: str, family: str) -> RuntimeError:
+    return RuntimeError(
+        "DolphinDB Alpha101/191 preflight failed because moneytreeAlpha.dos does "
+        f"not expose wrapper function [{function_name}] for {family}. Add the "
+        f"function to {MODULE_DIR_HINT}moneytreeAlpha.dos or pass the correct "
+        f"--{family}-function value."
+    )
+
+
+def _run_preflight(session: Any, args: argparse.Namespace, families: Sequence[str]) -> None:
+    for module_name in _required_modules(families):
+        try:
+            session.run(f"use {module_name}\n1")
+        except Exception as exc:
+            raise _preflight_module_error(module_name, exc) from exc
+
+    for family in families:
+        function_name = _family_function(args, family)
+        function_literal = _dolphindb_string_literal(function_name)
+        try:
+            result = session.run(
+                "use moneytreeAlpha\n"
+                f"select name from defs({function_literal}) where name = {function_literal}"
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "DolphinDB Alpha101/191 preflight failed while checking wrapper "
+                f"function [{function_name}] in moneytreeAlpha.dos. Original "
+                f"DolphinDB error: {exc}"
+            ) from exc
+        if _empty_result(result):
+            raise _preflight_function_error(function_name, family)
+
+
+def _run_setup_script(session: Any, families: Sequence[str]) -> None:
+    module_lines = [f"use {module_name}" for module_name in _required_modules(families)]
 
     session.run(
         "\n".join(module_lines)
@@ -154,6 +223,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
     session = ddb.Session()
     session.connect(args.host, int(args.port), args.user, args.password)
     version = _server_version(session)
+    _run_preflight(session, args, families)
     session.upload({"rawData": ddb_input})
     _run_setup_script(session, families)
 
