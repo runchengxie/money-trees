@@ -162,6 +162,25 @@ def test_write_local_factor_store_from_parquet_matches_in_memory_output(tmp_path
     )
 
 
+def test_write_local_factor_store_from_indexed_parquet_reads_date_index(tmp_path) -> None:
+    input_path = tmp_path / "base_indexed.parquet"
+    _base_panel(days=4).set_index(["date", "ticker"]).to_parquet(
+        input_path,
+        row_group_size=4,
+    )
+
+    manifest = write_local_factor_store_from_parquet(
+        input_path,
+        tmp_path / "stream_store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=2,
+    )
+
+    assert manifest["base_panel"]["rows"] == 8
+    assert manifest["factor_families"]["alpha158"]["rows"] == 8
+
+
 def test_write_local_factor_store_progress_reports_part_status(tmp_path, capsys) -> None:
     write_local_factor_store(
         _base_panel(days=4),

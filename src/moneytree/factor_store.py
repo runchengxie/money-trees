@@ -515,8 +515,8 @@ def _parquet_trade_dates(path: Path, *, batch_size: int = 250_000) -> pd.Index:
     seen: dict[str, object] = {}
     parquet_file = pq.ParquetFile(path)
     for batch in parquet_file.iter_batches(columns=["date"], batch_size=int(batch_size)):
-        frame = batch.to_pandas()
-        for value in pd.unique(frame["date"].dropna()):
+        values = batch.column(batch.schema.get_field_index("date")).to_pandas()
+        for value in pd.unique(values.dropna()):
             seen.setdefault(str(value), value)
 
     dates = pd.Index(seen.values())
