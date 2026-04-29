@@ -281,6 +281,7 @@ uv run moneytrees-tushare \
 - 正式拉取始终设置 `--cache-dir data/raw/tushare`。
 - 重复运行时搭配 `--refresh-recent-days 20` 刷新近期交易日。
 - 长任务加 `--progress`；需要更频繁输出时使用 `--progress-every 10`。
+- CLI 默认以 `--request-interval-seconds 0.13` 控制真实 TuShare 请求间隔，并在频率超限时按 `--rate-limit-wait-seconds` 等待后重试；cache 命中不会等待。
 - 调试时先限制日期范围和股票池，例如 `--tickers 000001.SZ,600000.SH`。
 - 只定位 TuShare/API 连通性时，先不加 `--factor-family`。
 - 只定位基础接口时，可临时使用 `--skip-daily-basic`、`--skip-adj-factor`、`--skip-limits`、`--skip-suspend` 和 `--skip-stock-basic`，但正式回测通常需要这些列支撑可交易过滤。

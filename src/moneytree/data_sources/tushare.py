@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import threading
+import time
 from typing import Any
 import warnings
 
@@ -34,6 +35,9 @@ from moneytree.metadata import (
 TOKEN_ENV_NAMES = ("TUSHARE_TOKEN", "TUSHARE_PRO_TOKEN", "TS_TOKEN", "TUSHARE_API_KEY")
 TUSHARE_PROXY_MODES = ("direct", "env", "proxy")
 TUSHARE_SANITY_CHECK_MODES = DATA_QUALITY_MODES_WITH_OFF
+DEFAULT_TUSHARE_REQUEST_INTERVAL_SECONDS = 0.0
+DEFAULT_TUSHARE_RATE_LIMIT_RETRIES = 3
+DEFAULT_TUSHARE_RATE_LIMIT_WAIT_SECONDS = 65.0
 _PROXY_ENV_NAMES = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -45,6 +49,8 @@ _PROXY_ENV_NAMES = (
 _NO_PROXY_ENV_NAMES = ("NO_PROXY", "no_proxy")
 _TUSHARE_NO_PROXY_HOSTS = ("api.waditu.com", "waditu.com")
 _PROXY_ENV_LOCK = threading.RLock()
+_TUSHARE_RATE_LIMIT_LOCK = threading.RLock()
+_LAST_TUSHARE_API_CALL_MONOTONIC: float | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,9 @@ class _TushareApiOptions:
     proxy_mode: str = "direct"
     proxy_url: str | None = None
     fallback_direct: bool = True
+    request_interval_seconds: float = DEFAULT_TUSHARE_REQUEST_INTERVAL_SECONDS
+    rate_limit_retries: int = DEFAULT_TUSHARE_RATE_LIMIT_RETRIES
+    rate_limit_wait_seconds: float = DEFAULT_TUSHARE_RATE_LIMIT_WAIT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -79,6 +88,9 @@ class TushareDailyConfig:
     proxy_mode: str = "direct"
     proxy_url: str | None = None
     fallback_direct: bool = True
+    request_interval_seconds: float = DEFAULT_TUSHARE_REQUEST_INTERVAL_SECONDS
+    rate_limit_retries: int = DEFAULT_TUSHARE_RATE_LIMIT_RETRIES
+    rate_limit_wait_seconds: float = DEFAULT_TUSHARE_RATE_LIMIT_WAIT_SECONDS
     sanity_check: str = "warn"
     cache_compression: str = DEFAULT_PARQUET_COMPRESSION
     cache_compression_level: int | None = None
@@ -234,6 +246,55 @@ def _looks_like_proxy_error(exc: BaseException) -> bool:
     return False
 
 
+def _looks_like_rate_limit_error(exc: BaseException) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    needles = (
+        "频率超限",
+        "频次",
+        "rate limit",
+        "too many requests",
+        "requests per minute",
+        "500次/分钟",
+    )
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        text = str(current).lower()
+        if any(needle in text for needle in needles):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _wait_for_tushare_request_interval(interval_seconds: float) -> None:
+    interval = max(0.0, float(interval_seconds))
+    if interval <= 0:
+        return
+
+    global _LAST_TUSHARE_API_CALL_MONOTONIC
+    with _TUSHARE_RATE_LIMIT_LOCK:
+        now = time.monotonic()
+        if _LAST_TUSHARE_API_CALL_MONOTONIC is not None:
+            remaining = interval - (now - _LAST_TUSHARE_API_CALL_MONOTONIC)
+            if remaining > 0:
+                time.sleep(remaining)
+                now = time.monotonic()
+        _LAST_TUSHARE_API_CALL_MONOTONIC = now
+
+
+def _invoke_tushare_method(
+    method,
+    clean_params: dict[str, Any],
+    *,
+    proxy_mode: str,
+    proxy_url: str | None,
+    request_interval_seconds: float,
+):
+    _wait_for_tushare_request_interval(request_interval_seconds)
+    with _temporary_proxy_mode(proxy_mode, proxy_url):
+        return method(**clean_params)
+
+
 def _call_api(
     pro,
     api_name: str,
@@ -244,28 +305,57 @@ def _call_api(
     options = api_options or _TushareApiOptions()
     method = getattr(pro, api_name)
     clean_params = {key: value for key, value in params.items() if value is not None}
-    try:
-        with _temporary_proxy_mode(options.proxy_mode, options.proxy_url):
-            out = method(**clean_params)
-    except Exception as exc:
-        if (
-            options.proxy_mode != "direct"
-            and options.fallback_direct
-            and _looks_like_proxy_error(exc)
-        ):
+    retries = max(0, int(options.rate_limit_retries))
+    attempts = 0
+    while True:
+        try:
+            try:
+                out = _invoke_tushare_method(
+                    method,
+                    clean_params,
+                    proxy_mode=options.proxy_mode,
+                    proxy_url=options.proxy_url,
+                    request_interval_seconds=options.request_interval_seconds,
+                )
+            except Exception as exc:
+                if (
+                    options.proxy_mode != "direct"
+                    and options.fallback_direct
+                    and _looks_like_proxy_error(exc)
+                ):
+                    warnings.warn(
+                        (
+                            f"TuShare API '{api_name}' failed through proxy mode "
+                            f"'{options.proxy_mode}'; retrying direct."
+                        ),
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    out = _invoke_tushare_method(
+                        method,
+                        clean_params,
+                        proxy_mode="direct",
+                        proxy_url=None,
+                        request_interval_seconds=options.request_interval_seconds,
+                    )
+                else:
+                    raise
+            return out if isinstance(out, pd.DataFrame) else pd.DataFrame(out)
+        except Exception as exc:
+            if not _looks_like_rate_limit_error(exc) or attempts >= retries:
+                raise
+            attempts += 1
+            wait_seconds = max(0.0, float(options.rate_limit_wait_seconds))
             warnings.warn(
                 (
-                    f"TuShare API '{api_name}' failed through proxy mode "
-                    f"'{options.proxy_mode}'; retrying direct."
+                    f"TuShare API '{api_name}' hit a rate limit; sleeping "
+                    f"{wait_seconds:g}s before retry {attempts}/{retries}."
                 ),
                 RuntimeWarning,
                 stacklevel=2,
             )
-            with _temporary_proxy_mode("direct"):
-                out = method(**clean_params)
-        else:
-            raise
-    return out if isinstance(out, pd.DataFrame) else pd.DataFrame(out)
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
 
 
 def _resolve_cache_dir(cache_dir: str | Path | None) -> Path | None:
@@ -834,6 +924,9 @@ def fetch_tushare_cn_daily_panel(
         proxy_mode=config.proxy_mode,
         proxy_url=config.proxy_url,
         fallback_direct=config.fallback_direct,
+        request_interval_seconds=config.request_interval_seconds,
+        rate_limit_retries=config.rate_limit_retries,
+        rate_limit_wait_seconds=config.rate_limit_wait_seconds,
     )
     _validate_proxy_settings(api_options.proxy_mode, api_options.proxy_url)
     _validate_sanity_check_mode(config.sanity_check)

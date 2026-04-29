@@ -6,7 +6,15 @@ from pathlib import Path
 from moneytree.data import DEFAULT_PARQUET_COMPRESSION
 from moneytree.data import save_market_data
 from moneytree.data_sources import TushareDailyConfig, fetch_tushare_cn_daily_panel
-from moneytree.data_sources.tushare import TUSHARE_PROXY_MODES, TUSHARE_SANITY_CHECK_MODES
+from moneytree.data_sources.tushare import (
+    DEFAULT_TUSHARE_RATE_LIMIT_RETRIES,
+    DEFAULT_TUSHARE_RATE_LIMIT_WAIT_SECONDS,
+    TUSHARE_PROXY_MODES,
+    TUSHARE_SANITY_CHECK_MODES,
+)
+
+
+DEFAULT_TUSHARE_CLI_REQUEST_INTERVAL_SECONDS = 0.13
 
 
 def _parse_tickers(raw: str) -> tuple[str, ...]:
@@ -19,6 +27,20 @@ def _positive_int(raw: str) -> int:
     value = int(raw)
     if value < 1:
         raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
+def _nonnegative_int(raw: str) -> int:
+    value = int(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return value
+
+
+def _nonnegative_float(raw: str) -> float:
+    value = float(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
     return value
 
 
@@ -146,6 +168,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Disable one direct retry when env/proxy mode fails with a proxy error.",
     )
     parser.add_argument(
+        "--request-interval-seconds",
+        type=_nonnegative_float,
+        default=DEFAULT_TUSHARE_CLI_REQUEST_INTERVAL_SECONDS,
+        help=(
+            "Minimum interval between live TuShare API calls. Cache hits do not sleep. "
+            "Default: 0.13, slightly below the 500 calls/minute limit."
+        ),
+    )
+    parser.add_argument(
+        "--rate-limit-retries",
+        type=_nonnegative_int,
+        default=DEFAULT_TUSHARE_RATE_LIMIT_RETRIES,
+        help="Retry count when TuShare returns a rate-limit error. Default: 3.",
+    )
+    parser.add_argument(
+        "--rate-limit-wait-seconds",
+        type=_nonnegative_float,
+        default=DEFAULT_TUSHARE_RATE_LIMIT_WAIT_SECONDS,
+        help="Seconds to wait before retrying after a TuShare rate-limit error. Default: 65.",
+    )
+    parser.add_argument(
         "--sanity-check",
         default="warn",
         choices=TUSHARE_SANITY_CHECK_MODES,
@@ -180,6 +223,9 @@ def main(argv: list[str] | None = None) -> None:
         proxy_mode="proxy" if args.proxy_url and args.proxy_mode == "direct" else args.proxy_mode,
         proxy_url=args.proxy_url or None,
         fallback_direct=not bool(args.no_fallback_direct),
+        request_interval_seconds=float(args.request_interval_seconds),
+        rate_limit_retries=int(args.rate_limit_retries),
+        rate_limit_wait_seconds=float(args.rate_limit_wait_seconds),
         sanity_check=args.sanity_check,
         cache_compression=args.cache_compression,
         cache_compression_level=args.cache_compression_level,

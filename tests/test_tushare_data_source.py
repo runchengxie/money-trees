@@ -240,6 +240,17 @@ class _ProxyFallbackPro:
         return pd.DataFrame({"ok": [1]})
 
 
+class _RateLimitOncePro:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def daily(self, **kwargs) -> pd.DataFrame:
+        self.calls += 1
+        if self.calls == 1:
+            raise Exception("抱歉，您访问接口(daily)频率超限(500次/分钟)")
+        return pd.DataFrame({"ok": [1]})
+
+
 def test_call_api_defaults_to_direct_proxy_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     proxy_url = "http://127.0.0.1:10810"
     for name in (
@@ -307,6 +318,29 @@ def test_call_api_proxy_error_falls_back_to_direct(monkeypatch: pytest.MonkeyPat
     assert len(frame) == 1
     assert pro.http_proxy_values == ["http://127.0.0.1:10810", None]
     assert os.environ["HTTP_PROXY"] == "http://127.0.0.1:10810"
+
+
+def test_call_api_retries_rate_limit_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "moneytree.data_sources.tushare.time.sleep",
+        lambda seconds: sleeps.append(float(seconds)),
+    )
+    pro = _RateLimitOncePro()
+
+    with pytest.warns(RuntimeWarning, match="rate limit"):
+        frame = _call_api(
+            pro,
+            "daily",
+            api_options=_TushareApiOptions(
+                rate_limit_retries=1,
+                rate_limit_wait_seconds=0.5,
+            ),
+        )
+
+    assert len(frame) == 1
+    assert pro.calls == 2
+    assert sleeps == [0.5]
 
 
 def test_fetch_tushare_cn_daily_panel_accepts_injected_client() -> None:
@@ -490,6 +524,12 @@ def test_tushare_cli_accepts_cache_args() -> None:
             "1000",
             "--cache-row-group-size",
             "500",
+            "--request-interval-seconds",
+            "0.2",
+            "--rate-limit-retries",
+            "7",
+            "--rate-limit-wait-seconds",
+            "61.5",
         ]
     )
 
@@ -502,6 +542,9 @@ def test_tushare_cli_accepts_cache_args() -> None:
     assert args.sanity_check == "error"
     assert args.row_group_size == 1000
     assert args.cache_row_group_size == 500
+    assert args.request_interval_seconds == 0.2
+    assert args.rate_limit_retries == 7
+    assert args.rate_limit_wait_seconds == 61.5
 
 
 def test_tushare_cli_accepts_proxy_args() -> None:
