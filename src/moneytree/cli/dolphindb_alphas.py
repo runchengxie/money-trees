@@ -230,13 +230,15 @@ def _run_dolphindb_family_part(
 
     return session.run(
         f"""
-        mtCalcStart = {_dolphindb_date_literal(calc_start)}
-        mtCalcEnd = {_dolphindb_date_literal(calc_end)}
-        mtTargetStart = {_dolphindb_date_literal(first_target)}
-        mtTargetEnd = {_dolphindb_date_literal(last_target)}
-        mtChunkRawData = select * from rawData where tradetime between mtCalcStart:mtCalcEnd
+        mtCalcStartDate = {_dolphindb_date_literal(calc_start)}
+        mtCalcEndDate = {_dolphindb_date_literal(calc_end)}
+        mtTargetStartDate = {_dolphindb_date_literal(first_target)}
+        mtTargetEndDate = {_dolphindb_date_literal(last_target)}
+        mtChunkRawData = select * from rawData where date(tradetime) between mtCalcStartDate:mtCalcEndDate
+        mtCalcStart = min(mtChunkRawData.tradetime)
+        mtCalcEnd = max(mtChunkRawData.tradetime)
         mtChunkResult = {function_name}(mtChunkRawData, mtCalcStart, mtCalcEnd)
-        select * from mtChunkResult where tradetime between mtTargetStart:mtTargetEnd
+        select * from mtChunkResult where date(tradetime) between mtTargetStartDate:mtTargetEndDate
         """
     )
 

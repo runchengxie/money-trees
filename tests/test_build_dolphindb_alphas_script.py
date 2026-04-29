@@ -89,9 +89,9 @@ class FakeSession:
 
     def _alpha_result(self, family: str, *, script: str | None = None) -> pd.DataFrame:
         raw = self.uploaded["rawData"]
-        if script is not None and "mtTargetStart" in script:
-            start_match = re.search(r"mtTargetStart = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
-            end_match = re.search(r"mtTargetEnd = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
+        if script is not None and "mtTargetStartDate" in script:
+            start_match = re.search(r"mtTargetStartDate = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
+            end_match = re.search(r"mtTargetEndDate = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
             if start_match and end_match:
                 start = pd.Timestamp(start_match.group(1).replace(".", "-"))
                 end = pd.Timestamp(end_match.group(1).replace(".", "-"))
@@ -348,16 +348,16 @@ def test_dolphindb_generation_can_write_factor_store_only(tmp_path: Path) -> Non
     assert "supersecret" not in json.dumps(manifest, sort_keys=True)
     streamed_scripts = [script for script in session.scripts if "mtChunkRawData" in script]
     assert len(streamed_scripts) == 2
-    assert "mtCalcStart = 2021.01.04" in streamed_scripts[0]
-    assert "mtCalcEnd = 2021.01.04" in streamed_scripts[0]
-    assert "mtTargetStart = 2021.01.04" in streamed_scripts[0]
-    assert "mtTargetEnd = 2021.01.04" in streamed_scripts[0]
-    assert "mtCalcStart = 2021.01.04" in streamed_scripts[1]
-    assert "mtCalcEnd = 2021.01.05" in streamed_scripts[1]
-    assert "mtTargetStart = 2021.01.05" in streamed_scripts[1]
-    assert "mtTargetEnd = 2021.01.05" in streamed_scripts[1]
+    assert "mtCalcStartDate = 2021.01.04" in streamed_scripts[0]
+    assert "mtCalcEndDate = 2021.01.04" in streamed_scripts[0]
+    assert "mtTargetStartDate = 2021.01.04" in streamed_scripts[0]
+    assert "mtTargetEndDate = 2021.01.04" in streamed_scripts[0]
+    assert "mtCalcStartDate = 2021.01.04" in streamed_scripts[1]
+    assert "mtCalcEndDate = 2021.01.05" in streamed_scripts[1]
+    assert "mtTargetStartDate = 2021.01.05" in streamed_scripts[1]
+    assert "mtTargetEndDate = 2021.01.05" in streamed_scripts[1]
     script_text = "\n".join(streamed_scripts)
-    assert "mtChunkRawData = select * from rawData" in script_text
+    assert "mtChunkRawData = select * from rawData where date(tradetime) between" in script_text
     assert "calcMoneyTreeAlpha101(mtChunkRawData, mtCalcStart, mtCalcEnd)" in script_text
     first_part = pd.read_parquet(store_dir / manifest["factor_families"]["alpha101"]["paths"][0])
     assert len(first_part) == 1
