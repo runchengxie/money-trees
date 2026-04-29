@@ -115,12 +115,24 @@ def _frame_panel_summary(path: Path) -> dict[str, Any]:
     else:
         ticker_values = pd.Series(dtype="object")
 
+    if isinstance(frame.index, pd.MultiIndex):
+        index_schema = [
+            {
+                "name": str(name) if name is not None else "",
+                "dtype": str(frame.index.get_level_values(level).dtype),
+            }
+            for level, name in enumerate(frame.index.names)
+        ]
+    else:
+        index_schema = [
+            {
+                "name": str(frame.index.name) if frame.index.name is not None else "",
+                "dtype": str(frame.index.dtype),
+            }
+        ]
     schema_payload = {
         "format": "pandas",
-        "index": [
-            {"name": str(name) if name is not None else "", "dtype": str(dtype)}
-            for name, dtype in zip(frame.index.names, getattr(frame.index, "dtypes", []), strict=False)
-        ],
+        "index": index_schema,
         "columns": [
             {"name": str(column), "dtype": str(dtype)}
             for column, dtype in frame.dtypes.items()

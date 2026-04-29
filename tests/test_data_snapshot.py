@@ -137,6 +137,17 @@ def test_data_snapshot_cli_outputs_json(tmp_path, capsys) -> None:
     assert (tmp_path / "snapshot" / "dataset_meta.json").exists()
 
 
+def test_create_data_snapshot_supports_pickle_panel(tmp_path) -> None:
+    panel_path = tmp_path / "panel.pkl"
+    _panel().set_index(["date", "ticker"]).to_pickle(panel_path)
+
+    result = create_data_snapshot(panel=panel_path, output_dir=tmp_path / "snapshot")
+
+    assert result.manifest["panel"]["rows"] == 3
+    assert result.manifest["panel"]["date_min"] == "2021-01-04"
+    assert result.manifest["panel"]["ticker_count"] == 2
+
+
 def test_data_snapshot_cli_reports_missing_panel(tmp_path, capsys) -> None:
     exit_code = main(
         [
