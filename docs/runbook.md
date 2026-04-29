@@ -433,7 +433,7 @@ DolphinDB Alpha101/191 preflight failed
 处理：
 
 - 检查 `docker/dolphindb/modules/` 下是否有 `wq101alpha.dos`、`prepare101.dos`、`gtja191Alpha.dos`、`gtja191Prepare.dos` 和 `moneytreeAlpha.dos`。
-- 使用 `docker-compose.alpha.yml` 时，确认该目录已挂载到 DolphinDB server 的 `/opt/dolphindb/server/modules`。
+- 使用 `docker-compose.alpha.yml` 时，确认该目录已挂载到 DolphinDB server 的 `/data/ddb/server/data/modules`。
 - 确认 `moneytreeAlpha.dos` 定义了 `calcMoneyTreeAlpha101(rawData, startTime, endTime)` 和 `calcMoneyTreeAlpha191(rawData, startTime, endTime)`，或者命令中传入了正确的 `--alpha101-function` / `--alpha191-function`。
 - 注意 `--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB `use` 的模块名。
 - 先按 [DolphinDB Alpha101/191 外部因子生产](dolphindb_alpha101_191.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式 factor store。

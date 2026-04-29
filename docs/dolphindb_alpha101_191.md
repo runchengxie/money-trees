@@ -122,7 +122,7 @@ docker/dolphindb/modules/
 使用本仓库 `docker-compose.alpha.yml` 时，该目录会只读挂载到 DolphinDB server 的：
 
 ```text
-/opt/dolphindb/server/modules
+/data/ddb/server/data/modules
 ```
 
 如果你用下方手工 `docker run` 示例，请确保挂载目标是你所用 DolphinDB 镜像实际读取模块的 server modules 目录。

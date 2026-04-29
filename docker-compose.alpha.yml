@@ -5,7 +5,7 @@ services:
       - "${DOLPHINDB_PORT:-8848}:8848"
     volumes:
       - ./data/ddb/server/data:/data/ddb/server/data
-      - ./docker/dolphindb/modules:/opt/dolphindb/server/modules:ro
+      - ./docker/dolphindb/modules:/data/ddb/server/data/modules:ro
       - ./docker/dolphindb/bootstrap:/opt/dolphindb/server/bootstrap:ro
     environment:
       DDB_USER: ${DOLPHINDB_USER:-admin}

@@ -41,6 +41,10 @@ def test_alpha_compose_separates_moneytrees_and_dolphindb_services() -> None:
     assert "dolphindb/dolphindb" in services["dolphindb"]["image"]
     assert "./data:/data" not in services["dolphindb"]["volumes"]
     assert "./data/ddb/server/data:/data/ddb/server/data" in services["dolphindb"]["volumes"]
+    assert (
+        "./docker/dolphindb/modules:/data/ddb/server/data/modules:ro"
+        in services["dolphindb"]["volumes"]
+    )
     assert services["moneytrees"]["build"]["args"]["EXTRA"] == "${MONEYTREES_EXTRA:-research}"
     assert services["moneytrees"]["depends_on"] == ["dolphindb"]
     assert "./data:/app/data" in services["moneytrees"]["volumes"]
