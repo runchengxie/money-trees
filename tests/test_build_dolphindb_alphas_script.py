@@ -142,6 +142,7 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "factor_store_output": None,
         "no_wide_output": False,
         "chunk_trade_dates": 60,
+        "overwrite": False,
         "dolphindb_warmup_trade_dates": 260,
         "progress": False,
     }

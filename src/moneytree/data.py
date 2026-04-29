@@ -304,7 +304,14 @@ def coerce_factor_columns(frame: pd.DataFrame, dtype: str = "float32") -> pd.Dat
         return frame.copy()
 
     out = frame.copy()
-    out[cols] = out[cols].astype(normalized_dtype)
+    values = out[cols].to_numpy(dtype="float64", copy=True)
+    invalid = ~np.isfinite(values)
+    if normalized_dtype == "float32":
+        dtype_info = np.finfo(np.float32)
+        invalid |= (values < dtype_info.min) | (values > dtype_info.max)
+    if invalid.any():
+        values[invalid] = np.nan
+    out[cols] = pd.DataFrame(values, index=out.index, columns=cols).astype(normalized_dtype)
     return out
 
 

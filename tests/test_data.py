@@ -103,6 +103,22 @@ def test_coerce_factor_columns_only_changes_alpha_dtypes() -> None:
     assert str(out["flag"].dtype) == "bool"
 
 
+def test_coerce_factor_columns_sanitizes_nonfinite_and_float32_overflow() -> None:
+    too_large_for_float32 = float(np.finfo(np.float32).max) * 2.0
+    frame = pd.DataFrame(
+        {
+            "alpha101_001": [1.0, np.inf, -np.inf, too_large_for_float32],
+            "feature_num": [1.0, np.inf, -np.inf, too_large_for_float32],
+        }
+    )
+
+    out = coerce_factor_columns(frame, "float32")
+
+    assert str(out["alpha101_001"].dtype) == "float32"
+    assert out["alpha101_001"].isna().tolist() == [False, True, True, True]
+    assert np.isinf(out["feature_num"]).tolist() == [False, True, True, False]
+
+
 def test_normalize_factor_dtype_rejects_unsupported_value() -> None:
     assert normalize_factor_dtype(" FLOAT64 ") == "float64"
     with pytest.raises(ValueError, match="Unsupported factor dtype"):

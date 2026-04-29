@@ -284,6 +284,7 @@ def _write_streamed_factor_store(
         compression=args.compression,
         compression_level=getattr(args, "compression_level", None),
         row_group_size=getattr(args, "row_group_size", None),
+        overwrite=bool(getattr(args, "overwrite", False)),
         metadata={
             "source": "moneytrees-dolphindb-alphas",
             "input": str(input_path),
@@ -470,6 +471,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
             compression=args.compression,
             compression_level=getattr(args, "compression_level", None),
             row_group_size=getattr(args, "row_group_size", None),
+            overwrite=bool(getattr(args, "overwrite", False)),
             metadata={
                 "source": "moneytrees-dolphindb-alphas",
                 "input": str(input_path),
@@ -582,6 +584,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Number of target trade dates per factor-store partition. In "
             "--no-wide-output mode this also controls each DolphinDB calculation chunk."
         ),
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Regenerate requested factor-store families even when they already exist.",
     )
     parser.add_argument(
         "--dolphindb-warmup-trade-dates",

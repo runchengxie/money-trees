@@ -208,7 +208,7 @@ uv run moneytrees-tushare \
 
 首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式 factor store。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
 
-使用 `--no-wide-output` 写入 factor store 时，CLI 会按 `--chunk-trade-dates` 对 DolphinDB 计算本身分片：每次只下载目标交易日的 Alpha101/191 结果并立即写入对应分片，避免在 DolphinDB 或 Python 中构造多年全市场的完整宽表。每个计算分片会额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日作为滚动公式上下文，默认 `260`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
+使用 `--no-wide-output` 写入 factor store 时，CLI 会按 `--chunk-trade-dates` 对 DolphinDB 计算本身分片：每次只下载目标交易日的 Alpha101/191 结果并立即写入对应分片，避免在 DolphinDB 或 Python 中构造多年全市场的完整宽表。每个计算分片会额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日作为滚动公式上下文，默认 `260`。重新生成已写入 manifest 的外部 family 时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
 
 Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
 
@@ -224,6 +224,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha101 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
@@ -244,6 +245,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha191 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
@@ -265,6 +267,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha191 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
