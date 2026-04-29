@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 from moneytree.data import load_market_data
+from moneytree.data_quality import build_parquet_panel_quality_payload
 from moneytree.data_quality import build_tushare_panel_quality_result
 
 
@@ -72,6 +73,8 @@ def _base_layer(path: str | Path) -> dict[str, Any]:
         }
 
     try:
+        if file_path.suffix.lower() == ".parquet":
+            return build_parquet_panel_quality_payload(file_path)
         frame = load_market_data(file_path)
         quality = build_tushare_panel_quality_result(frame)
     except Exception as exc:
@@ -99,6 +102,10 @@ def _base_layer(path: str | Path) -> dict[str, Any]:
         "duplicate_key_count": payload["duplicate_key_count"],
         "missing_required_columns": payload["missing_required_columns"],
         "null_rates": payload["null_rates"],
+        "null_counts": {
+            key: int(float(value) * len(frame))
+            for key, value in payload["null_rates"].items()
+        },
         "non_positive_price_counts": payload["non_positive_price_counts"],
         "negative_volume_count": payload["negative_volume_count"],
         "inverted_ohlc_count": payload["inverted_ohlc_count"],
@@ -139,6 +146,15 @@ def _raw_cache_layer(path: str | Path) -> dict[str, Any]:
                 ORDER BY source, api_name
                 """
             ).fetchall()
+            date_rows = conn.execute(
+                """
+                SELECT source, api_name, trade_date, rows
+                FROM raw_cache
+                WHERE source = 'tushare'
+                  AND api_name IN ('daily', 'adj_factor', 'daily_basic')
+                ORDER BY trade_date, api_name
+                """
+            ).fetchall()
     except Exception as exc:
         return {
             "status": "error",
@@ -174,16 +190,57 @@ def _raw_cache_layer(path: str | Path) -> dict[str, Any]:
         }
 
     errors: list[str] = []
+    warnings: list[str] = []
     if not apis:
         errors.append("raw cache manifest has no raw_cache entries")
+    for api_name, api in apis.items():
+        if int(api.get("schema_hash_count", 0)) > 1:
+            warnings.append(
+                f"{api_name} has {api.get('schema_hash_count')} distinct schema hashes"
+            )
+    by_date: dict[str, dict[str, int]] = {}
+    for source, api_name, trade_date, row_count in date_rows:
+        if source != "tushare":
+            continue
+        by_date.setdefault(str(trade_date), {})[str(api_name)] = int(row_count)
+    raw_anomalies: list[dict[str, Any]] = []
+    for trade_date, counts in sorted(by_date.items()):
+        daily_rows = int(counts.get("daily", 0))
+        if daily_rows <= 0:
+            continue
+        for related in ("adj_factor", "daily_basic"):
+            related_rows = counts.get(related)
+            if related_rows is None:
+                message = (
+                    f"tushare.{related} missing shard for trade_date={trade_date} "
+                    f"while tushare.daily rows={daily_rows}"
+                )
+            elif int(related_rows) == 0:
+                message = (
+                    f"tushare.{related} has zero rows for trade_date={trade_date} "
+                    f"while tushare.daily rows={daily_rows}"
+                )
+            else:
+                continue
+            raw_anomalies.append(
+                {
+                    "api_name": related,
+                    "trade_date": trade_date,
+                    "daily_rows": daily_rows,
+                    "rows": related_rows,
+                    "message": message,
+                }
+            )
+            errors.append(message)
     return {
         "status": "ok" if not errors else "error",
         "path": str(path),
         "manifest_path": str(manifest_path),
         "manifest_exists": True,
         "apis": apis,
+        "anomalies": raw_anomalies,
         "errors": errors,
-        "warnings": [],
+        "warnings": warnings,
     }
 
 
@@ -352,14 +409,52 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
                 f"duplicate_keys={layer.get('duplicate_key_count', 'NA')}"
             )
         )
+        if layer.get("out_of_order_count", 0):
+            lines.append(
+                f"[data-status:{name}] out_of_order={layer.get('out_of_order_count', 0)} "
+                f"duplicate_check_exact={layer.get('duplicate_check_exact')}"
+            )
+        derived = layer.get("derived_return_checks", {})
+        if derived.get("checked"):
+            rendered = []
+            for column in (
+                "return_1d",
+                "next_period_return",
+                "benchmark_return",
+                "benchmark_next_period_return",
+            ):
+                check = derived.get(column)
+                if isinstance(check, dict):
+                    rendered.append(
+                        f"{column}:mismatch={check.get('mismatch_count', 0)},"
+                        f"unexpected_null={check.get('unexpected_null_count', 0)}"
+                    )
+            if rendered:
+                lines.append(f"[data-status:{name}] derived_returns {'; '.join(rendered)}")
+        adjusted = layer.get("adjusted_price_checks", {})
+        if adjusted.get("checked"):
+            mismatch_counts = adjusted.get("mismatch_counts", {})
+            null_counts = adjusted.get("null_counts", {})
+            lines.append(
+                f"[data-status:{name}] adjusted_prices "
+                f"nulls={json.dumps(null_counts, sort_keys=True)} "
+                f"mismatches={json.dumps(mismatch_counts, sort_keys=True)}"
+            )
     elif name == "raw_cache":
         for api_name, api in layer.get("apis", {}).items():
             lines.append(
                 (
                     f"[data-status:{name}] api={api_name} "
                     f"start={api.get('date_min') or 'NA'} end={api.get('date_max') or 'NA'} "
-                    f"shards={api.get('shards', 0)} rows={api.get('rows', 0)}"
+                    f"shards={api.get('shards', 0)} rows={api.get('rows', 0)} "
+                    f"schema_hashes={api.get('schema_hash_count', 0)}"
                 )
+            )
+        for anomaly in layer.get("anomalies", []):
+            lines.append(
+                f"[data-status:{name}] anomaly api=tushare.{anomaly.get('api_name')} "
+                f"trade_date={anomaly.get('trade_date')} rows={anomaly.get('rows')} "
+                f"daily_rows={anomaly.get('daily_rows')}"
             )
     elif name == "factor_store":
         base = layer.get("base_panel", {})

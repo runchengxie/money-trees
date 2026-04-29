@@ -231,6 +231,45 @@ def _checksum_entries(
     return entries
 
 
+def _compact_quality_summary(
+    *,
+    panel: dict[str, Any],
+    raw_cache: dict[str, Any] | None,
+) -> dict[str, Any]:
+    derived = panel.get("derived_return_checks", {})
+    adjusted = panel.get("adjusted_price_checks", {})
+    raw_anomalies = raw_cache.get("anomalies", []) if raw_cache is not None else []
+    errors = list(panel.get("errors", []))
+    warnings = list(panel.get("warnings", []))
+    if raw_cache is not None:
+        errors.extend(str(error) for error in raw_cache.get("errors", []))
+        warnings.extend(str(warning) for warning in raw_cache.get("warnings", []))
+    return {
+        "status": "ok" if not errors else "error",
+        "checked_at_utc": datetime.now(timezone.utc).isoformat(),
+        "duplicate_key_count": panel.get("duplicate_key_count"),
+        "missing_required_columns": panel.get("missing_required_columns", []),
+        "null_counts": panel.get("null_counts", {}),
+        "derived_return_checks": {
+            key: derived.get(key)
+            for key in (
+                "return_1d",
+                "next_period_return",
+                "benchmark_return",
+                "benchmark_next_period_return",
+            )
+            if key in derived
+        },
+        "adjusted_price_checks": {
+            "null_counts": adjusted.get("null_counts", {}),
+            "mismatch_counts": adjusted.get("mismatch_counts", {}),
+        },
+        "raw_cache_anomalies": raw_anomalies,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
 def _write_checksums(path: Path, checksums: list[dict[str, Any]]) -> None:
     lines = [
         f"{entry['sha256']}  {entry['path']}"
@@ -288,6 +327,7 @@ def create_data_snapshot(
     output_path.mkdir(parents=True, exist_ok=True)
 
     panel_payload = _panel_summary(panel)
+    panel_quality_payload = _optional_layer("panel", Path(panel))
     raw_cache_payload = _optional_layer("raw_cache", Path(raw_cache) if raw_cache else None)
     factor_store_payload = _optional_layer(
         "factor_store",
@@ -309,6 +349,10 @@ def create_data_snapshot(
             "raw_cache": raw_cache_payload,
             "factor_store": factor_store_payload,
         },
+        "quality": _compact_quality_summary(
+            panel=panel_quality_payload or {},
+            raw_cache=raw_cache_payload,
+        ),
         "checksums": checksums,
         "environment": {
             "cwd": str(Path.cwd()),

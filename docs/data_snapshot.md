@@ -20,7 +20,24 @@ checksums.sha256
 README.md
 ```
 
-`dataset_meta.json` includes the panel path, file size, SHA-256, row count, column count, date range, ticker count, parquet schema hash, optional raw cache/factor store references, and git commit metadata when available.
+`dataset_meta.json` includes the panel path, file size, SHA-256, row count, column count, date range, ticker count, parquet schema hash, optional raw cache/factor store references, a compact quality summary, and git commit metadata when available.
+
+The `quality` object records:
+
+```text
+status
+checked_at_utc
+duplicate_key_count
+missing_required_columns
+null_counts
+derived_return_checks
+adjusted_price_checks
+raw_cache_anomalies
+errors
+warnings
+```
+
+The quality summary is intended to answer whether the backed-up dataset had already passed the same lightweight checks exposed by `moneytrees-data-status`. It does not repair data and does not embed large per-date or per-ticker diagnostics.
 
 Use `--factor-store` when you also want the snapshot to record a factor store manifest:
 

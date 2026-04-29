@@ -19,11 +19,11 @@ artifacts/               回测输出，按实验保留或短生命周期清理
 
 `moneytrees-data-status` 是只读命令，不删除、不刷新、不修复、不重写文件。
 
-检查基础面板：
+检查基础面板。Parquet 面板会走 streaming / narrow-column 检查路径，避免为了状态检查把多年全市场面板完整读进 pandas：
 
 ```bash
 uv run moneytrees-data-status \
-  --panel data/panel/cn/cn_daily_raw.parquet \
+  --panel data/panel/cn/cn_daily_2016_2025.parquet \
   --format text \
   --mode warn
 ```
@@ -56,7 +56,7 @@ uv run moneytrees-data-status \
 
 ```bash
 uv run moneytrees-data-status \
-  --panel data/panel/cn/cn_daily_raw.parquet \
+  --panel data/panel/cn/cn_daily_2016_2025.parquet \
   --raw-cache data/raw/tushare \
   --factor-store data/factor_store/cn/manifest.json \
   --artifacts artifacts/xgb-alpha-all \
@@ -64,7 +64,7 @@ uv run moneytrees-data-status \
   --mode error
 ```
 
-`--mode warn` 会报告问题但不因数据错误返回失败；`--mode error` 遇到错误会返回非零退出码。参数错误和无法读取输入仍会失败。
+`--mode warn` 会报告问题但不因数据错误返回失败；`--mode error` 遇到错误会返回非零退出码。参数错误和无法读取输入仍会失败。`moneytrees-data-status` 仍然是只读命令：它不会刷新 raw cache、不会修复面板，也不会重写 factor store 或 artifacts。
 
 ## 检查项
 
@@ -74,8 +74,12 @@ uv run moneytrees-data-status \
 - 日期范围、交易日数量、ticker 数量。
 - 重复 `date, ticker` 键。
 - 必需列缺失。
-- 关键列缺失率。
-- 非正价格、负成交量、`high < low`。
+- 关键列缺失数量和缺失率。
+- 原始和复权价格的非正值、负成交量、`high < low`。
+- parquet 面板按 streaming / narrow-column 方式扫描；如果 `date, ticker` 不是排序状态，会报告乱序并使用窄列 fallback 计算精确重复键数量。
+- 派生收益列一致性：`return_1d`、`next_period_return`、`benchmark_return`、`benchmark_next_period_return` 会按 `close_adj`（缺失时用 `close`）和 `benchmark_close` 重新计算后比对。
+- 允许自然边界空值：每个 ticker 第一条 `return_1d`、每个 ticker 最后一条 `next_period_return`、全局首日 `benchmark_return`、全局末日 `benchmark_next_period_return`。
+- 复权列一致性：当存在 `adj_factor` 和 `open_adj/high_adj/low_adj/close_adj/vwap_adj` 时，检查空值，并验证复权列约等于原始价格乘以 `adj_factor`。
 
 TuShare raw cache 检查：
 
@@ -83,6 +87,8 @@ TuShare raw cache 检查：
 - 每个 API 的日期范围。
 - 分片数量和累计行数。
 - schema hash 和 content hash 数量。
+- raw cache 异常分片：当 `daily` 某交易日有行数，但同日 `adj_factor` 或 `daily_basic` 为 0 行或缺失时报告错误。
+- schema hash 多版本会作为 warning 展示，便于识别 TuShare 上游字段变化。
 
 factor store 检查：
 

@@ -84,6 +84,8 @@ uv run moneytrees-data-status \
   --mode warn
 ```
 
+Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年全市场面板。预期的收益列边界空值是：每个 ticker 第一条 `return_1d`、每个 ticker 最后一条 `next_period_return`、全局首日 `benchmark_return`、全局末日 `benchmark_next_period_return`。其他派生收益空值、复权列空值、`daily` 有行但 `adj_factor` 或 `daily_basic` 空分片，都需要先修复再进入正式实验或备份归档。
+
 5. 可选：离线生成外部 Alpha101/191。
 
 Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。

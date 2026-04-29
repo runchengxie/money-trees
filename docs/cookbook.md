@@ -56,6 +56,17 @@ uv run moneytrees-tushare \
 
 `--cache-dir` 会缓存 `daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 的原始返回。重复拉取同一区间时，已有交易日会读本地 parquet。长区间全市场任务建议加 `--progress`，观察每个接口的交易日进度、累计行数、cache 命中和实际请求次数。
 
+生成基础面板后先做只读质量检查：
+
+```bash
+uv run moneytrees-data-status \
+  --panel data/panel/cn/cn_daily_raw.parquet \
+  --raw-cache data/raw/tushare \
+  --mode warn
+```
+
+这个检查会流式扫描 parquet 面板，检查 `date,ticker`、关键列空值、派生收益一致性、复权列一致性，并检查 raw cache 中 `daily` 有行但 `adj_factor` 或 `daily_basic` 空分片的问题。收益列只允许自然边界空值：每个 ticker 的首尾以及基准首尾交易日。
+
 ## 3. 按需生成本地 Alpha158/360 factor store
 
 ```bash

@@ -239,3 +239,4 @@ full_project_source.txt
 
 # Local datasets and API caches
 data/
+backups/

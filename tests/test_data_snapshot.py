@@ -34,6 +34,46 @@ def _panel() -> pd.DataFrame:
     )
 
 
+def _quality_panel() -> pd.DataFrame:
+    dates = pd.to_datetime(["2021-01-04", "2021-01-05", "2021-01-06"])
+    close = pd.Series([10.0, 11.0, 12.0], index=dates)
+    adj_factor = pd.Series([2.0, 2.0, 2.0], index=dates)
+    close_adj = close * adj_factor
+    return_1d = close_adj.pct_change()
+    next_return = return_1d.shift(-1)
+    benchmark_close = pd.Series([100.0, 102.0, 101.0], index=dates)
+    benchmark_return = benchmark_close.pct_change()
+    benchmark_next = benchmark_return.shift(-1)
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "ticker": ["000001.SZ", "000001.SZ", "000001.SZ"],
+            "open": close.to_numpy(),
+            "high": (close + 1.0).to_numpy(),
+            "low": (close - 1.0).to_numpy(),
+            "close": close.to_numpy(),
+            "volume": [1000.0, 1100.0, 1200.0],
+            "vwap": (close + 0.1).to_numpy(),
+            "adj_factor": adj_factor.to_numpy(),
+            "open_adj": (close * adj_factor).to_numpy(),
+            "high_adj": ((close + 1.0) * adj_factor).to_numpy(),
+            "low_adj": ((close - 1.0) * adj_factor).to_numpy(),
+            "close_adj": close_adj.to_numpy(),
+            "vwap_adj": ((close + 0.1) * adj_factor).to_numpy(),
+            "return_1d": return_1d.to_numpy(),
+            "next_period_return": next_return.to_numpy(),
+            "benchmark_close": benchmark_close.to_numpy(),
+            "benchmark_return": benchmark_return.to_numpy(),
+            "benchmark_next_period_return": benchmark_next.to_numpy(),
+            "benchmark_cum_ret": (1.0 + benchmark_return.fillna(0.0)).cumprod().to_numpy(),
+            "hit_up_limit": [False, False, False],
+            "hit_down_limit": [False, False, False],
+            "is_suspended": [False, False, False],
+            "is_st": [False, False, False],
+        }
+    ).reset_index(drop=True)
+
+
 def _write_raw_cache_manifest(cache_dir) -> None:
     cache_dir.mkdir()
     with sqlite3.connect(cache_dir / "manifest.sqlite") as conn:
@@ -56,7 +96,7 @@ def _write_raw_cache_manifest(cache_dir) -> None:
             )
             """
         )
-        conn.execute(
+        conn.executemany(
             """
             INSERT INTO raw_cache (
                 source, api_name, trade_date, path, rows, columns_json,
@@ -65,20 +105,23 @@ def _write_raw_cache_manifest(cache_dir) -> None:
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                "tushare",
-                "daily",
-                "20210104",
-                "daily/trade_date=20210104.parquet",
-                3,
-                "[]",
-                "r1",
-                "{}",
-                "s1",
-                "c1",
-                "now",
-                "now",
-            ),
+            [
+                (
+                    "tushare",
+                    api_name,
+                    "20210104",
+                    f"{api_name}/trade_date=20210104.parquet",
+                    3,
+                    "[]",
+                    f"{api_name}-r1",
+                    "{}",
+                    "s1",
+                    f"{api_name}-c1",
+                    "now",
+                    "now",
+                )
+                for api_name in ("daily", "adj_factor", "daily_basic")
+            ],
         )
 
 
@@ -112,8 +155,22 @@ def test_create_data_snapshot_writes_metadata_checksums_and_readme(tmp_path) -> 
     assert payload["panel"]["schema_hash"]
     assert payload["references"]["raw_cache"]["manifest_exists"] is True
     assert payload["references"]["factor_store"]["manifest_exists"] is True
+    assert payload["quality"]["status"] == "ok"
+    assert payload["quality"]["duplicate_key_count"] == 0
     assert "panel.parquet" in result.checksums_path.read_text(encoding="utf-8")
     assert "records metadata and checksums only" in result.readme_path.read_text(encoding="utf-8")
+
+
+def test_create_data_snapshot_records_quality_summary_for_rich_panel(tmp_path) -> None:
+    panel_path = tmp_path / "panel.parquet"
+    save_market_data(_quality_panel().set_index(["date", "ticker"]), panel_path)
+
+    result = create_data_snapshot(panel=panel_path, output_dir=tmp_path / "snapshot")
+
+    quality = result.manifest["quality"]
+    assert quality["status"] == "ok"
+    assert quality["derived_return_checks"]["return_1d"]["mismatch_count"] == 0
+    assert quality["adjusted_price_checks"]["mismatch_counts"]["close_adj"] == 0
 
 
 def test_data_snapshot_cli_outputs_json(tmp_path, capsys) -> None:
@@ -134,6 +191,7 @@ def test_data_snapshot_cli_outputs_json(tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["panel"]["rows"] == 3
+    assert payload["quality"]["status"] == "ok"
     assert (tmp_path / "snapshot" / "dataset_meta.json").exists()
 
 
