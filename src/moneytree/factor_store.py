@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import sys
 import time
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import pandas as pd
 
@@ -21,7 +21,11 @@ from moneytree.data import (
     normalize_factor_dtype,
     save_market_data,
 )
-from moneytree.factors.external import external_alpha_columns, sanitize_manifest_metadata
+from moneytree.factors.external import (
+    external_alpha_columns,
+    normalize_date_ticker_frame,
+    sanitize_manifest_metadata,
+)
 from moneytree.factors.qlib import build_alpha158_features, build_alpha360_features
 from moneytree.metadata import dataframe_schema_hash
 
@@ -528,6 +532,249 @@ def write_partitioned_factor_family(
     if source:
         entry["source"] = source
     return entry
+
+
+def write_external_factor_store_partitioned(
+    base_panel: pd.DataFrame,
+    output_dir: str | Path,
+    *,
+    families: Iterable[str],
+    generate_family_part: Callable[[str, pd.Index, int, int], pd.DataFrame],
+    factor_dtype: str = "float32",
+    chunk_trade_dates: int = 60,
+    metadata: dict[str, Any] | None = None,
+    compression: str = DEFAULT_PARQUET_COMPRESSION,
+    compression_level: int | None = None,
+    row_group_size: int | None = None,
+    overwrite: bool = False,
+    show_progress: bool = False,
+) -> dict[str, Any]:
+    """Write external Alpha101/191 families while generating one date partition at a time."""
+    requested_families = _normalize_families(families)
+    unsupported = [family for family in requested_families if family not in EXTERNAL_FACTOR_FAMILIES]
+    if unsupported:
+        choices = ", ".join(EXTERNAL_FACTOR_FAMILIES)
+        raise ValueError(
+            f"Unsupported external factor families: {', '.join(unsupported)}. "
+            f"Expected one of: {choices}."
+        )
+    if not requested_families:
+        raise ValueError("At least one external factor family is required.")
+
+    dtype = normalize_factor_dtype(factor_dtype)
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+
+    indexed_base = _validate_unique_date_ticker(base_panel, source_name="base panel")
+    base_columns = [
+        column for column in indexed_base.columns if column not in factor_columns(indexed_base.columns)
+    ]
+    base_frame = indexed_base.loc[:, base_columns]
+
+    manifest_path = root / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
+            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        existing_base_path = _resolve_store_path(root, manifest["base_panel"]["path"])
+        if existing_base_path.exists():
+            existing_base = _validate_unique_date_ticker(
+                load_market_data(existing_base_path),
+                source_name="base panel",
+            )
+            if not existing_base.index.equals(base_frame.index):
+                raise FactorStoreValidationError(
+                    "Existing factor store base panel index does not match the input panel."
+                )
+    else:
+        manifest = {
+            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
+            "kind": "moneytree_factor_store",
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "factor_families": {},
+            "key_validation": {
+                "date_ticker_unique": True,
+                "aligned": True,
+            },
+            "metadata": {},
+        }
+
+    base_path = root / "base.parquet"
+    save_market_data(
+        base_frame,
+        base_path,
+        compression=compression,
+        compression_level=compression_level,
+        row_group_size=row_group_size,
+    )
+
+    dates = pd.Index(base_frame.index.get_level_values("date").unique()).sort_values()
+    chunks = _date_chunks(dates, chunk_trade_dates)
+    date_index = base_frame.index.get_level_values("date")
+    factor_entries = dict(manifest.get("factor_families", {}))
+    generated: list[str] = []
+    skipped: list[str] = []
+    parts_generated: dict[str, int] = {}
+
+    for family in requested_families:
+        if family in factor_entries and not overwrite:
+            skipped.append(family)
+            parts_generated[family] = 0
+            continue
+
+        expected_columns = _expected_external_family_columns(family)
+        family_dir = root / "factors" / family
+        family_dir.mkdir(parents=True, exist_ok=True)
+        paths: list[str] = []
+        parts: list[dict[str, Any]] = []
+        rows = 0
+        started_at = time.perf_counter()
+
+        if show_progress and len(chunks) > 0:
+            print(
+                (
+                    f"[factor-store:{family}] start parts={len(chunks)} rows={len(base_frame)} "
+                    f"start={_date_value(dates[0])} end={_date_value(dates[-1])} "
+                    f"chunk_trade_dates={int(chunk_trade_dates)}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+
+        for idx, target_dates in enumerate(chunks, start=1):
+            part_started_at = time.perf_counter()
+            target_frame = base_frame.loc[date_index.isin(target_dates)].sort_index()
+            generated_part = generate_family_part(family, target_dates, idx, len(chunks))
+            indexed_factors = normalize_date_ticker_frame(
+                generated_part,
+                source_name=f"{family} generated part {idx}",
+            )
+            missing = [column for column in expected_columns if column not in indexed_factors.columns]
+            if missing:
+                raise FactorStoreValidationError(
+                    f"{family} factors are missing expected columns: {missing}."
+                )
+
+            factor_part = coerce_factor_columns(
+                indexed_factors.loc[:, expected_columns],
+                dtype,
+            ).sort_index()
+            if not factor_part.index.equals(target_frame.index):
+                missing_keys = target_frame.index.difference(factor_part.index)
+                extra_keys = factor_part.index.difference(target_frame.index)
+                raise FactorStoreValidationError(
+                    f"{family} generated part {idx} is not aligned with the target "
+                    f"date/ticker keys (missing={len(missing_keys)}, extra={len(extra_keys)})."
+                )
+
+            part_path = family_dir / f"part-{idx:04d}.parquet"
+            save_market_data(
+                factor_part,
+                part_path,
+                compression=compression,
+                compression_level=compression_level,
+                row_group_size=row_group_size,
+            )
+            relative_part_path = _relative_path(root, part_path)
+            part_rows = int(len(factor_part))
+            rows += part_rows
+            paths.append(relative_part_path)
+            parts.append(
+                {
+                    "path": relative_part_path,
+                    "start_date": _date_value(target_dates[0]),
+                    "end_date": _date_value(target_dates[-1]),
+                    "rows": part_rows,
+                    "columns": len(expected_columns),
+                }
+            )
+
+            if show_progress:
+                elapsed = time.perf_counter() - started_at
+                remaining = (elapsed / idx) * (len(chunks) - idx) if idx else 0.0
+                print(
+                    (
+                        f"[factor-store:{family}] part={idx}/{len(chunks)} "
+                        f"progress={_progress_bar(idx, len(chunks))} rows={rows} "
+                        f"start={_date_value(target_dates[0])} "
+                        f"end={_date_value(target_dates[-1])} "
+                        f"part_elapsed={_format_duration(time.perf_counter() - part_started_at)} "
+                        f"elapsed={_format_duration(elapsed)} eta={_format_duration(remaining)}"
+                    ),
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        factor_entries[family] = {
+            "paths": paths,
+            "parts": parts,
+            "partitioned": True,
+            "prefix": FACTOR_FAMILY_PREFIXES[family],
+            "rows": rows,
+            "columns": len(expected_columns),
+            "chunk_trade_dates": int(chunk_trade_dates),
+            "factor_dtype": dtype,
+            "compression": compression,
+            "compression_level": compression_level,
+            "row_group_size": row_group_size,
+            "source": "dolphindb",
+        }
+        generated.append(family)
+        parts_generated[family] = len(chunks)
+
+        if show_progress:
+            print(
+                (
+                    f"[factor-store:{family}] done parts={len(chunks)} rows={rows} "
+                    f"elapsed={_format_duration(time.perf_counter() - started_at)}"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+
+    manifest.update(
+        {
+            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
+            "kind": "moneytree_factor_store",
+            "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "base_panel": {
+                "path": _relative_path(root, base_path),
+                "rows": int(len(base_frame)),
+                "columns": int(len(base_frame.columns)),
+                "schema_hash": dataframe_schema_hash(base_frame),
+            },
+            "factor_families": factor_entries,
+            "factor_dtype": dtype,
+            "compression": compression,
+            "compression_level": compression_level,
+            "row_group_size": row_group_size,
+            "key_validation": {
+                "date_ticker_unique": True,
+                "aligned": True,
+            },
+            "external_generation": sanitize_manifest_metadata(
+                {
+                    "families_requested": list(requested_families),
+                    "families_generated": generated,
+                    "families_skipped": skipped,
+                    "parts_generated": parts_generated,
+                    "source": "dolphindb",
+                    "streamed": True,
+                    "chunk_trade_dates": int(chunk_trade_dates),
+                    "compression": compression,
+                    "compression_level": compression_level,
+                    "row_group_size": row_group_size,
+                    **dict(metadata or {}),
+                }
+            ),
+            "metadata": sanitize_manifest_metadata(
+                {**dict(manifest.get("metadata", {})), **dict(metadata or {})}
+            ),
+        }
+    )
+    sanitized_manifest = sanitize_manifest_metadata(manifest)
+    manifest_path.write_text(json.dumps(sanitized_manifest, indent=2), encoding="utf-8")
+    return sanitized_manifest
 
 
 def write_local_factor_store(

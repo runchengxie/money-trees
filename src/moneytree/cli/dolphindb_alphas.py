@@ -9,9 +9,12 @@ import sys
 import tempfile
 from typing import Any
 
+import pandas as pd
+
 from moneytree.data import (
     DEFAULT_PARQUET_COMPRESSION,
     coerce_factor_columns,
+    ensure_date_ticker_index,
     load_market_data,
     normalize_factor_dtype,
     save_market_data,
@@ -19,11 +22,15 @@ from moneytree.data import (
 from moneytree.factors.external import (
     build_dolphindb_input,
     build_external_alpha_manifest,
+    external_alpha_columns,
     merge_external_alpha_columns,
     normalize_external_families,
     write_external_alpha_manifest,
 )
-from moneytree.factor_store import write_external_factor_store
+from moneytree.factor_store import (
+    write_external_factor_store,
+    write_external_factor_store_partitioned,
+)
 
 
 DEFAULT_ALPHA101_FUNCTION = "calcMoneyTreeAlpha101"
@@ -108,6 +115,10 @@ def _dolphindb_string_literal(value: str) -> str:
     return f'"{escaped}"'
 
 
+def _dolphindb_date_literal(value: object) -> str:
+    return pd.Timestamp(value).strftime("%Y.%m.%d")
+
+
 def _moneytree_function_ref(function_name: str) -> str:
     if "::" in function_name:
         return function_name
@@ -188,10 +199,121 @@ def _server_version(session: Any) -> str | None:
     return str(value) if value is not None else None
 
 
+def _panel_trade_dates(panel: pd.DataFrame) -> pd.Index:
+    indexed = ensure_date_ticker_index(panel)
+    return pd.Index(indexed.index.get_level_values("date").unique()).sort_values()
+
+
+def _family_alpha_column_count(families: Sequence[str]) -> int:
+    return sum(len(external_alpha_columns(family)) for family in families)
+
+
+def _run_dolphindb_family_part(
+    session: Any,
+    args: argparse.Namespace,
+    family: str,
+    *,
+    all_dates: pd.Index,
+    target_dates: pd.Index,
+    warmup_trade_dates: int,
+) -> pd.DataFrame:
+    date_positions = {pd.Timestamp(value): idx for idx, value in enumerate(all_dates)}
+    first_target = pd.Timestamp(target_dates[0])
+    last_target = pd.Timestamp(target_dates[-1])
+    target_start_idx = date_positions[first_target]
+    target_end_idx = date_positions[last_target]
+    calc_start_idx = max(0, target_start_idx - max(0, int(warmup_trade_dates)))
+    calc_dates = all_dates[calc_start_idx : target_end_idx + 1]
+    calc_start = pd.Timestamp(calc_dates[0])
+    calc_end = pd.Timestamp(calc_dates[-1])
+    function_name = _family_function(args, family)
+
+    return session.run(
+        f"""
+        mtCalcStart = {_dolphindb_date_literal(calc_start)}
+        mtCalcEnd = {_dolphindb_date_literal(calc_end)}
+        mtTargetStart = {_dolphindb_date_literal(first_target)}
+        mtTargetEnd = {_dolphindb_date_literal(last_target)}
+        mtChunkRawData = select * from rawData where tradetime between mtCalcStart:mtCalcEnd
+        mtChunkResult = {function_name}(mtChunkRawData, mtCalcStart, mtCalcEnd)
+        select * from mtChunkResult where tradetime between mtTargetStart:mtTargetEnd
+        """
+    )
+
+
+def _write_streamed_factor_store(
+    session: Any,
+    args: argparse.Namespace,
+    *,
+    panel: pd.DataFrame,
+    input_path: Path,
+    families: Sequence[str],
+    factor_dtype: str,
+    field_mapping: dict[str, Any],
+    version: str | None,
+) -> Path:
+    store_dir = Path(args.factor_store_output)
+    all_dates = _panel_trade_dates(panel)
+    warmup_trade_dates = int(getattr(args, "dolphindb_warmup_trade_dates", 260))
+
+    def generate_family_part(
+        family: str,
+        target_dates: pd.Index,
+        part_index: int,
+        part_count: int,
+    ) -> pd.DataFrame:
+        del part_index, part_count
+        return _run_dolphindb_family_part(
+            session,
+            args,
+            family,
+            all_dates=all_dates,
+            target_dates=target_dates,
+            warmup_trade_dates=warmup_trade_dates,
+        )
+
+    write_external_factor_store_partitioned(
+        panel,
+        store_dir,
+        families=families,
+        generate_family_part=generate_family_part,
+        factor_dtype=factor_dtype,
+        chunk_trade_dates=int(getattr(args, "chunk_trade_dates", 60)),
+        compression=args.compression,
+        compression_level=getattr(args, "compression_level", None),
+        row_group_size=getattr(args, "row_group_size", None),
+        metadata={
+            "source": "moneytrees-dolphindb-alphas",
+            "input": str(input_path),
+            "families": list(families),
+            "field_mapping": field_mapping,
+            "dolphindb": {
+                "host": args.host,
+                "port": int(args.port),
+                "user": args.user,
+                "server_version": version,
+                "python_client_version": _package_version("dolphindb"),
+            },
+            "module_versions": _module_versions(args),
+            "dolphindb_warmup_trade_dates": warmup_trade_dates,
+            "row_group_size": getattr(args, "row_group_size", None),
+        },
+        show_progress=bool(getattr(args, "progress", False)),
+    )
+    return store_dir / "manifest.json"
+
+
 def _positive_int(raw: str) -> int:
     value = int(raw)
     if value < 1:
         raise argparse.ArgumentTypeError("must be >= 1")
+    return value
+
+
+def _nonnegative_int(raw: str) -> int:
+    value = int(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
     return value
 
 
@@ -233,6 +355,25 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
     _run_preflight(session, args, families)
     session.upload({"rawData": ddb_input})
     _run_setup_script(session, families)
+
+    if no_wide_output and factor_store_output:
+        factor_store_manifest_path = _write_streamed_factor_store(
+            session,
+            args,
+            panel=panel,
+            input_path=input_path,
+            families=families,
+            factor_dtype=factor_dtype,
+            field_mapping=field_mapping,
+            version=version,
+        )
+        return GenerationResult(
+            output_path=None,
+            manifest_path=None,
+            rows=int(len(panel)),
+            alpha_columns=_family_alpha_column_count(families),
+            factor_store_manifest_path=factor_store_manifest_path,
+        )
 
     merged = panel
     validation: dict[str, Any] = {"families": families, "family_results": {}}
@@ -435,7 +576,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--chunk-trade-dates",
         type=_positive_int,
         default=60,
-        help="Number of target trade dates per factor-store partition.",
+        help=(
+            "Number of target trade dates per factor-store partition. In "
+            "--no-wide-output mode this also controls each DolphinDB calculation chunk."
+        ),
+    )
+    parser.add_argument(
+        "--dolphindb-warmup-trade-dates",
+        type=_nonnegative_int,
+        default=260,
+        help=(
+            "Historical trade dates included before each streamed DolphinDB calculation "
+            "chunk so rolling Alpha101/191 formulas have lookback context."
+        ),
     )
     parser.add_argument(
         "--progress",

@@ -81,14 +81,21 @@ class FakeSession:
             )
             return pd.DataFrame({"name": [function_name] if available else []})
         for function_name, family in self.function_results.items():
-            if f"{function_name}(rawData" in script:
+            if f"{function_name}(" in script:
                 if function_name in self.missing_functions:
                     raise RuntimeError(f"Unknown function [{function_name}]")
-                return self._alpha_result(family)
+                return self._alpha_result(family, script=script)
         return None
 
-    def _alpha_result(self, family: str) -> pd.DataFrame:
+    def _alpha_result(self, family: str, *, script: str | None = None) -> pd.DataFrame:
         raw = self.uploaded["rawData"]
+        if script is not None and "mtTargetStart" in script:
+            start_match = re.search(r"mtTargetStart = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
+            end_match = re.search(r"mtTargetEnd = ([0-9]{4}\.[0-9]{2}\.[0-9]{2})", script)
+            if start_match and end_match:
+                start = pd.Timestamp(start_match.group(1).replace(".", "-"))
+                end = pd.Timestamp(end_match.group(1).replace(".", "-"))
+                raw = raw.loc[raw["tradetime"].between(start, end)]
         values = {
             "tradetime": raw["tradetime"],
             "securityid": raw["securityid"],
@@ -135,6 +142,7 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "factor_store_output": None,
         "no_wide_output": False,
         "chunk_trade_dates": 60,
+        "dolphindb_warmup_trade_dates": 260,
         "progress": False,
     }
     values.update(overrides)
@@ -324,6 +332,7 @@ def test_dolphindb_generation_can_write_factor_store_only(tmp_path: Path) -> Non
             factor_store_output=str(store_dir),
             no_wide_output=True,
             chunk_trade_dates=1,
+            dolphindb_warmup_trade_dates=1,
         ),
         ddb_module=FakeDolphinDB(session),
     )
@@ -337,6 +346,21 @@ def test_dolphindb_generation_can_write_factor_store_only(tmp_path: Path) -> Non
     assert "alpha101" in manifest["factor_families"]
     assert len(manifest["factor_families"]["alpha101"]["paths"]) == 2
     assert "supersecret" not in json.dumps(manifest, sort_keys=True)
+    streamed_scripts = [script for script in session.scripts if "mtChunkRawData" in script]
+    assert len(streamed_scripts) == 2
+    assert "mtCalcStart = 2021.01.04" in streamed_scripts[0]
+    assert "mtCalcEnd = 2021.01.04" in streamed_scripts[0]
+    assert "mtTargetStart = 2021.01.04" in streamed_scripts[0]
+    assert "mtTargetEnd = 2021.01.04" in streamed_scripts[0]
+    assert "mtCalcStart = 2021.01.04" in streamed_scripts[1]
+    assert "mtCalcEnd = 2021.01.05" in streamed_scripts[1]
+    assert "mtTargetStart = 2021.01.05" in streamed_scripts[1]
+    assert "mtTargetEnd = 2021.01.05" in streamed_scripts[1]
+    script_text = "\n".join(streamed_scripts)
+    assert "mtChunkRawData = select * from rawData" in script_text
+    assert "calcMoneyTreeAlpha101(mtChunkRawData, mtCalcStart, mtCalcEnd)" in script_text
+    first_part = pd.read_parquet(store_dir / manifest["factor_families"]["alpha101"]["paths"][0])
+    assert len(first_part) == 1
 
 
 def test_dolphindb_generation_can_write_wide_and_factor_store(tmp_path: Path) -> None:
