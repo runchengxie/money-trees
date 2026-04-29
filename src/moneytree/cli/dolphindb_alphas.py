@@ -108,6 +108,12 @@ def _dolphindb_string_literal(value: str) -> str:
     return f'"{escaped}"'
 
 
+def _moneytree_function_ref(function_name: str) -> str:
+    if "::" in function_name:
+        return function_name
+    return f"moneytreeAlpha::{function_name}"
+
+
 def _empty_result(value: Any) -> bool:
     if value is None:
         return True
@@ -145,7 +151,8 @@ def _run_preflight(session: Any, args: argparse.Namespace, families: Sequence[st
 
     for family in families:
         function_name = _family_function(args, family)
-        function_literal = _dolphindb_string_literal(function_name)
+        function_ref = _moneytree_function_ref(function_name)
+        function_literal = _dolphindb_string_literal(function_ref)
         try:
             result = session.run(
                 "use moneytreeAlpha\n"

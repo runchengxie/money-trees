@@ -74,9 +74,10 @@ class FakeSession:
         if "defs(" in script:
             match = re.search(r'defs\("([^"]+)"\)', script)
             function_name = match.group(1) if match else ""
+            short_name = function_name.rsplit("::", 1)[-1]
             available = (
-                function_name in self.function_results
-                and function_name not in self.missing_functions
+                short_name in self.function_results
+                and short_name not in self.missing_functions
             )
             return pd.DataFrame({"name": [function_name] if available else []})
         for function_name, family in self.function_results.items():
@@ -303,8 +304,8 @@ def test_dolphindb_preflight_uses_custom_wrapper_function_names(tmp_path: Path) 
 
     script_text = "\n---\n".join(session.scripts)
     assert result.alpha_columns == 292
-    assert 'defs("customAlpha101")' in script_text
-    assert 'defs("customAlpha191")' in script_text
+    assert 'defs("moneytreeAlpha::customAlpha101")' in script_text
+    assert 'defs("moneytreeAlpha::customAlpha191")' in script_text
     assert "customAlpha101(rawData, startTime, endTime)" in session.scripts
     assert "customAlpha191(rawData, startTime, endTime)" in session.scripts
 

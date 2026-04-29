@@ -145,6 +145,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local DolphinDB alpha modules.
+docker/dolphindb/modules/*.dos
+
 # Spyder project settings
 .spyderproject
 .spyproject
