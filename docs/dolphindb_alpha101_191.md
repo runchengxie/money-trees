@@ -161,6 +161,8 @@ uv run python -c 'import dolphindb as ddb; s=ddb.Session(); s.connect("127.0.0.1
 
 返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB 的 `use` 模块名。
 
+CLI 默认从 `DOLPHINDB_PASSWORD` 读取密码；环境变量未设置或为空时，回退到本地开发默认密码 `123456`。如果显式传 `--password`，该值必须非空。
+
 ## 字段映射
 
 CLI 会把 Money Trees 面板映射成 DolphinDB 输入：
@@ -220,7 +222,6 @@ uv run moneytrees-dolphindb-alphas \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
-  --password "$DOLPHINDB_PASSWORD" \
   --alpha101 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
@@ -241,7 +242,6 @@ uv run moneytrees-dolphindb-alphas \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
-  --password "$DOLPHINDB_PASSWORD" \
   --alpha191 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
@@ -262,7 +262,6 @@ uv run moneytrees-dolphindb-alphas \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
-  --password "$DOLPHINDB_PASSWORD" \
   --alpha101 \
   --alpha191 \
   --factor-dtype float32 \
@@ -294,7 +293,6 @@ uv run moneytrees-dolphindb-alphas \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
-  --password 123456 \
   --alpha101 \
   --alpha191 \
   --wq101-module-version <your-wq101-version> \

@@ -98,7 +98,6 @@ uv run moneytrees-dolphindb-alphas \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
-  --password 123456 \
   --alpha101 \
   --alpha191 \
   --factor-dtype float32 \

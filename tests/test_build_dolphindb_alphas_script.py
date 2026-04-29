@@ -45,11 +45,13 @@ class FakeSession:
         missing_column: bool = False,
         missing_modules: set[str] | None = None,
         missing_functions: set[str] | None = None,
+        connection_error: Exception | None = None,
         function_results: dict[str, str] | None = None,
     ) -> None:
         self.missing_column = missing_column
         self.missing_modules = missing_modules or set()
         self.missing_functions = missing_functions or set()
+        self.connection_error = connection_error
         self.function_results = function_results or {
             "calcMoneyTreeAlpha101": "alpha101",
             "calcMoneyTreeAlpha191": "alpha191",
@@ -66,6 +68,8 @@ class FakeSession:
 
     def run(self, script: str) -> Any:
         self.scripts.append(script)
+        if script == "1" and self.connection_error is not None:
+            raise self.connection_error
         for module_name in self.missing_modules:
             if f"use {module_name}" in script:
                 raise RuntimeError(f"Can't find module [{module_name}]")
@@ -194,6 +198,55 @@ def test_dolphindb_generation_package_cli_smoke_with_mocked_session(tmp_path: Pa
     assert result.alpha_columns == 101
     assert output_path.exists()
     assert output_path.with_suffix(output_path.suffix + ".factor_manifest.json").exists()
+
+
+def test_dolphindb_parser_password_defaults_to_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOLPHINDB_PASSWORD", "from-env")
+
+    args = dolphindb_alphas.build_parser().parse_args(
+        ["--input", "input.parquet", "--output", "output.parquet", "--alpha101"]
+    )
+
+    assert args.password == "from-env"
+
+
+def test_dolphindb_parser_password_falls_back_when_environment_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOLPHINDB_PASSWORD", "")
+
+    args = dolphindb_alphas.build_parser().parse_args(
+        ["--input", "input.parquet", "--output", "output.parquet", "--alpha101"]
+    )
+
+    assert args.password == "123456"
+
+
+def test_dolphindb_generation_rejects_empty_password(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="--password is empty"):
+        dolphindb_alphas.run_generation(
+            _args(tmp_path / "input.parquet", tmp_path / "output.parquet", password=""),
+            ddb_module=FakeDolphinDB(FakeSession()),
+        )
+
+
+def test_dolphindb_generation_reports_connection_failure_before_preflight(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+    session = FakeSession(connection_error=RuntimeError("The user name or password is incorrect."))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        dolphindb_alphas.run_generation(
+            _args(input_path, output_path),
+            ddb_module=FakeDolphinDB(session),
+        )
+
+    message = str(exc_info.value)
+    assert "connection failed before module preflight" in message
+    assert "user name or password is incorrect" in message
+    assert "wq101alpha" not in message
+    assert session.uploaded == {}
 
 
 def test_dolphindb_alpha101_preflight_loads_required_modules(tmp_path: Path) -> None:

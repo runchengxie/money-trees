@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -199,6 +200,31 @@ def _server_version(session: Any) -> str | None:
     return str(value) if value is not None else None
 
 
+def _default_dolphindb_password() -> str:
+    return os.environ.get("DOLPHINDB_PASSWORD") or "123456"
+
+
+def _validate_connection_args(args: argparse.Namespace) -> None:
+    if str(getattr(args, "password", "")).strip() == "":
+        raise ValueError(
+            "--password is empty. Set DOLPHINDB_PASSWORD, pass a non-empty "
+            "--password value, or omit --password to use the local default."
+        )
+
+
+def _connect_session(session: Any, args: argparse.Namespace) -> None:
+    try:
+        session.connect(args.host, int(args.port), args.user, args.password)
+        session.run("1")
+    except Exception as exc:
+        raise RuntimeError(
+            "DolphinDB connection failed before module preflight. Check --host, "
+            "--port, --user, and --password. If you rely on DOLPHINDB_PASSWORD, "
+            "make sure it is exported in the current shell. Original DolphinDB "
+            f"error: {exc}"
+        ) from exc
+
+
 def _panel_trade_dates(panel: pd.DataFrame) -> pd.Index:
     indexed = ensure_date_ticker_index(panel)
     return pd.Index(indexed.index.get_level_values("date").unique()).sort_values()
@@ -323,6 +349,7 @@ def _nonnegative_int(raw: str) -> int:
 def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -> GenerationResult:
     families = _selected_families(args)
     factor_dtype = normalize_factor_dtype(getattr(args, "factor_dtype", "float32"))
+    _validate_connection_args(args)
     input_path = Path(args.input)
     no_wide_output = bool(getattr(args, "no_wide_output", False))
     factor_store_output = getattr(args, "factor_store_output", None)
@@ -353,7 +380,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
 
     ddb = ddb_module if ddb_module is not None else load_dolphindb_client()
     session = ddb.Session()
-    session.connect(args.host, int(args.port), args.user, args.password)
+    _connect_session(session, args)
     version = _server_version(session)
     _run_preflight(session, args, families)
     session.upload({"rawData": ddb_input})
@@ -526,7 +553,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1", help="DolphinDB host.")
     parser.add_argument("--port", type=int, default=8848, help="DolphinDB port.")
     parser.add_argument("--user", default="admin", help="DolphinDB user.")
-    parser.add_argument("--password", default="123456", help="DolphinDB password.")
+    parser.add_argument(
+        "--password",
+        default=_default_dolphindb_password(),
+        help=(
+            "DolphinDB password. Defaults to DOLPHINDB_PASSWORD when set, "
+            "otherwise 123456 for local development."
+        ),
+    )
     parser.add_argument(
         "--family",
         action="append",
