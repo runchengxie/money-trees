@@ -6,7 +6,11 @@ from pathlib import Path
 
 from moneytree.data import DEFAULT_PARQUET_COMPRESSION
 from moneytree.data import load_market_data
-from moneytree.factor_store import LOCAL_FACTOR_FAMILIES, write_local_factor_store
+from moneytree.factor_store import (
+    LOCAL_FACTOR_FAMILIES,
+    write_local_factor_store,
+    write_local_factor_store_from_parquet,
+)
 
 
 @dataclass(frozen=True)
@@ -92,24 +96,41 @@ def run_generation(args: argparse.Namespace) -> FactorStoreBuildResult:
 
     input_path = Path(args.input)
     output_dir = Path(args.output_dir)
-    panel = load_market_data(input_path)
-    manifest = write_local_factor_store(
-        panel,
-        output_dir,
-        families=families,
-        adjusted=not bool(args.raw_features),
-        factor_dtype=args.factor_dtype,
-        chunk_trade_dates=int(args.chunk_trade_dates),
-        compression=args.compression,
-        compression_level=args.compression_level,
-        row_group_size=args.row_group_size,
-        overwrite=bool(args.overwrite),
-        show_progress=bool(args.progress),
-        metadata={
-            "source": "moneytrees-factor-store",
-            "input": str(input_path),
-        },
-    )
+    metadata = {
+        "source": "moneytrees-factor-store",
+        "input": str(input_path),
+    }
+    if input_path.suffix.lower() == ".parquet":
+        manifest = write_local_factor_store_from_parquet(
+            input_path,
+            output_dir,
+            families=families,
+            adjusted=not bool(args.raw_features),
+            factor_dtype=args.factor_dtype,
+            chunk_trade_dates=int(args.chunk_trade_dates),
+            compression=args.compression,
+            compression_level=args.compression_level,
+            row_group_size=args.row_group_size,
+            overwrite=bool(args.overwrite),
+            show_progress=bool(args.progress),
+            metadata=metadata,
+        )
+    else:
+        panel = load_market_data(input_path)
+        manifest = write_local_factor_store(
+            panel,
+            output_dir,
+            families=families,
+            adjusted=not bool(args.raw_features),
+            factor_dtype=args.factor_dtype,
+            chunk_trade_dates=int(args.chunk_trade_dates),
+            compression=args.compression,
+            compression_level=args.compression_level,
+            row_group_size=args.row_group_size,
+            overwrite=bool(args.overwrite),
+            show_progress=bool(args.progress),
+            metadata=metadata,
+        )
     return FactorStoreBuildResult(
         manifest_path=output_dir / "manifest.json",
         base_rows=int(manifest["base_panel"]["rows"]),

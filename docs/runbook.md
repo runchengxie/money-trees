@@ -62,6 +62,8 @@ uv run moneytrees-factor-store \
   --progress
 ```
 
+`moneytrees-factor-store` 对 parquet 输入会按日期窗口流式读取基础面板：每个 partition 只加载目标交易日和本地因子所需的历史 overlap，然后立即落盘，避免把大面板整表读进内存。`--chunk-trade-dates` 控制每个 partition 的目标交易日数；内存紧张时可降到 `20` 或 `10`。
+
 `moneytrees-factor-store` 会按分区复用已生成的本地因子文件。重复运行同一 family 时，已完成且输入一致的 partition 会跳过；基础面板扩展到新日期后，只补缺失或输入变化的 partition。需要强制全量重算时传 `--overwrite`。`--progress` 会输出 ASCII 进度条、每个 partition 的 `generated/skipped` 状态、单块耗时、累计耗时和 ETA。
 
 回测入口可以直接读取 factor store manifest，并按配置只加载需要的因子族：

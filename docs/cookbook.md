@@ -95,6 +95,8 @@ uv run moneytrees-factor-store \
 
 默认优先使用复权价格生成本地 Alpha 特征，并把生成的 `alpha158_`、`alpha360_` 列保存为 `float32`。需要保留双精度时传 `--factor-dtype float64`。使用未复权价格：
 
+当 `--input` 是 parquet 时，`moneytrees-factor-store` 会按 `--chunk-trade-dates` 分区流式读取面板，并自动带上 Alpha158/360 所需的历史 overlap。大面板内存紧张时，优先把 `--chunk-trade-dates` 调低到 `20` 或 `10`，不要把因子重新并回单个超宽 parquet。
+
 ```bash
 uv run moneytrees-factor-store \
   --input data/panel/cn/cn_daily_raw.parquet \

@@ -13,6 +13,7 @@ from moneytree.factor_store import (
     write_external_factor_store,
     write_factor_store,
     write_local_factor_store,
+    write_local_factor_store_from_parquet,
 )
 
 
@@ -128,6 +129,37 @@ def test_write_local_factor_store_generates_partitioned_family(tmp_path) -> None
     assert "open" in out.columns
     assert "alpha158_kmid" in out.columns
     assert str(out["alpha158_kmid"].dtype) == "float32"
+
+
+def test_write_local_factor_store_from_parquet_matches_in_memory_output(tmp_path) -> None:
+    input_path = tmp_path / "base.parquet"
+    panel = _base_panel(days=8)
+    panel.to_parquet(input_path, index=False, row_group_size=4)
+
+    write_local_factor_store(
+        panel,
+        tmp_path / "memory_store",
+        families=["alpha158", "alpha360"],
+        adjusted=False,
+        chunk_trade_dates=4,
+    )
+    manifest = write_local_factor_store_from_parquet(
+        input_path,
+        tmp_path / "stream_store",
+        families=["alpha158", "alpha360"],
+        adjusted=False,
+        chunk_trade_dates=4,
+    )
+
+    assert manifest["local_generation"]["input_mode"] == "parquet_streaming"
+    memory = load_factor_store(tmp_path / "memory_store" / "manifest.json")
+    streamed = load_factor_store(tmp_path / "stream_store" / "manifest.json")
+    pd.testing.assert_index_equal(streamed.index, memory.index)
+    pd.testing.assert_frame_equal(
+        streamed.loc[:, memory.columns],
+        memory,
+        check_dtype=False,
+    )
 
 
 def test_write_local_factor_store_progress_reports_part_status(tmp_path, capsys) -> None:
@@ -369,6 +401,35 @@ def test_factor_store_cli_generates_local_store(tmp_path) -> None:
 
     assert result.manifest_path.exists()
     assert result.base_rows == 16
+    assert result.factor_families == ("alpha158",)
+
+
+def test_factor_store_cli_streams_parquet_without_full_panel_load(tmp_path, monkeypatch) -> None:
+    input_path = tmp_path / "base.parquet"
+    _base_panel(days=4).to_parquet(input_path, index=False)
+
+    def _fail_load_market_data(*args, **kwargs):
+        raise AssertionError("CLI should stream parquet input")
+
+    monkeypatch.setattr("moneytree.cli.factor_store.load_market_data", _fail_load_market_data)
+    args = build_parser().parse_args(
+        [
+            "--input",
+            str(input_path),
+            "--output-dir",
+            str(tmp_path / "store"),
+            "--factor-family",
+            "alpha158",
+            "--raw-features",
+            "--chunk-trade-dates",
+            "2",
+        ]
+    )
+
+    result = run_generation(args)
+
+    assert result.manifest_path.exists()
+    assert result.base_rows == 8
     assert result.factor_families == ("alpha158",)
 
 
