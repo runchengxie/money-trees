@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +107,7 @@ class BacktestSettings:
     benchmark_name: str = "000300.SH"
     benchmark_return_column: str = "benchmark_next_period_return"
     benchmark_cum_column: str = "benchmark_cum_ret"
+    benchmark_cum_mode: str = "nav"
     market_tradability_columns: dict[str, str] = field(default_factory=dict)
     market_tradability_filters: dict[str, bool] = field(default_factory=dict)
     model_id: str = "random_forest"
@@ -144,6 +145,7 @@ class BacktestSettings:
     random_seed: int = 123
     include_factor_prefixes: tuple[str, ...] = ()
     exclude_factor_prefixes: tuple[str, ...] = ()
+    missing_feature_policy: str = "error"
     feature_lag_periods: int = 1
     train_months: int = 60
     gap_months: int = 3
@@ -224,6 +226,7 @@ def load_backtest_settings(
                 "benchmark_cum_ret",
             )
         ),
+        benchmark_cum_mode=str(market.get("benchmark_cum_mode", "nav")),
         market_tradability_columns=dict(market.get("tradability_columns", {})),
         market_tradability_filters={
             "suspend": bool(market.get("tradability_filters", {}).get("suspend", False)),
@@ -276,6 +279,7 @@ def load_backtest_settings(
             _as_str_tuple(features.get("exclude_factor_prefixes")),
             families=_as_str_tuple(features.get("exclude_factor_families")),
         ),
+        missing_feature_policy=str(features.get("missing_feature_policy", "error")),
         feature_lag_periods=int(market.get("feature_lag_periods", 1)),
         train_months=int(backtest.get("train_months", 60)),
         gap_months=int(backtest.get("gap_months", 3)),

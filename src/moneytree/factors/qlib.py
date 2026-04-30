@@ -5,9 +5,7 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 
-from moneytree.data import ensure_date_ticker_index
-from moneytree.data import normalize_factor_dtype
-
+from moneytree.data import ensure_date_ticker_index, normalize_factor_dtype
 
 PRICE_FIELDS = ("open", "high", "low", "close", "vwap")
 ALPHA360_FIELDS = ("open", "high", "low", "close", "vwap", "volume")

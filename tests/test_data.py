@@ -5,15 +5,16 @@ import pandas as pd
 import pytest
 
 from moneytree.data import (
-    FACTOR_PREFIXES,
     DEFAULT_PARQUET_COMPRESSION,
+    FACTOR_PREFIXES,
     NON_FEATURE_COLUMNS,
     apply_feature_lag,
+    apply_missing_feature_policy,
     coerce_factor_columns,
     ensure_date_ticker_index,
     factor_columns,
-    filter_factor_columns,
     fill_missing_with_reference,
+    filter_factor_columns,
     get_feature_columns,
     load_market_data,
     make_labels,
@@ -172,6 +173,63 @@ def test_preprocess_data_pred_rel_return_missing_column_raises_key_error() -> No
 
     with pytest.raises(KeyError, match="pred_rel_return"):
         preprocess_data(raw, label_source="pred_rel_return", apply_global_fill=False)
+
+
+def test_preprocess_data_does_not_forward_fill_targets_or_state_columns() -> None:
+    raw = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2021-01-31", "2021-02-28", "2021-03-31"]),
+            "ticker": ["A", "A", "A"],
+            "f1": [1.0, np.nan, 3.0],
+            "next_period_return": [0.10, np.nan, 0.03],
+            "benchmark_next_period_return": [0.01, np.nan, 0.01],
+            "benchmark_cum_ret": [1.0, np.nan, 1.02],
+            "is_tradable": [True, np.nan, True],
+            "is_suspended": [False, np.nan, False],
+            "is_st": [False, np.nan, False],
+            "hit_up_limit": [False, np.nan, False],
+            "hit_down_limit": [False, np.nan, False],
+        }
+    )
+
+    out = preprocess_data(raw, apply_global_fill=True)
+    idx = (pd.Timestamp("2021-02-28"), "A")
+
+    assert np.isclose(float(out.loc[idx, "f1"]), 1.0)
+    assert pd.isna(out.loc[idx, "next_period_return"])
+    assert pd.isna(out.loc[idx, "benchmark_next_period_return"])
+    assert pd.isna(out.loc[idx, "benchmark_cum_ret"])
+    assert pd.isna(out.loc[idx, "is_tradable"])
+    assert pd.isna(out.loc[idx, "is_suspended"])
+    assert pd.isna(out.loc[idx, "is_st"])
+    assert pd.isna(out.loc[idx, "hit_up_limit"])
+    assert pd.isna(out.loc[idx, "hit_down_limit"])
+    assert pd.isna(out.loc[idx, "rel_return"])
+
+
+def test_apply_missing_feature_policy_errors_by_default_and_can_fill_for_legacy() -> None:
+    frame = pd.DataFrame({"f1": [1.0]})
+
+    with pytest.raises(ValueError, match="Missing selected feature columns"):
+        apply_missing_feature_policy(
+            frame,
+            ["f1", "missing_factor"],
+            frame_role="test frame",
+            policy="error",
+        )
+
+    with pytest.warns(RuntimeWarning, match="filling with 0.0"):
+        filled = apply_missing_feature_policy(
+            frame,
+            ["f1", "missing_factor"],
+            frame_role="legacy frame",
+            policy="warn_fill_zero",
+        )
+
+    assert filled["missing_factor"].tolist() == [0.0]
+    assert filled.attrs["missing_feature_fallbacks"] == [
+        {"frame_role": "legacy frame", "columns": ["missing_factor"]}
+    ]
 
 
 def test_load_market_data_unsupported_suffix_raises_value_error(tmp_path) -> None:

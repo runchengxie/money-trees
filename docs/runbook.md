@@ -218,6 +218,8 @@ uv run moneytrees-parquet-rewrite \
 
 该命令会拒绝原地重写，并在写入后默认校验行数、列和索引名称。确认新文件可用后，再手工更新后续命令中的 `--data` 或 `--input` 路径。
 
+只迁移可信 pickle 文件。正式研究路径使用 parquet 或因子仓库。
+
 ## TuShare token 排查
 
 Token 读取顺序：
@@ -333,6 +335,8 @@ benchmark_cum_ret
 
 - 检查输入文件是否包含基准累计收益。
 - 如果上游列名不同，在 `configs/market/cn.yaml` 里设置 `benchmark_cum_column`。
+- 如果上游列是净值或指数水平，保持 `benchmark_cum_mode: nav`。
+- 如果上游列是累计收益率，设置 `benchmark_cum_mode: cumulative_return`。
 
 ### 可交易过滤列缺失
 
@@ -345,6 +349,7 @@ tradability column mapping
 处理：
 
 - 补齐 `is_suspended`、`is_st`、`hit_up_limit`、`hit_down_limit`。
+- TuShare 默认 `is_st` 来自 `stock_basic.name` 最新名称标记，严格历史回测需要上游提供 point-in-time ST 状态。
 - 临时关闭对应过滤，例如 `--set market.tradability_filters.st=false`。
 
 ### 训练或验证样本为空

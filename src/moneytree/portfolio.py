@@ -232,6 +232,15 @@ def _build_heuristic_weights_from_scores(
     return weights
 
 
+def _with_portfolio_attrs(
+    weights: pd.Series,
+    *,
+    qp_fallback: bool = False,
+) -> pd.Series:
+    weights.attrs["qp_fallback"] = bool(qp_fallback)
+    return weights
+
+
 def _build_rank_based_mu(scores: pd.Series, clip_value: float) -> pd.Series:
     if scores.empty:
         return pd.Series(dtype=float, name="mu")
@@ -518,7 +527,7 @@ def build_portfolio_weights(
     score = score.where(score.abs() >= cfg.min_score, 0.0)
     active = score[score != 0]
     if active.empty:
-        return pd.Series(dtype=float, name="weight")
+        return _with_portfolio_attrs(pd.Series(dtype=float, name="weight"))
 
     method = str(cfg.weighting_method).strip().lower()
     if method == "signal_risk_qp":
@@ -533,7 +542,7 @@ def build_portfolio_weights(
         qp_signal = qp_signal.where(qp_signal.abs() > 1e-12, 0.0)
         qp_signal = qp_signal[qp_signal != 0]
         if qp_signal.empty:
-            return pd.Series(dtype=float, name="weight")
+            return _with_portfolio_attrs(pd.Series(dtype=float, name="weight"))
 
         qp_weights = _solve_signal_risk_qp_weights(
             signal_scores=qp_signal,
@@ -542,13 +551,16 @@ def build_portfolio_weights(
             previous_weights=previous_weights,
         )
         if qp_weights is not None:
-            return qp_weights
+            return _with_portfolio_attrs(qp_weights, qp_fallback=False)
         if not cfg.qp_fallback_to_heuristic:
-            return pd.Series(dtype=float, name="weight")
+            return _with_portfolio_attrs(pd.Series(dtype=float, name="weight"))
+        qp_fallback = True
     elif method != "heuristic":
         raise ValueError(
             "Unsupported weighting_method. Use 'heuristic' or 'signal_risk_qp'."
         )
+    else:
+        qp_fallback = False
 
     zscores = _zscore_clip(active, zmax=cfg.winsor_z)
 
@@ -577,9 +589,32 @@ def build_portfolio_weights(
     zscores = zscores.where(zscores.abs() > 1e-12, 0.0)
     zscores = zscores[zscores != 0]
     if zscores.empty:
-        return pd.Series(dtype=float, name="weight")
+        return _with_portfolio_attrs(pd.Series(dtype=float, name="weight"), qp_fallback=qp_fallback)
 
-    return _build_heuristic_weights_from_scores(zscores, cfg=cfg)
+    return _with_portfolio_attrs(
+        _build_heuristic_weights_from_scores(zscores, cfg=cfg),
+        qp_fallback=qp_fallback,
+    )
+
+
+def portfolio_exposure_diagnostics(
+    *,
+    weights: pd.Series,
+    cfg: PortfolioConfig,
+) -> dict[str, float | bool]:
+    """Summarize target and realized exposure for a period."""
+    target_gross = max(float(cfg.gross_target), 0.0)
+    target_net = float(np.clip(cfg.net_target, -target_gross, target_gross))
+    realized_gross = float(weights.abs().sum()) if not weights.empty else 0.0
+    realized_net = float(weights.sum()) if not weights.empty else 0.0
+    return {
+        "target_gross": target_gross,
+        "realized_gross": realized_gross,
+        "target_net": target_net,
+        "realized_net": realized_net,
+        "unallocated_exposure": max(0.0, target_gross - realized_gross),
+        "qp_fallback": bool(weights.attrs.get("qp_fallback", False)),
+    }
 
 
 def estimate_turnover_from_weights(

@@ -1,28 +1,32 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
 import threading
 import time
-from typing import Any
 import warnings
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from moneytree.data import DEFAULT_PARQUET_COMPRESSION
-from moneytree.data import ensure_date_ticker_index
-from moneytree.data import parquet_write_options
-from moneytree.data_quality import DATA_QUALITY_MODES_WITH_OFF
-from moneytree.data_quality import build_tushare_panel_quality_result
-from moneytree.data_quality import enforce_data_quality_result
-from moneytree.data_quality import validate_data_quality_mode
+from moneytree.data import (
+    DEFAULT_PARQUET_COMPRESSION,
+    ensure_date_ticker_index,
+    parquet_write_options,
+)
+from moneytree.data_quality import (
+    DATA_QUALITY_MODES_WITH_OFF,
+    build_tushare_panel_quality_result,
+    enforce_data_quality_result,
+    validate_data_quality_mode,
+)
 from moneytree.factors import add_factor_family_features
 from moneytree.metadata import (
     dataframe_content_hash,
@@ -30,7 +34,6 @@ from moneytree.metadata import (
     stable_json_dumps,
     stable_json_hash,
 )
-
 
 TOKEN_ENV_NAMES = ("TUSHARE_TOKEN", "TUSHARE_PRO_TOKEN", "TS_TOKEN", "TUSHARE_API_KEY")
 TUSHARE_PROXY_MODES = ("direct", "env", "proxy")
@@ -687,6 +690,8 @@ def _merge_stock_basic(panel: pd.DataFrame, stock_basic: pd.DataFrame | None) ->
     if stock_basic is None or stock_basic.empty or "ts_code" not in stock_basic.columns:
         if "is_st" not in panel.columns:
             panel["is_st"] = False
+        panel.attrs["is_st_source"] = "default_false_no_stock_basic"
+        panel.attrs["is_st_point_in_time"] = False
         return panel
 
     basic = stock_basic.copy()
@@ -695,8 +700,12 @@ def _merge_stock_basic(panel: pd.DataFrame, stock_basic: pd.DataFrame | None) ->
     out = panel.reset_index().merge(basic, on="ticker", how="left").set_index(["date", "ticker"]).sort_index()
     if "name" in out.columns:
         out["is_st"] = out["name"].astype(str).str.contains("ST", case=False, na=False)
+        out.attrs["is_st_source"] = "tushare_stock_basic_latest_name_flag"
+        out.attrs["is_st_point_in_time"] = False
     else:
         out["is_st"] = False
+        out.attrs["is_st_source"] = "default_false_no_stock_basic_name"
+        out.attrs["is_st_point_in_time"] = False
     if "list_date" in out.columns:
         list_date = _to_datetime_date(out["list_date"])
         date_values = pd.Series(out.index.get_level_values("date"), index=out.index)
@@ -884,7 +893,11 @@ def standardize_tushare_cn_daily_panel(
             expected_end=trade_dates[-1] if trade_dates else None,
             factor_families=factor_families,
         )
-    return ensure_date_ticker_index(panel).sort_index()
+    panel = ensure_date_ticker_index(panel).sort_index()
+    if "is_st" in panel.columns:
+        panel.attrs.setdefault("is_st_source", "tushare_stock_basic_latest_name_flag")
+        panel.attrs.setdefault("is_st_point_in_time", False)
+    return panel
 
 
 def _fetch_stock_basic(

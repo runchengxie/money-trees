@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,6 @@ from moneytree.metadata import (
     runtime_metadata,
     stable_json_dumps,
 )
-
 
 EXTERNAL_ALPHA_COUNTS = {
     "alpha101": 101,

@@ -14,25 +14,25 @@ class CNMarketProfile(BaseMarketProfile):
     market_id = "cn"
 
     @staticmethod
-    def _benchmark_return_column(settings: "BacktestSettings | None") -> str:
+    def _benchmark_return_column(settings: BacktestSettings | None) -> str:
         if settings is None:
             return "benchmark_next_period_return"
         return str(settings.benchmark_return_column or "benchmark_next_period_return")
 
     @staticmethod
-    def _benchmark_cum_column(settings: "BacktestSettings | None") -> str:
+    def _benchmark_cum_column(settings: BacktestSettings | None) -> str:
         if settings is None:
             return "benchmark_cum_ret"
         return str(settings.benchmark_cum_column or "benchmark_cum_ret")
 
     @staticmethod
-    def _tradability_columns(settings: "BacktestSettings | None") -> dict[str, str]:
+    def _tradability_columns(settings: BacktestSettings | None) -> dict[str, str]:
         if settings is None:
             return {}
         return {str(key): str(value) for key, value in settings.market_tradability_columns.items()}
 
     @staticmethod
-    def _tradability_filters(settings: "BacktestSettings | None") -> dict[str, bool]:
+    def _tradability_filters(settings: BacktestSettings | None) -> dict[str, bool]:
         if settings is None:
             return {}
         return {str(key): bool(value) for key, value in settings.market_tradability_filters.items()}
@@ -41,7 +41,7 @@ class CNMarketProfile(BaseMarketProfile):
         self,
         *,
         label_source: str,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> set[str]:
         required = {"next_period_return", "benchmark_cum_ret"}
         if label_source == "actual":
@@ -68,7 +68,7 @@ class CNMarketProfile(BaseMarketProfile):
         *,
         frame: pd.DataFrame,
         label_source: str,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> pd.DataFrame:
         prepared = frame.copy()
         benchmark_return_column = self._benchmark_return_column(settings)
@@ -94,7 +94,7 @@ class CNMarketProfile(BaseMarketProfile):
         self,
         frame: pd.DataFrame,
         *,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> pd.DataFrame:
         if frame.empty:
             return frame

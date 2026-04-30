@@ -3,9 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from moneytree.data import load_market_data
 from moneytree.cli.factor_store import build_parser, run_generation
-from moneytree.factors.external import external_alpha_columns
+from moneytree.data import load_market_data
 from moneytree.factor_store import (
     FactorStoreValidationError,
     load_factor_store,
@@ -15,6 +14,7 @@ from moneytree.factor_store import (
     write_local_factor_store,
     write_local_factor_store_from_parquet,
 )
+from moneytree.factors.external import external_alpha_columns
 
 
 def _panel() -> pd.DataFrame:

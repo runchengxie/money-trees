@@ -30,16 +30,18 @@ configs/backtest/default.yaml
 
 - `src/moneytree/data.py`
 - `src/moneytree/data_sources/tushare.py`
+- `src/moneytree/factor_store.py`
 - `scripts/convert_pickle_to_parquet.py`
 
 职责：
 
-- 读取 pickle 或 parquet。
+- 读取可信 pickle 或 parquet。
 - 统一 `date, ticker` 索引。
 - 生成 `rel_return` 和 `rel_performance`。
 - 处理缺失值、无穷值和特征滞后。
 - 将 TuShare 日频接口标准化为项目面板。
 - 将原始接口结果按 API 和交易日缓存为 parquet。
+- 通过因子仓库保存基础面板、本地因子、外部因子、分区文件和元数据清单。
 
 标准输入是 `date, ticker` 面板。上游数据可以先保留普通列，运行时会转成 MultiIndex。详细列契约见 [data_contract.md](data_contract.md)。
 
@@ -73,6 +75,7 @@ configs/backtest/default.yaml
 - `src/moneytree/factors/qlib.py`
 - `src/moneytree/factors/catalog.py`
 - `src/moneytree/factors/evaluate.py`
+- `src/moneytree/cli/factor_store.py`
 - `docs/factor_catalog.csv`
 
 职责：
@@ -80,8 +83,9 @@ configs/backtest/default.yaml
 - 生成本地 Alpha158-style 和 Alpha360-style 日频特征，共 518 列。
 - 维护 Alpha101、Alpha191、Alpha158、Alpha360 共 810 列的列名和接入口径。
 - 计算单因子 IC 和 RankIC。
+- 将 Alpha158/360 和外部 Alpha101/191 写入因子仓库，供回测按 family 或 prefix 按需读取。
 
-Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后并入面板。本仓库维护列名约定、输入字段、校验、manifest 和治理提醒，不在回测过程中实时调用 DolphinDB。
+Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后写入因子仓库或兼容并入面板。本仓库维护列名约定、输入字段、校验、元数据清单和治理提醒；回测读取离线产物。
 
 ## 模型层
 
@@ -142,6 +146,7 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后并入面�
 - 分别拟合 segment A 与 segment B。
 - 拼接两个 segment 的样本外序列。
 - 生成策略、信号、基准、换手、持仓数、IC 和 RankIC。
+- 记录目标/实际暴露、未分配暴露和 QP fallback 诊断。
 - 计算收益、波动、回撤、IR、VaR、CVaR、Alpha/Beta 等指标。
 - 按配置执行最终 holdout 验证。
 
@@ -166,7 +171,7 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后并入面�
 - segment 特征清单
 - 可选 holdout 子目录
 
-`run_config.json` 记录解析后的配置、segment 规格、holdout 信息、git commit 和可复现摘要。`experiment_manifest.json` 记录输入文件 hash、raw 输入 schema hash、模型输入 schema hash、配置文件 hash、解析后配置 hash、数据版本和运行环境。
+`run_config.json` 记录解析后的配置、基准净值口径、segment 规格、segment 验证区间、holdout 信息、git commit 和可复现摘要。`experiment_manifest.json` 记录输入文件 hash、raw 输入 schema hash、模型输入 schema hash、配置文件 hash、解析后配置 hash、数据版本和运行环境。
 
 ## 数据保存策略
 
@@ -174,6 +179,7 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后并入面�
 
 - 原始缓存：TuShare 按 `api_name/trade_date=YYYYMMDD.parquet` 保存接口返回。
 - 缓存索引：`manifest.sqlite` 记录 API、交易日、路径、行数、列信息和创建时间。
+- 因子仓库：`manifest.json` 记录基础面板、因子 family、分区文件、schema 和生成参数。
 - 研究产物：标准面板 parquet、回测 CSV、JSON 和文本摘要。
 
 这个方向适合当前项目规模，raw cache 可复用，标准面板可重建，回测产物可审计。当前已经落地的版本和元数据：

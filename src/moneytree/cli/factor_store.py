@@ -4,8 +4,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-from moneytree.data import DEFAULT_PARQUET_COMPRESSION
-from moneytree.data import load_market_data
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION, load_market_data
 from moneytree.factor_store import (
     LOCAL_FACTOR_FAMILIES,
     write_local_factor_store,

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-from typing import Iterable, Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 LabelSource = Literal["actual", "pred_rel_return"]
 FactorDtype = Literal["float32", "float64"]
+MissingFeaturePolicy = Literal["error", "warn_fill_zero", "fill_zero"]
 
 FACTOR_FAMILY_PREFIXES = {
     "alpha101": "alpha101_",
@@ -30,15 +31,33 @@ NON_FEATURE_COLUMNS = {
     "date",
     "ticker",
     "return",
+    "return_1d",
     "cum_ret",
+    "benchmark_return",
     "benchmark_cum_ret",
     "benchmark_next_period_return",
+    "benchmark_open",
+    "benchmark_close",
+    "benchmark_high",
+    "benchmark_low",
     "next_period_return",
     "pred_rel_return",
     "rel_return",
     "rel_performance",
     "is_tradable",
     "tradeable",
+    "is_suspended",
+    "is_st",
+    "is_st_latest_name_flag",
+    "hit_up_limit",
+    "hit_down_limit",
+    "up_limit",
+    "down_limit",
+    "suspend_type",
+    "list_date",
+    "delist_date",
+    "list_status",
+    "listed_days",
 }
 
 
@@ -566,14 +585,95 @@ def fill_missing_with_reference(
     return data
 
 
+def feature_like_columns(
+    frame: pd.DataFrame,
+    extra_drop: Iterable[str] | None = None,
+) -> list[str]:
+    """Return columns eligible for feature-style filling or model inputs."""
+    drop_cols = set(NON_FEATURE_COLUMNS)
+    if extra_drop is not None:
+        drop_cols.update(str(column) for column in extra_drop)
+    return [str(column) for column in frame.columns if str(column) not in drop_cols]
+
+
+def fill_feature_missing_with_reference(
+    frame: pd.DataFrame,
+    reference: pd.DataFrame,
+    add_missing_indicators: bool = False,
+    extra_drop: Iterable[str] | None = None,
+) -> pd.DataFrame:
+    """Fill only feature-like columns, leaving targets and state columns untouched."""
+    data = frame.copy()
+    fill_cols = [
+        column
+        for column in feature_like_columns(reference, extra_drop=extra_drop)
+        if column in data.columns
+    ]
+    if not fill_cols:
+        return data
+
+    filled = fill_missing_with_reference(
+        frame=data.loc[:, fill_cols],
+        reference=reference.loc[:, fill_cols],
+        add_missing_indicators=add_missing_indicators,
+    )
+    data.loc[:, fill_cols] = filled.loc[:, fill_cols]
+    indicator_cols = [column for column in filled.columns if column not in fill_cols]
+    for column in indicator_cols:
+        data[column] = filled[column]
+    return data
+
+
+def apply_missing_feature_policy(
+    frame: pd.DataFrame,
+    feature_columns: Iterable[str],
+    *,
+    frame_role: str,
+    policy: MissingFeaturePolicy = "error",
+) -> pd.DataFrame:
+    """Validate or backfill missing selected feature columns."""
+    resolved_policy = str(policy).strip().lower()
+    if resolved_policy not in {"error", "warn_fill_zero", "fill_zero"}:
+        raise ValueError(
+            "Unsupported missing_feature_policy. Use 'error', 'warn_fill_zero', or 'fill_zero'."
+        )
+
+    data = frame.copy()
+    missing = [str(column) for column in feature_columns if str(column) not in data.columns]
+    if not missing:
+        return data
+
+    if resolved_policy == "error":
+        raise ValueError(
+            f"Missing selected feature columns in {frame_role}: {missing}. "
+            "Set missing_feature_policy=warn_fill_zero only for legacy compatibility."
+        )
+
+    if resolved_policy == "warn_fill_zero":
+        import warnings
+
+        warnings.warn(
+            f"Missing selected feature columns in {frame_role}; filling with 0.0: {missing}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        fallback = list(data.attrs.get("missing_feature_fallbacks", []))
+        fallback.append({"frame_role": frame_role, "columns": missing})
+        data.attrs["missing_feature_fallbacks"] = fallback
+
+    for column in missing:
+        data[column] = 0.0
+    return data
+
+
 def preprocess_data(
     frame: pd.DataFrame,
-    market_profile: "BaseMarketProfile | None" = None,
+    market_profile: BaseMarketProfile | None = None,
     label_source: LabelSource = "actual",
     label_threshold: float = 0.05,
     add_missing_indicators: bool = False,
     apply_global_fill: bool = True,
-    settings: "BacktestSettings | None" = None,
+    settings: BacktestSettings | None = None,
 ) -> pd.DataFrame:
     """
     Clean the dataset and build labels.
@@ -593,9 +693,11 @@ def preprocess_data(
     data = ensure_date_ticker_index(prepared_frame)
     data = data.replace([np.inf, -np.inf], np.nan)
 
-    data = data.groupby(level="ticker", sort=False).ffill()
+    fill_cols = feature_like_columns(data)
+    if fill_cols:
+        data.loc[:, fill_cols] = data.loc[:, fill_cols].groupby(level="ticker", sort=False).ffill()
     if apply_global_fill:
-        data = fill_missing_with_reference(
+        data = fill_feature_missing_with_reference(
             frame=data,
             reference=data,
             add_missing_indicators=add_missing_indicators,
@@ -656,11 +758,7 @@ def get_feature_columns(
     extra_drop: Iterable[str] | None = None,
 ) -> list[str]:
     """Return model feature columns (numeric and bool only)."""
-    drop_cols = set(NON_FEATURE_COLUMNS)
-    if extra_drop is not None:
-        drop_cols.update(extra_drop)
-
-    candidate = [c for c in frame.columns if c not in drop_cols]
+    candidate = feature_like_columns(frame, extra_drop=extra_drop)
     numeric_or_bool = frame[candidate].select_dtypes(include=[np.number, "bool"]).columns
     return list(numeric_or_bool)
 
@@ -672,18 +770,20 @@ def build_xy_target_returns(
     realized_return_column: str = "next_period_return",
 ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """Build model matrix, configured target, and realized next-period returns."""
-    features = frame[feature_columns].copy()
+    required = list(dict.fromkeys([*feature_columns, target_column, realized_return_column]))
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        raise KeyError(f"Missing columns for model matrix: {missing}")
+
+    valid_mask = frame[target_column].notna() & frame[realized_return_column].notna()
+    model_frame = frame.loc[valid_mask]
+    features = model_frame[feature_columns].copy()
     bool_cols = features.select_dtypes(include=["bool"]).columns
     if len(bool_cols) > 0:
         features[bool_cols] = features[bool_cols].astype(np.int8)
 
-    if target_column not in frame.columns:
-        raise KeyError(f"Missing target column: {target_column}")
-    if realized_return_column not in frame.columns:
-        raise KeyError(f"Missing realized return column: {realized_return_column}")
-
-    target = frame[target_column].to_numpy()
-    realized_returns = frame[realized_return_column].to_numpy()
+    target = model_frame[target_column].to_numpy()
+    realized_returns = model_frame[realized_return_column].to_numpy()
     return features, target, realized_returns
 
 

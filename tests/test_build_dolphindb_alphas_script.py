@@ -3,16 +3,16 @@ from __future__ import annotations
 import argparse
 import builtins
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pandas as pd
 import pytest
 
-from moneytree.factors.external import external_alpha_columns
 from moneytree.cli import dolphindb_alphas
+from moneytree.factors.external import external_alpha_columns
 from scripts import build_dolphindb_alphas
 
 

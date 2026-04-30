@@ -9,12 +9,15 @@
 - pickle：`.pkl`、`.pickle`
 - parquet：`.parquet`
 
-推荐使用 parquet。pickle 适合迁移旧研究数据，转换脚本：
+推荐使用 parquet。pickle 只适合迁移可信的旧研究数据。推荐迁移命令：
 
 ```bash
-uv run python scripts/convert_pickle_to_parquet.py \
-  --input data_small.pkl
+uv run moneytrees-parquet-rewrite \
+  --input data/old.pkl \
+  --output data/old.parquet
 ```
+
+旧脚本 `scripts/convert_pickle_to_parquet.py` 作为兼容迁移工具保留。
 
 ## 索引
 
@@ -45,9 +48,9 @@ date, ticker, next_period_return, benchmark_next_period_return, ...
 | `ticker` | 股票代码，或 MultiIndex 的第二级。 |
 | `next_period_return` | 下一期股票收益，用于训练目标和组合收益。 |
 | `benchmark_next_period_return` | 下一期基准收益，用于计算相对收益。 |
-| `benchmark_cum_ret` | 基准累计收益序列，用于生成基准净值。 |
+| `benchmark_cum_ret` | 基准累计列，用于生成基准净值。默认按 `market.benchmark_cum_mode: nav` 解释。 |
 | `is_suspended` | 停牌过滤。 |
-| `is_st` | ST 过滤。 |
+| `is_st` | ST 过滤。TuShare 默认路径使用最新名称标记，历史 point-in-time ST 状态需要上游治理。 |
 | `hit_up_limit` | 涨停过滤。 |
 | `hit_down_limit` | 跌停过滤。 |
 
@@ -100,12 +103,21 @@ return
 cum_ret
 benchmark_cum_ret
 benchmark_next_period_return
+benchmark_return
+benchmark_open
+benchmark_close
+benchmark_high
+benchmark_low
 next_period_return
 pred_rel_return
 rel_return
 rel_performance
 is_tradable
 tradeable
+is_suspended
+is_st
+hit_up_limit
+hit_down_limit
 ```
 
 ## 特征滞后
@@ -127,8 +139,8 @@ Legacy notebook 兼容预设会关闭额外滞后。正式 Alpha101/191/158/360 
 
 1. 统一索引。
 2. 将 `inf` 和 `-inf` 转为缺失值。
-3. 按 ticker 前向填充。
-4. 训练、验证和测试切片中使用训练窗口统计量填充。
+3. 只对特征列按 ticker 前向填充。
+4. 训练、验证和测试切片中只对特征列使用训练窗口统计量填充。
 
 训练窗口填充规则：
 
@@ -136,6 +148,34 @@ Legacy notebook 兼容预设会关闭额外滞后。正式 Alpha101/191/158/360 
 - 布尔列用 `False`。
 - 字符串列用 `"missing"`。
 - 可选生成 `__is_missing` 缺失指示列。
+
+收益、标签、基准和可交易状态列不会被前向填充或训练窗口统计量填充。缺失特征列默认报错：
+
+```yaml
+features:
+  missing_feature_policy: error
+```
+
+旧 notebook 复现或迁移旧数据时可以显式使用：
+
+```yaml
+features:
+  missing_feature_policy: warn_fill_zero
+```
+
+## 基准净值口径
+
+`market.benchmark_cum_mode` 控制 `benchmark_cum_ret` 的解释：
+
+```yaml
+market:
+  benchmark_cum_mode: nav
+```
+
+- `nav`: `benchmark_cum_ret` 是净值或指数水平，基准净值按 `benchmark / first` 归一化。
+- `cumulative_return`: `benchmark_cum_ret` 是累计收益率，基准净值按 `1 + benchmark - first` 构造。
+
+TuShare 标准面板生成的 `benchmark_cum_ret` 是净值口径。
 
 ## TuShare 标准面板
 
@@ -157,6 +197,8 @@ name, industry, list_date, delist_date, listed_days
 ```
 
 实际列取决于 TuShare 权限、命令行跳过参数和接口返回。
+
+TuShare `stock_basic.name` 推导的 `is_st` 是最新名称标记。严格历史回测需要 point-in-time ST 状态数据源。
 
 ## VWAP 与复权口径
 
@@ -184,6 +226,8 @@ open_adj, high_adj, low_adj, close_adj, vwap_adj
 
 - 缺 `benchmark_next_period_return`：默认标签来源需要它计算相对收益。
 - 缺 `benchmark_cum_ret`：无法生成基准净值。
+- `benchmark_cum_mode` 设置错误：基准收益、超额收益和 IR 会失真。
 - 开启 ST 或停牌过滤但缺对应列：`cn` 市场配置档会立即报错。
+- 缺失配置选中的特征列：默认直接报错，检查因子仓库 family、prefix 或列名。
 - 使用 legacy notebook 兼容预设但缺 `pred_rel_return`：该预设依赖外部预测收益列。
 - 特征滞后后样本为空：检查每只股票是否至少有两期特征数据。

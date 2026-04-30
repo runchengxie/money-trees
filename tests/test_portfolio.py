@@ -8,6 +8,7 @@ from moneytree.portfolio import (
     build_portfolio_weights,
     build_signal_scores,
     compute_period_return_from_weights,
+    portfolio_exposure_diagnostics,
 )
 
 
@@ -303,6 +304,13 @@ def test_build_portfolio_weights_cap_can_limit_total_allocated_exposure() -> Non
     assert np.isclose(float(weights.abs().sum()), 0.6)
     assert float(weights.abs().max()) <= 0.2 + 1e-12
 
+    diagnostics = portfolio_exposure_diagnostics(weights=weights, cfg=cfg)
+    assert diagnostics["target_gross"] == 1.0
+    assert np.isclose(float(diagnostics["realized_gross"]), 0.6)
+    assert diagnostics["target_net"] == 0.0
+    assert np.isclose(float(diagnostics["realized_net"]), 0.6)
+    assert np.isclose(float(diagnostics["unallocated_exposure"]), 0.4)
+
 
 def test_build_portfolio_weights_signal_risk_qp_respects_constraints() -> None:
     idx = pd.MultiIndex.from_tuples(
@@ -441,3 +449,45 @@ def test_signal_risk_qp_high_turnover_penalty_tracks_previous_weights() -> None:
     assert np.isclose(float(aligned.loc["B"]), -0.1, atol=1e-3)
     assert abs(float(aligned.loc["C"])) <= 1e-3
     assert abs(float(aligned.loc["D"])) <= 1e-3
+
+
+def test_signal_risk_qp_fallback_is_recorded(monkeypatch) -> None:
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2021-03-31"), "A"),
+            (pd.Timestamp("2021-03-31"), "B"),
+            (pd.Timestamp("2021-03-31"), "C"),
+            (pd.Timestamp("2021-03-31"), "D"),
+        ],
+        names=["date", "ticker"],
+    )
+    train_frame = _build_train_frame_for_tickers(["A", "B", "C", "D"])
+    test_frame = pd.DataFrame({"f": np.arange(len(idx), dtype=float)}, index=idx)
+    preds = np.array([1, 1, -1, -1], dtype=int)
+    cfg = PortfolioConfig(
+        min_score=0.0,
+        use_prob_signal=False,
+        weighting_method="signal_risk_qp",
+        gross_target=1.0,
+        net_target=0.0,
+        max_name_weight=0.5,
+        min_names_per_side=1,
+        use_vol_scaling=False,
+        qp_fallback_to_heuristic=True,
+    )
+
+    monkeypatch.setattr("moneytree.portfolio._solve_signal_risk_qp_weights", lambda **kwargs: None)
+
+    weights = build_portfolio_weights(
+        predictions=preds,
+        probs=None,
+        classes_=None,
+        sample_index=idx,
+        train_frame=train_frame,
+        test_frame=test_frame,
+        cfg=cfg,
+    )
+    diagnostics = portfolio_exposure_diagnostics(weights=weights, cfg=cfg)
+
+    assert diagnostics["qp_fallback"] is True
+    assert not weights.empty

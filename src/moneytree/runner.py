@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-import subprocess
 from typing import Any
 
 import numpy as np
@@ -20,9 +20,10 @@ from moneytree.backtest import (
 from moneytree.config import BacktestSettings
 from moneytree.data import (
     apply_feature_lag,
+    apply_missing_feature_policy,
     build_xy_target_returns,
+    fill_feature_missing_with_reference,
     filter_factor_columns,
-    fill_missing_with_reference,
     get_feature_columns,
     load_market_data,
     preprocess_data,
@@ -36,9 +37,13 @@ from moneytree.metadata import (
     build_experiment_manifest,
     stable_json_hash,
 )
-from moneytree.models import get_model_adapter
 from moneytree.model import count_active_names, profit_with_estimated_turnover
-from moneytree.portfolio import PortfolioConfig, build_portfolio_weights, compute_period_return_from_weights
+from moneytree.models import get_model_adapter
+from moneytree.portfolio import (
+    PortfolioConfig,
+    build_portfolio_weights,
+    compute_period_return_from_weights,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -98,10 +103,16 @@ class SegmentSpec:
 class SegmentFitResult:
     feature_columns: list[str]
     model_params: dict[str, Any]
+    model_id: str
+    train_start: str
+    train_end: str
+    valid_start: str
+    valid_end: str
     validation_profit: float
     validation_turnover: float
     validation_active_names: int
     tuning_best_value: float
+    tuning_enabled: bool
     selection_history: pd.DataFrame | None
 
 
@@ -125,6 +136,11 @@ class HoldoutResult:
     signal_active_names: pd.Series
     period_ic: pd.Series
     period_rank_ic: pd.Series
+    portfolio_diagnostics: pd.DataFrame
+    model_segment_train_start: str
+    model_segment_train_end: str
+    model_segment_valid_start: str
+    model_segment_valid_end: str
     metrics: dict[str, float]
 
 
@@ -180,12 +196,12 @@ def fit_segment_model(
     if train_raw.empty or valid_raw.empty:
         raise ValueError(f"Segment {spec.name} has empty train/valid frame.")
 
-    train_frame = fill_missing_with_reference(
+    train_frame = fill_feature_missing_with_reference(
         frame=train_raw,
         reference=train_raw,
         add_missing_indicators=settings.add_missing_indicators,
     )
-    valid_frame = fill_missing_with_reference(
+    valid_frame = fill_feature_missing_with_reference(
         frame=valid_raw,
         reference=train_raw,
         add_missing_indicators=settings.add_missing_indicators,
@@ -253,10 +269,16 @@ def fit_segment_model(
     return SegmentFitResult(
         feature_columns=selected_features,
         model_params=prepared.model_params,
+        model_id=model_adapter.model_id,
+        train_start=spec.train_start,
+        train_end=spec.train_end,
+        valid_start=spec.valid_start,
+        valid_end=spec.valid_end,
         validation_profit=valid_profit,
         validation_turnover=valid_turnover,
         validation_active_names=int(len(valid_weights)),
         tuning_best_value=prepared.tuning_best_value,
+        tuning_enabled=bool(settings.n_trials > 0 or settings.tuning_cv_folds > 1),
         selection_history=prepared.selection_history,
     )
 
@@ -355,22 +377,29 @@ def _build_holdout_result(
     if train_raw.empty or holdout_raw.empty:
         raise ValueError("Holdout train/test frame is empty; adjust holdout dates.")
 
-    train_frame = fill_missing_with_reference(
+    train_frame = fill_feature_missing_with_reference(
         frame=train_raw,
         reference=train_raw,
         add_missing_indicators=settings.add_missing_indicators,
     )
-    holdout_frame = fill_missing_with_reference(
+    holdout_frame = fill_feature_missing_with_reference(
         frame=holdout_raw,
         reference=train_raw,
         add_missing_indicators=settings.add_missing_indicators,
     )
     feature_columns = list(segment_fit.feature_columns)
-    for col in feature_columns:
-        if col not in train_frame.columns:
-            train_frame[col] = 0.0
-        if col not in holdout_frame.columns:
-            holdout_frame[col] = 0.0
+    train_frame = apply_missing_feature_policy(
+        train_frame,
+        feature_columns,
+        frame_role="holdout train frame",
+        policy=settings.missing_feature_policy,
+    )
+    holdout_frame = apply_missing_feature_policy(
+        holdout_frame,
+        feature_columns,
+        frame_role="holdout frame",
+        policy=settings.missing_feature_policy,
+    )
 
     train_x, train_y, _ = build_xy_target_returns(
         train_frame,
@@ -407,6 +436,7 @@ def _build_holdout_result(
     signal_active_name_counts: list[int] = []
     period_ic_values: list[float] = []
     period_rank_ic_values: list[float] = []
+    portfolio_diagnostic_rows: list[dict[str, float | bool]] = []
     nav_points: list[float] = []
     nav_value = 1.0
     signal_nav_points: list[float] = []
@@ -458,6 +488,18 @@ def _build_holdout_result(
         )
         nav_value *= 1.0 + period_profit
         signal_nav_value *= 1.0 + signal_profit
+        period_diagnostics = {
+            "target_gross": max(float(portfolio_cfg.gross_target), 0.0),
+            "realized_gross": float(current_weights.abs().sum()) if not current_weights.empty else 0.0,
+            "target_net": float(np.clip(portfolio_cfg.net_target, -portfolio_cfg.gross_target, portfolio_cfg.gross_target)),
+            "realized_net": float(current_weights.sum()) if not current_weights.empty else 0.0,
+            "unallocated_exposure": max(
+                0.0,
+                max(float(portfolio_cfg.gross_target), 0.0)
+                - (float(current_weights.abs().sum()) if not current_weights.empty else 0.0),
+            ),
+            "qp_fallback": bool(current_weights.attrs.get("qp_fallback", False)),
+        }
         nav_points.append(nav_value)
         signal_nav_points.append(signal_nav_value)
         period_dates.append(_resolve_period_date_from_index(idx, fallback=period_end))
@@ -471,6 +513,7 @@ def _build_holdout_result(
         )
         period_ic_values.append(float(ic_value))
         period_rank_ic_values.append(float(rank_ic_value))
+        portfolio_diagnostic_rows.append(period_diagnostics)
 
     strategy_nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
     signal_nav = pd.Series(signal_nav_points, index=period_dates, name="signal_nav")
@@ -486,10 +529,14 @@ def _build_holdout_result(
     )
     period_ic_series = pd.Series(period_ic_values, index=period_dates, name="period_ic")
     period_rank_ic_series = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
+    portfolio_diagnostics = pd.DataFrame(portfolio_diagnostic_rows, index=period_dates)
+    if not portfolio_diagnostics.empty:
+        portfolio_diagnostics.index.name = "date"
     benchmark_nav = build_benchmark_nav(
         frame,
         strategy_nav.index,
         benchmark_cum_col="benchmark_cum_ret",
+        benchmark_cum_mode=settings.benchmark_cum_mode,
     )
     benchmark_returns = benchmark_nav.pct_change().dropna()
     metrics = compute_performance_metrics(
@@ -522,6 +569,11 @@ def _build_holdout_result(
         signal_active_names=signal_active_names,
         period_ic=period_ic_series,
         period_rank_ic=period_rank_ic_series,
+        portfolio_diagnostics=portfolio_diagnostics,
+        model_segment_train_start=segment_fit.train_start,
+        model_segment_train_end=segment_fit.train_end,
+        model_segment_valid_start=segment_fit.valid_start,
+        model_segment_valid_end=segment_fit.valid_end,
         metrics=metrics,
     )
 
@@ -609,6 +661,9 @@ def build_run_summary_text(
         (
             "- Segment A: "
             f"features={len(segment_a.feature_columns)}, "
+            f"train={segment_a.train_start}->{segment_a.train_end}, "
+            f"valid={segment_a.valid_start}->{segment_a.valid_end}, "
+            f"model={segment_a.model_id}, "
             f"tuning_best={_format_float(segment_a.tuning_best_value)}, "
             f"validation_profit={_format_float(segment_a.validation_profit)}, "
             f"validation_turnover={_format_float(segment_a.validation_turnover)}, "
@@ -617,6 +672,9 @@ def build_run_summary_text(
         (
             "- Segment B: "
             f"features={len(segment_b.feature_columns)}, "
+            f"train={segment_b.train_start}->{segment_b.train_end}, "
+            f"valid={segment_b.valid_start}->{segment_b.valid_end}, "
+            f"model={segment_b.model_id}, "
             f"tuning_best={_format_float(segment_b.tuning_best_value)}, "
             f"validation_profit={_format_float(segment_b.validation_profit)}, "
             f"validation_turnover={_format_float(segment_b.validation_turnover)}, "
@@ -711,6 +769,7 @@ def write_outputs(
     signal_active_names: pd.Series,
     period_ic: pd.Series,
     period_rank_ic: pd.Series,
+    portfolio_diagnostics: pd.DataFrame,
     segment_a: SegmentFitResult,
     segment_b: SegmentFitResult,
     metrics: dict[str, float],
@@ -736,7 +795,7 @@ def write_outputs(
     active_names.to_frame(name="active_names").to_csv(out_dir / "active_names.csv")
     pd.concat([period_ic, period_rank_ic], axis=1).to_csv(out_dir / "ic_series.csv")
     pd.concat([strategy_nav, benchmark_nav], axis=1).to_csv(out_dir / "strategy_vs_benchmark.csv")
-    pd.concat(
+    oos_diagnostics = pd.concat(
         [
             strategy_returns.rename("strategy_ret"),
             benchmark_returns.rename("benchmark_ret"),
@@ -749,7 +808,10 @@ def write_outputs(
             period_rank_ic.rename("period_rank_ic"),
         ],
         axis=1,
-    ).to_csv(out_dir / "oos_period_diagnostics.csv")
+    )
+    if not portfolio_diagnostics.empty:
+        oos_diagnostics = pd.concat([oos_diagnostics, portfolio_diagnostics], axis=1)
+    oos_diagnostics.to_csv(out_dir / "oos_period_diagnostics.csv")
     summary = {
         "segment_a_validation_profit": segment_a.validation_profit,
         "segment_a_validation_turnover": segment_a.validation_turnover,
@@ -820,7 +882,7 @@ def write_holdout_outputs(
     pd.concat([holdout.strategy_nav, holdout.benchmark_nav], axis=1).to_csv(
         holdout_dir / "strategy_vs_benchmark.csv"
     )
-    pd.concat(
+    holdout_diagnostics = pd.concat(
         [
             holdout.strategy_returns.rename("strategy_ret"),
             holdout.benchmark_returns.rename("benchmark_ret"),
@@ -833,7 +895,13 @@ def write_holdout_outputs(
             holdout.period_rank_ic.rename("period_rank_ic"),
         ],
         axis=1,
-    ).to_csv(holdout_dir / "oos_period_diagnostics.csv")
+    )
+    if not holdout.portfolio_diagnostics.empty:
+        holdout_diagnostics = pd.concat(
+            [holdout_diagnostics, holdout.portfolio_diagnostics],
+            axis=1,
+        )
+    holdout_diagnostics.to_csv(holdout_dir / "oos_period_diagnostics.csv")
     _write_notebook_report_files(
         out_dir=holdout_dir,
         strategy_nav=holdout.strategy_nav,
@@ -852,6 +920,10 @@ def write_holdout_outputs(
                 "train_end": holdout.train_end,
                 "holdout_start": holdout.holdout_start,
                 "holdout_end": holdout.holdout_end,
+                "model_segment_train_start": holdout.model_segment_train_start,
+                "model_segment_train_end": holdout.model_segment_train_end,
+                "model_segment_valid_start": holdout.model_segment_valid_start,
+                "model_segment_valid_end": holdout.model_segment_valid_end,
             },
             indent=2,
         ),
@@ -878,6 +950,8 @@ def build_run_config(
     settings: BacktestSettings,
     segment_a_spec: SegmentSpec,
     segment_b_spec: SegmentSpec,
+    segment_a: SegmentFitResult | None = None,
+    segment_b: SegmentFitResult | None = None,
     experiment_manifest: dict[str, Any] | None = None,
     holdout_result: HoldoutResult | None = None,
     factor_load_info: dict[str, Any] | None = None,
@@ -901,6 +975,7 @@ def build_run_config(
             "name": settings.benchmark_name,
             "return_column": settings.benchmark_return_column,
             "cum_column": settings.benchmark_cum_column,
+            "cum_mode": settings.benchmark_cum_mode,
         },
         "segment_specs": {
             "segment_a": asdict(segment_a_spec),
@@ -912,6 +987,29 @@ def build_run_config(
             **(factor_load_info or {}),
         },
     }
+    if segment_a is not None and segment_b is not None:
+        config["segment_fits"] = {
+            "segment_a": {
+                "model_id": segment_a.model_id,
+                "train_start": segment_a.train_start,
+                "train_end": segment_a.train_end,
+                "valid_start": segment_a.valid_start,
+                "valid_end": segment_a.valid_end,
+                "selected_feature_count": len(segment_a.feature_columns),
+                "tuning_enabled": segment_a.tuning_enabled,
+                "tuning_best_value": segment_a.tuning_best_value,
+            },
+            "segment_b": {
+                "model_id": segment_b.model_id,
+                "train_start": segment_b.train_start,
+                "train_end": segment_b.train_end,
+                "valid_start": segment_b.valid_start,
+                "valid_end": segment_b.valid_end,
+                "selected_feature_count": len(segment_b.feature_columns),
+                "tuning_enabled": segment_b.tuning_enabled,
+                "tuning_best_value": segment_b.tuning_best_value,
+            },
+        }
     if experiment_manifest is not None:
         config["reproducibility"] = {
             "dataset_version": experiment_manifest["dataset"]["dataset_version"],
@@ -951,6 +1049,12 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         raise ValueError("--portfolio-qp-max-names must be >= 0.")
     if bool(settings.holdout_start) != bool(settings.holdout_end):
         raise ValueError("Use --holdout-start and --holdout-end together.")
+    if settings.benchmark_cum_mode not in {"nav", "cumulative_return"}:
+        raise ValueError("--benchmark-cum-mode must be 'nav' or 'cumulative_return'.")
+    if settings.missing_feature_policy not in {"error", "warn_fill_zero", "fill_zero"}:
+        raise ValueError(
+            "--missing-feature-policy must be 'error', 'warn_fill_zero', or 'fill_zero'."
+        )
 
     model_adapter = get_model_adapter(settings.model_id)
     model_adapter.validate_configuration(
@@ -1074,6 +1178,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
             frame_slice,
             settings=settings,
         ),
+        missing_feature_policy=settings.missing_feature_policy,
     )
     bt_b = run_rolling_backtest(
         frame=frame,
@@ -1098,6 +1203,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
             frame_slice,
             settings=settings,
         ),
+        missing_feature_policy=settings.missing_feature_policy,
     )
 
     strategy_nav = combine_backtest_segments(bt_a.nav, bt_b.nav, name="strategy_nav")
@@ -1126,7 +1232,18 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
     )
     period_ic = combine_backtest_segments(bt_a.period_ic, bt_b.period_ic, name="period_ic")
     period_rank_ic = combine_backtest_segments(bt_a.period_rank_ic, bt_b.period_rank_ic, name="period_rank_ic")
-    benchmark_nav = build_benchmark_nav(frame, strategy_nav.index, benchmark_cum_col="benchmark_cum_ret")
+    portfolio_diagnostics = pd.concat([bt_a.portfolio_diagnostics, bt_b.portfolio_diagnostics])
+    if not portfolio_diagnostics.empty:
+        portfolio_diagnostics = portfolio_diagnostics.sort_index()
+        portfolio_diagnostics = portfolio_diagnostics[
+            ~portfolio_diagnostics.index.duplicated(keep="last")
+        ]
+    benchmark_nav = build_benchmark_nav(
+        frame,
+        strategy_nav.index,
+        benchmark_cum_col="benchmark_cum_ret",
+        benchmark_cum_mode=settings.benchmark_cum_mode,
+    )
     benchmark_returns = benchmark_nav.pct_change().dropna()
     metrics = compute_performance_metrics(
         strategy_nav=strategy_nav,
@@ -1158,6 +1275,8 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         settings=settings,
         segment_a_spec=segment_a_spec,
         segment_b_spec=segment_b_spec,
+        segment_a=segment_a,
+        segment_b=segment_b,
         experiment_manifest=experiment_manifest,
         holdout_result=holdout_result,
         factor_load_info=factor_load_info,
@@ -1189,6 +1308,7 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
         signal_active_names=signal_active_names,
         period_ic=period_ic,
         period_rank_ic=period_rank_ic,
+        portfolio_diagnostics=portfolio_diagnostics,
         segment_a=segment_a,
         segment_b=segment_b,
         metrics=metrics,

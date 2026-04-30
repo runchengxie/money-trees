@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """Utility script to verify TuShare tokens via the user quota endpoint."""
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Literal, TypedDict
+from typing import Literal, TypedDict
 
 import tushare as ts
-
 
 ENV_KEYS = ("TUSHARE_TOKEN", "TUSHARE_TOKEN_2")
 

@@ -17,7 +17,7 @@ class BaseMarketProfile(ABC):
         self,
         *,
         label_source: str,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> set[str]:
         raise NotImplementedError
 
@@ -26,7 +26,7 @@ class BaseMarketProfile(ABC):
         *,
         frame: pd.DataFrame,
         label_source: str,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> None:
         missing = sorted(
             self.required_columns(label_source=label_source, settings=settings).difference(frame.columns)
@@ -42,7 +42,7 @@ class BaseMarketProfile(ABC):
         *,
         frame: pd.DataFrame,
         label_source: str,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> pd.DataFrame:
         raise NotImplementedError
 
@@ -50,6 +50,6 @@ class BaseMarketProfile(ABC):
         self,
         frame: pd.DataFrame,
         *,
-        settings: "BacktestSettings | None" = None,
+        settings: BacktestSettings | None = None,
     ) -> pd.DataFrame:
         return frame

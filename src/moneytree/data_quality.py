@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import warnings
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
-from typing import Iterable
-import warnings
 
 import numpy as np
 import pandas as pd

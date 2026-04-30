@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 import moneytree
 from moneytree.metadata import runtime_metadata

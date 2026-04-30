@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
-import os
 from pathlib import Path
-import sys
-import tempfile
 from typing import Any
 
 import pandas as pd
@@ -20,6 +20,10 @@ from moneytree.data import (
     normalize_factor_dtype,
     save_market_data,
 )
+from moneytree.factor_store import (
+    write_external_factor_store,
+    write_external_factor_store_partitioned,
+)
 from moneytree.factors.external import (
     build_dolphindb_input,
     build_external_alpha_manifest,
@@ -28,11 +32,6 @@ from moneytree.factors.external import (
     normalize_external_families,
     write_external_alpha_manifest,
 )
-from moneytree.factor_store import (
-    write_external_factor_store,
-    write_external_factor_store_partitioned,
-)
-
 
 DEFAULT_ALPHA101_FUNCTION = "calcMoneyTreeAlpha101"
 DEFAULT_ALPHA191_FUNCTION = "calcMoneyTreeAlpha191"

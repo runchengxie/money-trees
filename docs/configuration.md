@@ -58,6 +58,7 @@ features:
   exclude_factor_families: []
   include_factor_prefixes: []
   exclude_factor_prefixes: []
+  missing_feature_policy: error
 ```
 
 说明：
@@ -67,6 +68,7 @@ features:
 - `include_*` 非空时，只保留匹配的 Alpha 因子列；非因子列会保留，用于标签、基准、可交易过滤和报告。
 - `exclude_*` 会从已选 Alpha 因子列中排除对应前缀。
 - parquet 输入会根据 schema 做列裁剪；pickle 输入会先完整读取，再在内存中过滤。
+- `missing_feature_policy` 可取 `error`、`warn_fill_zero` 或 `fill_zero`。默认 `error` 会在选中特征缺列时失败；旧 notebook 复现可用 `warn_fill_zero`。
 
 示例：
 
@@ -89,6 +91,7 @@ market:
   benchmark: 000300.SH
   benchmark_return_column: benchmark_next_period_return
   benchmark_cum_column: benchmark_cum_ret
+  benchmark_cum_mode: nav
   label_source: actual
   label_threshold: 0.03
   feature_lag_periods: 1
@@ -109,6 +112,7 @@ market:
 
 - `profile` 当前只支持 `cn`。
 - `benchmark_return_column` 和 `benchmark_cum_column` 可以映射上游不同列名。
+- `benchmark_cum_mode` 可取 `nav` 或 `cumulative_return`。TuShare 标准面板使用 `nav`。
 - `label_source: actual` 使用真实相对收益生成标签。
 - `label_source: pred_rel_return` 使用输入数据中的 `pred_rel_return`。
 - `feature_lag_periods` 控制模型特征按 ticker 滞后多少期。

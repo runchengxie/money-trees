@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-import subprocess
 from typing import Any
 
 import pandas as pd
@@ -12,7 +12,6 @@ import pandas as pd
 from moneytree.data import load_market_data
 from moneytree.data_status import build_data_status_report
 from moneytree.metadata import file_metadata, stable_json_hash
-
 
 DATA_SNAPSHOT_SCHEMA_VERSION = "1.0"
 DATA_SNAPSHOT_KIND = "moneytree_data_snapshot"

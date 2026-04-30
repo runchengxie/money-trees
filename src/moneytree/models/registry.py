@@ -5,7 +5,6 @@ from moneytree.models.linear import ElasticNetAdapter, LassoAdapter, RidgeAdapte
 from moneytree.models.random_forest import RandomForestAdapter
 from moneytree.models.xgboost import XGBoostAdapter, XGBoostRegressorAdapter
 
-
 _MODEL_REGISTRY: dict[str, BaseModelAdapter] = {
     "random_forest": RandomForestAdapter(),
     "ridge": RidgeAdapter(),

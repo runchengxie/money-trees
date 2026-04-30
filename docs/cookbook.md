@@ -83,6 +83,14 @@ uv run moneytrees-tushare \
 
 基础面板生成后，再按需生成本地因子族。factor store 会把基础面板和因子族分开保存，避免把所有列写进单个超宽 parquet。
 
+回测从因子仓库读取选中特征时，缺失列默认报错。迁移旧数据时可以临时设置：
+
+```bash
+uv run moneytrees \
+  --data data/factor_store/cn_daily/manifest.json \
+  --set features.missing_feature_policy=warn_fill_zero
+```
+
 ```bash
 uv run moneytrees-factor-store \
   --input data/panel/cn/cn_daily_raw.parquet \

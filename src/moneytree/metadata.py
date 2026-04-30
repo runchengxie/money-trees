@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
-from importlib import metadata as importlib_metadata
 import json
-from pathlib import Path
 import platform
 import sys
+from datetime import datetime, timezone
+from importlib import metadata as importlib_metadata
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
 
 EXPERIMENT_MANIFEST_SCHEMA_VERSION = "1.0"
 OUTPUT_SCHEMA_VERSION = "1.0"

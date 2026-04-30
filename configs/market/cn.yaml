@@ -3,6 +3,7 @@ market:
   benchmark: 000300.SH
   benchmark_return_column: benchmark_next_period_return
   benchmark_cum_column: benchmark_cum_ret
+  benchmark_cum_mode: nav
   label_mode: relative_to_benchmark
   label_source: actual
   label_threshold: 0.03

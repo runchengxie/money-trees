@@ -1,8 +1,8 @@
-# Data Snapshot
+# 数据快照
 
-`moneytrees-data-snapshot` records a lightweight, reproducible metadata snapshot for a Money Trees panel. It writes metadata and checksum files only; it does not copy large parquet, raw cache, or factor store files.
+`moneytrees-data-snapshot` 用来记录 Money Trees 标准面板的数据版本信息。它只写入 metadata、checksum 和 README，不复制大型 parquet、原始缓存或因子仓库文件。
 
-Use it after generating a canonical panel:
+基础用法：
 
 ```bash
 uv run moneytrees-data-snapshot \
@@ -12,7 +12,7 @@ uv run moneytrees-data-snapshot \
   --label cn_daily_2016_2025
 ```
 
-The output directory contains:
+输出目录包含：
 
 ```text
 dataset_meta.json
@@ -20,9 +20,9 @@ checksums.sha256
 README.md
 ```
 
-`dataset_meta.json` includes the panel path, file size, SHA-256, row count, column count, date range, ticker count, parquet schema hash, optional raw cache/factor store references, a compact quality summary, and git commit metadata when available.
+`dataset_meta.json` 记录面板路径、文件大小、SHA-256、行数、列数、日期范围、ticker 数量、parquet 表结构哈希、可选原始缓存/因子仓库引用、轻量质量摘要和可用的 git commit 信息。
 
-The `quality` object records:
+质量摘要包含：
 
 ```text
 status
@@ -37,9 +37,9 @@ errors
 warnings
 ```
 
-The quality summary is intended to answer whether the backed-up dataset had already passed the same lightweight checks exposed by `moneytrees-data-status`. It does not repair data and does not embed large per-date or per-ticker diagnostics.
+质量摘要用于回答备份前的数据是否已经通过 `moneytrees-data-status` 暴露的轻量检查。它不会修复数据，也不会嵌入大体量的逐日期或逐 ticker 诊断。
 
-Use `--factor-store` when you also want the snapshot to record a factor store manifest:
+同时记录因子仓库和说明：
 
 ```bash
 uv run moneytrees-data-snapshot \
@@ -47,7 +47,8 @@ uv run moneytrees-data-snapshot \
   --raw-cache data/raw/tushare \
   --factor-store data/factor_store/cn_daily \
   --output-dir data/snapshots/cn_daily_2016_2025_full \
-  --label cn_daily_2016_2025_full
+  --label cn_daily_2016_2025_full \
+  --note "full 810 factor research snapshot"
 ```
 
-The command is intended for dataset version records. Use system tools such as `cp`, `rsync`, or remote object storage tools to copy the large files themselves.
+这个命令用于保存数据版本记录。大型文件本身请用 `cp`、`rsync` 或对象存储工具复制。

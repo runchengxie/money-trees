@@ -13,9 +13,9 @@ from moneytree.data import MarketDataSanityReport
 from moneytree.data_quality import DataQualityResult
 from moneytree.data_sources.tushare import (
     TushareDailyConfig,
-    _TushareApiOptions,
     _call_api,
     _emit_tushare_sanity_report,
+    _TushareApiOptions,
     fetch_tushare_cn_daily_panel,
     resolve_tushare_token,
     standardize_tushare_cn_daily_panel,
@@ -103,6 +103,8 @@ def test_standardize_tushare_cn_daily_panel_builds_contract() -> None:
     assert bool(panel.loc[(pd.Timestamp("2021-01-05"), "000001.SZ"), "hit_up_limit"]) is True
     assert bool(panel.loc[(pd.Timestamp("2021-01-05"), "000002.SZ"), "hit_down_limit"]) is True
     assert bool(panel.loc[(pd.Timestamp("2021-01-04"), "000002.SZ"), "is_st"]) is True
+    assert panel.attrs["is_st_source"] == "tushare_stock_basic_latest_name_flag"
+    assert panel.attrs["is_st_point_in_time"] is False
 
 
 def test_standardize_tushare_cn_daily_panel_deduplicates_suspend_records() -> None:

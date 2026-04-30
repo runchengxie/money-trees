@@ -1,6 +1,6 @@
 # 测试说明
 
-项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、外部 Alpha 生产和维护脚本。
+项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、因子仓库、数据状态、数据快照、外部 Alpha 生产、容器运行文件、维护脚本和文档清单。
 
 ## 命令
 
@@ -8,6 +8,12 @@
 
 ```bash
 uv run pytest -q
+```
+
+运行 lint：
+
+```bash
+uv run ruff check .
 ```
 
 只跑 CLI 冒烟测试：
@@ -28,35 +34,51 @@ uv run pytest -q tests/test_tushare_data_source.py
 uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py
 ```
 
-运行 lint：
-
-```bash
-uv run ruff check .
-```
-
 只跑组合和回测核心：
 
 ```bash
 uv run pytest -q tests/test_portfolio.py tests/test_backtest.py
 ```
 
+只跑工程化 CLI 测试：
+
+```bash
+uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/test_factor_store.py tests/test_parquet_rewrite_cli.py
+```
+
+只跑文档 guard 测试：
+
+```bash
+uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
+```
+
 ## 当前覆盖
 
 | 文件 | 覆盖重点 |
 | --- | --- |
-| `tests/test_data.py` | `date,ticker` 索引、标签生成、缺失填充、特征滞后、文件格式错误。 |
-| `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
-| `tests/test_model.py` | 随机森林调参、时间序列 CV、特征选择、Optuna 可选依赖和 legacy notebook 兼容路径。 |
-| `tests/test_factors.py` | Alpha158/360 列数、本地因子追加、因子 IC、因子目录元数据。 |
-| `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重和换手惩罚。 |
-| `tests/test_backtest.py` | 滚动窗口、绩效指标、基准净值、Notebook 报告数据和样本外结果序列。 |
-| `tests/test_backtest_cli.py` | CLI 配置栈、`--set` 覆盖、默认配置、holdout、输出文件和错误参数。 |
-| `tests/test_smoke.py` | smoke 配置栈端到端运行。 |
-| `tests/test_tushare_data_source.py` | TuShare 标准化、token、raw cache、`manifest.sqlite` 元数据、旧 manifest 迁移和近期刷新。 |
-| `tests/test_build_dolphindb_alphas_script.py` | DolphinDB Alpha101/191 CLI、兼容 wrapper、manifest 脱敏和可选依赖报错。 |
-| `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |
-| `tests/test_convert_pickle_to_parquet_script.py` | pickle 到 parquet 迁移脚本。 |
+| `tests/test_backtest.py` | 滚动窗口、绩效指标、基准净值口径、缺失特征策略、组合诊断、Notebook 报告数据和样本外结果序列。 |
+| `tests/test_backtest_cli.py` | CLI 配置栈、`--set` 覆盖、默认配置、留出验证、输出文件、run config 元数据和错误参数。 |
+| `tests/test_build_dolphindb_alphas_script.py` | DolphinDB Alpha101/191 CLI、兼容入口、元数据清单脱敏和可选依赖报错。 |
+| `tests/test_container_runtime.py` | Dockerfile、`.dockerignore`、DolphinDB compose 和 runtime 输出隔离。 |
+| `tests/test_convert_pickle_to_parquet_script.py` | 可信 pickle 到 parquet 的历史迁移脚本。 |
+| `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
+| `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
+| `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
+| `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts 在 README 或 docs 中的覆盖。 |
+| `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
+| `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在。 |
+| `tests/test_docs_style.py` | 中文文档中高风险间接句式和核心术语漂移。 |
 | `tests/test_export_repo_source.py` | 源码导出工具是否包含配置和因子清单，同时继续排除运行数据目录。 |
+| `tests/test_external_alphas.py` | 外部 Alpha101/191 列名、字段映射、输入依赖、并入和元数据清单校验。 |
+| `tests/test_factor_store.py` | 本地因子仓库、外部因子仓库、元数据清单、分区、压缩、覆盖和选择加载。 |
+| `tests/test_factors.py` | Alpha158/360 列数、本地因子追加、因子 IC、因子目录元数据。 |
+| `tests/test_model.py` | 随机森林调参、时间序列 CV、特征选择、Optuna 可选依赖和 legacy notebook 兼容路径。 |
+| `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
+| `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |
+| `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重、换手惩罚和 fallback 诊断。 |
+| `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |
+| `tests/test_smoke.py` | 冒烟测试配置栈端到端运行。 |
+| `tests/test_tushare_data_source.py` | TuShare 标准化、token、原始缓存、`manifest.sqlite` 元数据、旧元数据清单迁移、近期刷新和最新名称 ST 标记。 |
 
 ## 可选依赖
 
@@ -90,37 +112,9 @@ Optuna 调参运行需要：
 uv sync --dev --extra tuning
 ```
 
-研究场景通常使用：
+## 当前测试缺口
 
-```bash
-uv sync --dev --extra research
-```
-
-## 测试数据特点
-
-测试内动态构造小型季度或月度面板，不依赖真实行情文件。典型列包括：
-
-```text
-date
-ticker
-f_signal
-f_rank
-next_period_return
-benchmark_next_period_return
-benchmark_cum_ret
-is_suspended
-is_st
-hit_up_limit
-hit_down_limit
-```
-
-TuShare 测试使用 fake client，不访问网络。
-
-## 当前缺口
-
-建议后续补充：
-
-- 文档命令检查：验证 README 和 docs 中引用的关键配置路径存在。
-- 输出契约测试：将 [outputs.md](outputs.md) 的文件清单与 CLI 输出断言统一维护。
-- 数据契约测试：把 [data_contract.md](data_contract.md) 的最小必需列转成参数化测试。
-- 输出文件 hash 测试：如果后续把每个 CSV/JSON 的 hash 写入 manifest，需要补对应断言。
+- 文档命令执行检查：README 和 docs 中出现的完整 CLI 示例目前只做存在性保护，尚未逐条运行。
+- 输出文件 hash 检查：`experiment_manifest.json` 已记录输入和配置 hash，后续可继续记录每个 CSV/JSON 产物 hash。
+- 更真实的 A 股执行模型：当前组合测试覆盖权重、暴露和换手，尚未覆盖涨跌停无法成交、成交量容量和冲击成本。
+- 历史 point-in-time ST 和行业归属：当前测试只保证最新名称 ST 标记被明确标注语义。

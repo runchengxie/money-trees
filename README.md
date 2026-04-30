@@ -1,24 +1,18 @@
-# money-trees 摇钱树
+# money-trees
 
-> A dollar might turn to a million and we all rich\ 
-> That's just how I feel
-> 
-> 一块钱也能滚成一百万，兄弟们都能富起来\ 
-> 我心里就是这么觉得
-> 
-> *Kendrick Lamar - Money Trees*
-> 
-> *肯德里克·拉马尔 - 摇钱树*
+Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列规范展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征由 DolphinDB 等外部生产器离线生成后写入因子仓库（factor store）或兼容并入标准 `date, ticker` 面板。
 
-`money-trees` / Money Trees 是一个面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列契约展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征由 DolphinDB 等外部生产器离线生成后并入标准 `date, ticker` 面板。核心链路包括 TuShare 日频数据拉取、因子生成/并入、特征滞后、模型适配器、组合构建、滚动回测、holdout 验证和可复现产物输出。
+核心链路包括 TuShare 日频数据拉取、原始缓存、因子仓库、特征滞后、模型适配器、组合构建、滚动回测、留出验证和可复现产物输出。Python import 包名仍然是 `moneytree`；`moneytree` 单数 CLI 作为兼容入口保留，新文档优先使用 `moneytrees`。
 
-Python import 包名仍然是 `moneytree`，旧的 `moneytree` CLI 也继续可用；新文档优先使用 `moneytrees` CLI alias。
+兼容 CLI alias 包括 `moneytree`、`moneytree-tushare`、`moneytree-data-status`、`moneytree-data-snapshot`、`moneytree-dolphindb-alphas`、`moneytree-factor-store` 和 `moneytree-parquet-rewrite`。对应复数入口为 `moneytrees`、`moneytrees-tushare`、`moneytrees-data-status`、`moneytrees-data-snapshot`、`moneytrees-dolphindb-alphas`、`moneytrees-factor-store` 和 `moneytrees-parquet-rewrite`。
 
 ## 使用路径
 
-1. 最小回测：使用已有标准 `date, ticker` 面板运行模型和组合回测。
-2. 本地 518 因子：通过 TuShare 生成基础面板，并追加 Alpha158/360。
-3. 完整 810 因子：先生成 Alpha158/360，再用 DolphinDB 离线生成 Alpha101/191，合并后进入统一回测链路。
+1. 标准面板回测：使用已有 `date, ticker` 面板运行模型和组合回测。
+2. 本地 518 因子：通过 TuShare 生成基础面板，再用 `moneytrees-factor-store` 生成 Alpha158/360。
+3. 完整 810 因子：本地生成 Alpha158/360，用 DolphinDB 离线生成 Alpha101/191，统一写入因子仓库后回测。
+
+大规模研究推荐使用因子仓库，避免长期维护单个超宽 parquet。
 
 ## 快速开始
 
@@ -44,7 +38,7 @@ uv run moneytrees \
   --output-dir artifacts/smoke
 ```
 
-拉取 TuShare 日频数据并追加本地 Alpha158/360：
+拉取 TuShare 基础面板：
 
 ```bash
 uv sync --dev --extra research
@@ -52,22 +46,33 @@ uv sync --dev --extra research
 uv run moneytrees-tushare \
   --start-date 20180101 \
   --end-date 20241231 \
-  --output data/cn_daily_alpha158_360.parquet \
+  --output data/panel/cn/cn_daily_raw.parquet \
   --cache-dir data/raw/tushare \
   --refresh-recent-days 20 \
-  --benchmark 000300.SH \
-  --factor-family alpha158 \
-  --factor-family alpha360
+  --benchmark 000300.SH
 ```
 
-追加外部 Alpha101/191，得到完整 810 因子面板：
+生成本地 Alpha158/360 因子仓库：
+
+```bash
+uv run moneytrees-factor-store \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --output-dir data/factor_store/cn_daily \
+  --family alpha158 \
+  --family alpha360 \
+  --chunk-trade-dates 60 \
+  --progress
+```
+
+追加外部 Alpha101/191：
 
 ```bash
 uv sync --dev --extra external-alphas
 
 uv run moneytrees-dolphindb-alphas \
-  --input data/cn_daily_alpha158_360.parquet \
-  --output data/cn_daily_alpha_all.parquet \
+  --input data/panel/cn/cn_daily_raw.parquet \
+  --factor-store data/factor_store/cn_daily \
+  --no-wide-output \
   --host 127.0.0.1 \
   --port 8848 \
   --user admin \
@@ -79,52 +84,79 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-使用完整面板跑 XGBoost 回归：
+从完整因子仓库运行 XGBoost 回归：
 
 ```bash
 uv run moneytrees \
   --config configs/market/cn.yaml \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
-  --data data/cn_daily_alpha_all.parquet \
+  --data data/factor_store/cn_daily/manifest.json \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-显式开启随机森林调参：
-
-```bash
-uv run moneytrees \
-  --config configs/market/cn.yaml \
-  --config configs/model/rf.yaml \
-  --config configs/backtest/default.yaml \
-  --config configs/preset/tuning.yaml \
-  --data data/cn_daily_alpha_all.parquet \
-  --output-dir artifacts/rf-alpha-all-tuned
-```
+DolphinDB 容器和模块路径见 [docs/dolphindb_alpha101_191.md](docs/dolphindb_alpha101_191.md)，本仓库也提供 `docker-compose.alpha.yml` 作为本地联调入口。
 
 ## 常用命令
+
+运行全部测试：
 
 ```bash
 uv run pytest -q
 ```
 
+运行 lint：
+
 ```bash
 uv run ruff check .
 ```
 
+运行 CLI 冒烟测试：
+
 ```bash
 uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py
 ```
+
+检查数据状态：
+
+```bash
+uv run moneytrees-data-status \
+  --panel data/panel/cn/cn_daily_raw.parquet \
+  --raw-cache data/raw/tushare \
+  --factor-store data/factor_store/cn_daily/manifest.json \
+  --artifacts artifacts/xgb-alpha-all
+```
+
+生成数据快照：
+
+```bash
+uv run moneytrees-data-snapshot \
+  --panel data/panel/cn/cn_daily_raw.parquet \
+  --raw-cache data/raw/tushare \
+  --factor-store data/factor_store/cn_daily \
+  --output-dir data/snapshots/cn_daily_raw \
+  --label cn_daily_raw
+```
+
+重写 parquet 或迁移可信 pickle：
+
+```bash
+uv run moneytrees-parquet-rewrite \
+  --input data/old.pkl \
+  --output data/old.parquet
+```
+
+pickle 只能读取可信文件；正常研究路径推荐 parquet。
 
 ## 文档导航
 
 - [docs/minimal_run.md](docs/minimal_run.md): 最小跑通路径和最小数据列。
 - [docs/architecture.md](docs/architecture.md): 数据层、市场层、因子层、模型层、组合层、回测层和输出层设计。
 - [docs/data_contract.md](docs/data_contract.md): 标准面板索引、必需列、可选列、标签和特征口径。
-- [docs/data_status.md](docs/data_status.md): raw cache、基础面板、factor store 和 artifacts 的只读状态检查。
-- [docs/data_snapshot.md](docs/data_snapshot.md): 基础面板、raw cache 和 factor store 的轻量元数据快照与校验码。
+- [docs/data_status.md](docs/data_status.md): 原始缓存、基础面板、因子仓库和回测产物的只读状态检查。
+- [docs/data_snapshot.md](docs/data_snapshot.md): 基础面板、原始缓存和因子仓库的轻量元数据快照与校验码。
 - [docs/configuration.md](docs/configuration.md): 配置文件分层、合并规则和常用字段。
-- [docs/outputs.md](docs/outputs.md): `metrics.json`、`run_config.json`、CSV 和 holdout 产物说明。
+- [docs/outputs.md](docs/outputs.md): `metrics.json`、`run_config.json`、CSV 和留出验证产物说明。
 - [docs/cookbook.md](docs/cookbook.md): 常见研究任务示例。
 - [docs/runbook.md](docs/runbook.md): 日常运行、缓存刷新、排障和归档检查。
 - [docs/testing.md](docs/testing.md): 测试命令、测试覆盖和当前测试缺口。
@@ -137,13 +169,13 @@ uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py
 
 ```text
 configs/
-  backtest/   回测窗口、成本、holdout 和输出配置
-  market/     A 股市场配置
+  backtest/   回测窗口、成本、留出验证和输出配置
+  market/     A 股市场配置档
   model/      内置模型入口配置
-  preset/     可叠加的本地运行预设
+  preset/     可叠加的本地运行预设配置
 docs/         使用、架构、数据契约和运维文档
 project_tools/ 仓库维护脚本
-scripts/      兼容 wrapper 和迁移脚本
+scripts/      兼容入口和迁移脚本
 src/moneytree/ 核心包、CLI、数据层、模型、组合和回测逻辑
 tests/        单元测试、CLI 冒烟测试和数据源测试
 ```
@@ -152,7 +184,9 @@ tests/        单元测试、CLI 冒烟测试和数据源测试
 
 - 市场层只有 `cn` 市场配置档，默认基准是 `000300.SH`。
 - 输入数据支持 pickle 和 parquet，推荐统一为 `date, ticker` MultiIndex parquet。
-- Alpha158/360 是本地生成的日频特征；Alpha101/191 是外部生成后并入标准面板的列契约。
+- `benchmark_cum_ret` 默认按净值/指数口径处理，配置字段是 `market.benchmark_cum_mode: nav`。
+- 缺失特征列默认报错；旧 notebook 复现可通过 `features.missing_feature_policy: warn_fill_zero` 迁移。
+- TuShare `stock_basic.name` 推导的 `is_st` 是最新名称标记，历史 ST、历史行业归属、退市股票完整样本和幸存者偏差需要在上游数据治理中解决。
+- Alpha158/360 是本地生成的日频特征；Alpha101/191 是外部生成后写入因子仓库或兼容并入标准面板的列规范。
 - DolphinDB、TuShare、XGBoost 和 Optuna 都是可选依赖；普通回测只需要已有标准面板。
-- A 股历史 ST、历史行业归属、退市股票完整样本和幸存者偏差需要在上游数据治理中解决。
-- 当前数据保存路线是 raw parquet cache + `manifest.sqlite` + 可重建标准面板 + 回测产物；回测会生成 `experiment_manifest.json`，TuShare cache manifest 会记录请求、schema 和内容 hash。
+- 当前数据保存路线是原始 parquet 缓存、`manifest.sqlite`、可重建标准面板、因子仓库和回测产物；回测会生成 `experiment_manifest.json`。

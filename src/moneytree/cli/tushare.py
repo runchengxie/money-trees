@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from moneytree.data import DEFAULT_PARQUET_COMPRESSION
-from moneytree.data import save_market_data
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION, save_market_data
 from moneytree.data_sources import TushareDailyConfig, fetch_tushare_cn_daily_panel
 from moneytree.data_sources.tushare import (
     DEFAULT_TUSHARE_RATE_LIMIT_RETRIES,
@@ -12,7 +11,6 @@ from moneytree.data_sources.tushare import (
     TUSHARE_PROXY_MODES,
     TUSHARE_SANITY_CHECK_MODES,
 )
-
 
 DEFAULT_TUSHARE_CLI_REQUEST_INTERVAL_SECONDS = 0.13
 

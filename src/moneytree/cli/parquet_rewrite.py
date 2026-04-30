@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-import sys
-from typing import Sequence
 
-from moneytree.data import DEFAULT_PARQUET_COMPRESSION
-from moneytree.data import load_market_data
-from moneytree.data import save_market_data
+from moneytree.data import DEFAULT_PARQUET_COMPRESSION, load_market_data, save_market_data
 
 
 @dataclass(frozen=True)

@@ -9,9 +9,10 @@ import pandas as pd
 from scipy.stats import linregress
 
 from .data import (
+    apply_missing_feature_policy,
     build_benchmark_series,
     build_xy_target_returns,
-    fill_missing_with_reference,
+    fill_feature_missing_with_reference,
     slice_by_date,
 )
 from .model import count_active_names, fit_random_forest, profit_with_estimated_turnover
@@ -20,6 +21,7 @@ from .portfolio import (
     build_portfolio_weights,
     build_signal_scores,
     compute_period_return_from_weights,
+    portfolio_exposure_diagnostics,
 )
 
 
@@ -35,6 +37,7 @@ class BacktestResult:
     signal_period_profit: pd.Series
     signal_turnover: pd.Series
     signal_active_names: pd.Series
+    portfolio_diagnostics: pd.DataFrame
 
 
 @dataclass
@@ -142,6 +145,7 @@ def run_rolling_backtest(
     add_missing_indicators: bool = False,
     portfolio_config: PortfolioConfig | None = None,
     tradability_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    missing_feature_policy: str = "error",
 ) -> BacktestResult:
     portfolio_cfg = PortfolioConfig() if portfolio_config is None else portfolio_config
     nav_value = float(initial_nav)
@@ -156,6 +160,7 @@ def run_rolling_backtest(
     signal_active_names: list[int] = []
     period_ic_values: list[float] = []
     period_rank_ic_values: list[float] = []
+    portfolio_diagnostic_rows: list[dict[str, float | bool]] = []
     period_dates: list[pd.Timestamp] = []
     previous_weights: pd.Series | None = None
     previous_signal_weights: pd.Series | None = None
@@ -166,12 +171,12 @@ def run_rolling_backtest(
         if train_raw.empty or test_raw.empty:
             continue
 
-        train_frame = fill_missing_with_reference(
+        train_frame = fill_feature_missing_with_reference(
             frame=train_raw,
             reference=train_raw,
             add_missing_indicators=add_missing_indicators,
         )
-        test_frame = fill_missing_with_reference(
+        test_frame = fill_feature_missing_with_reference(
             frame=test_raw,
             reference=train_raw,
             add_missing_indicators=add_missing_indicators,
@@ -180,11 +185,18 @@ def run_rolling_backtest(
             test_frame = tradability_filter(test_frame)
             if test_frame.empty:
                 continue
-        for col in feature_columns:
-            if col not in train_frame.columns:
-                train_frame[col] = 0.0
-            if col not in test_frame.columns:
-                test_frame[col] = 0.0
+        train_frame = apply_missing_feature_policy(
+            train_frame,
+            feature_columns,
+            frame_role="rolling train frame",
+            policy=missing_feature_policy,
+        )
+        test_frame = apply_missing_feature_policy(
+            test_frame,
+            feature_columns,
+            frame_role="rolling test frame",
+            policy=missing_feature_policy,
+        )
 
         train_x, train_y, _ = build_xy_target_returns(
             train_frame,
@@ -267,6 +279,13 @@ def run_rolling_backtest(
             sample_index=test_x.index,
         )
 
+        period_date = _resolve_period_date(test_frame, fallback=test_end)
+        diagnostics = portfolio_exposure_diagnostics(
+            weights=current_weights,
+            cfg=portfolio_cfg,
+        )
+        diagnostics["qp_fallback"] = bool(current_weights.attrs.get("qp_fallback", False))
+
         nav_value *= 1.0 + period_return
         signal_nav_value *= 1.0 + signal_profit
         nav_points.append(nav_value)
@@ -279,7 +298,8 @@ def run_rolling_backtest(
         signal_active_names.append(count_active_names(np.asarray(preds, dtype=int), test_x.index))
         period_ic_values.append(period_ic)
         period_rank_ic_values.append(period_rank_ic)
-        period_dates.append(_resolve_period_date(test_frame, fallback=test_end))
+        period_dates.append(period_date)
+        portfolio_diagnostic_rows.append(diagnostics)
 
     nav = pd.Series(nav_points, index=period_dates, name="strategy_nav")
     signal_nav = pd.Series(signal_nav_points, index=period_dates, name="signal_nav")
@@ -291,6 +311,9 @@ def run_rolling_backtest(
     signal_active = pd.Series(signal_active_names, index=period_dates, name="signal_active_names")
     period_ic = pd.Series(period_ic_values, index=period_dates, name="period_ic")
     period_rank_ic = pd.Series(period_rank_ic_values, index=period_dates, name="period_rank_ic")
+    portfolio_diagnostics = pd.DataFrame(portfolio_diagnostic_rows, index=period_dates)
+    if not portfolio_diagnostics.empty:
+        portfolio_diagnostics.index.name = "date"
     return BacktestResult(
         nav=nav,
         period_returns=returns,
@@ -302,6 +325,7 @@ def run_rolling_backtest(
         signal_period_profit=signal_profit_series,
         signal_turnover=signal_turnover_series,
         signal_active_names=signal_active,
+        portfolio_diagnostics=portfolio_diagnostics,
     )
 
 
@@ -310,6 +334,7 @@ def build_benchmark_nav(
     target_index: pd.Index,
     frequency: str = "QE",
     benchmark_cum_col: str | None = None,
+    benchmark_cum_mode: str = "nav",
 ) -> pd.Series:
     benchmark = build_benchmark_series(frame, benchmark_cum_col=benchmark_cum_col).resample(
         frequency
@@ -317,10 +342,25 @@ def build_benchmark_nav(
     if benchmark.empty:
         return pd.Series(dtype=float, name="benchmark_nav")
 
-    benchmark_nav = benchmark - float(benchmark.iloc[0]) + 1.0
+    mode = str(benchmark_cum_mode).strip().lower()
+    first_value = float(benchmark.iloc[0])
+    if mode == "nav":
+        if not np.isfinite(first_value) or first_value == 0:
+            return pd.Series(dtype=float, name="benchmark_nav")
+        benchmark_nav = benchmark / first_value
+    elif mode == "cumulative_return":
+        benchmark_nav = benchmark - first_value + 1.0
+    else:
+        raise ValueError(
+            "Unsupported benchmark_cum_mode. Use 'nav' or 'cumulative_return'."
+        )
     aligned = benchmark_nav.reindex(target_index, method="ffill")
     if not aligned.empty:
-        aligned = aligned - float(aligned.iloc[0]) + 1.0
+        aligned_first = float(aligned.iloc[0])
+        if mode == "nav":
+            aligned = aligned / aligned_first if aligned_first != 0 else aligned
+        else:
+            aligned = aligned - aligned_first + 1.0
     aligned.name = "benchmark_nav"
     return aligned
 
@@ -472,26 +512,33 @@ def compute_performance_metrics(
     strategy_end_nav = float(aligned_nav["strategy_nav"].iloc[-1])
     benchmark_start_nav = float(aligned_nav["benchmark_nav"].iloc[0])
     benchmark_end_nav = float(aligned_nav["benchmark_nav"].iloc[-1])
-    strategy_total_return = (
-        float(strategy_end_nav / strategy_start_nav - 1.0)
-        if np.isfinite(strategy_start_nav) and strategy_start_nav != 0
-        else float("nan")
-    )
-    benchmark_total_return = (
-        float(benchmark_end_nav / benchmark_start_nav - 1.0)
-        if np.isfinite(benchmark_start_nav) and benchmark_start_nav != 0
-        else float("nan")
-    )
+    strategy_total_ret = strategy_returns.dropna() if strategy_returns is not None else strategy_ret
+    benchmark_total_ret = benchmark_returns.dropna() if benchmark_returns is not None else benchmark_ret
+    strategy_total_return = float((1.0 + strategy_total_ret).prod() - 1.0)
+    benchmark_total_return = float((1.0 + benchmark_total_ret).prod() - 1.0)
+    if strategy_returns is None:
+        strategy_total_return = (
+            float(strategy_end_nav / strategy_start_nav - 1.0)
+            if np.isfinite(strategy_start_nav) and strategy_start_nav != 0
+            else float("nan")
+        )
+    if benchmark_returns is None:
+        benchmark_total_return = (
+            float(benchmark_end_nav / benchmark_start_nav - 1.0)
+            if np.isfinite(benchmark_start_nav) and benchmark_start_nav != 0
+            else float("nan")
+        )
 
-    n_nav_periods = len(aligned_nav) - 1
+    n_strategy_periods = len(strategy_total_ret) if strategy_returns is not None else len(aligned_nav) - 1
+    n_benchmark_periods = len(benchmark_total_ret) if benchmark_returns is not None else len(aligned_nav) - 1
     strategy_ann_return = (
-        float((strategy_end_nav / strategy_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
-        if n_nav_periods > 0
+        float((1.0 + strategy_total_return) ** (periods_per_year / n_strategy_periods) - 1.0)
+        if n_strategy_periods > 0 and np.isfinite(strategy_total_return)
         else float("nan")
     )
     benchmark_ann_return = (
-        float((benchmark_end_nav / benchmark_start_nav) ** (periods_per_year / n_nav_periods) - 1.0)
-        if n_nav_periods > 0
+        float((1.0 + benchmark_total_return) ** (periods_per_year / n_benchmark_periods) - 1.0)
+        if n_benchmark_periods > 0 and np.isfinite(benchmark_total_return)
         else float("nan")
     )
     strategy_ann_vol = (

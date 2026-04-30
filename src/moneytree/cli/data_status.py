@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
-from typing import Sequence
+from collections.abc import Sequence
+from pathlib import Path
 
-from moneytree.data_quality import DATA_QUALITY_MODES
-from moneytree.data_quality import validate_data_quality_mode
+from moneytree.data_quality import DATA_QUALITY_MODES, validate_data_quality_mode
 from moneytree.data_status import build_data_status_report
 
 

@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-
 DEFAULT_RF_PARAMS: dict[str, Any] = {
     "n_estimators": 100,
     "max_depth": 35,

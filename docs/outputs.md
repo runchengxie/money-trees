@@ -7,7 +7,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | `metrics.json` | 策略、基准、风险、换手、持仓数、IC 和 RankIC 指标。 |
-| `run_config.json` | 解析后的配置、segment 规格、holdout 信息、运行时间和 git commit。 |
+| `run_config.json` | 解析后的配置、基准净值口径、segment 规格、segment fit 元数据、holdout 信息、运行时间和 git commit。 |
 | `experiment_manifest.json` | 可复现实验元数据，包括输入 hash、schema hash、配置 hash、运行环境和数据版本。 |
 | `run_summary.txt` | 面向人工阅读的回测摘要。 |
 | `segment_a_features.txt` | Segment A 最终使用的特征列。 |
@@ -32,7 +32,7 @@
 | `strategy_turnover.csv` | 策略换手。 |
 | `active_names.csv` | 每期组合持仓数量。 |
 | `ic_series.csv` | 每期 IC 和 RankIC。 |
-| `oos_period_diagnostics.csv` | 样本外分期收益、换手、持仓数、信号收益、IC 和 RankIC。 |
+| `oos_period_diagnostics.csv` | 样本外分期收益、换手、持仓数、信号收益、IC、RankIC、目标/实际暴露、未分配暴露和 QP fallback 状态。 |
 
 ## Notebook 报告数据
 
@@ -102,8 +102,9 @@
 - `git_commit`
 - `output_schema_version`
 - CLI 和配置解析后的参数。
-- 基准名称和基准列。
+- 基准名称、基准列和 `benchmark_cum_mode`。
 - Segment A/B 的训练、验证和滚动回测规格。
+- Segment A/B 的模型 ID、验证区间、特征数、调参状态和调参最优值。
 - Holdout 是否开启及其区间。
 - `reproducibility` 摘要，包括 `dataset_version`、输入文件 hash、schema hash、配置 hash 和 `experiment_manifest.json` 自身 hash。
 

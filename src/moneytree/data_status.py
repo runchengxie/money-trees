@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import json
 import math
-import numpy as np
 import sqlite3
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from moneytree.data import load_market_data
-from moneytree.data_quality import build_parquet_panel_quality_payload
-from moneytree.data_quality import build_tushare_panel_quality_result
+from moneytree.data_quality import (
+    build_parquet_panel_quality_payload,
+    build_tushare_panel_quality_result,
+)
 
 
 @dataclass(frozen=True)
@@ -587,13 +590,13 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
     lines = [f"[data-status:{name}] status={status} path={path}"]
     if name == "base_panel":
         lines.append(
-            (
+            
                 f"[data-status:{name}] rows={layer.get('rows', 'NA')} "
                 f"cols={layer.get('columns', 'NA')} dates={layer.get('date_count', 'NA')} "
                 f"tickers={layer.get('ticker_count', 'NA')} "
                 f"start={layer.get('date_min') or 'NA'} end={layer.get('date_max') or 'NA'} "
                 f"duplicate_keys={layer.get('duplicate_key_count', 'NA')}"
-            )
+            
         )
         if layer.get("out_of_order_count", 0):
             lines.append(
@@ -629,12 +632,12 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
     elif name == "raw_cache":
         for api_name, api in layer.get("apis", {}).items():
             lines.append(
-                (
+                
                     f"[data-status:{name}] api={api_name} "
                     f"start={api.get('date_min') or 'NA'} end={api.get('date_max') or 'NA'} "
                     f"shards={api.get('shards', 0)} rows={api.get('rows', 0)} "
                     f"schema_hashes={api.get('schema_hash_count', 0)}"
-                )
+                
             )
         for anomaly in layer.get("anomalies", []):
             lines.append(
@@ -645,24 +648,24 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
     elif name == "factor_store":
         base = layer.get("base_panel", {})
         lines.append(
-            (
+            
                 f"[data-status:{name}] base_rows={base.get('rows', 'NA')} "
                 f"base_cols={base.get('columns', 'NA')} "
                 f"families={','.join(layer.get('factor_families', {}))}"
-            )
+            
         )
         for family, entry in layer.get("factor_families", {}).items():
             lines.append(
-                (
+                
                     f"[data-status:{name}] family={family} prefix={entry.get('prefix') or 'NA'} "
                     f"rows={entry.get('rows', 'NA')} cols={entry.get('columns', 'NA')} "
                     f"partitions={entry.get('partitions', 0)}"
-                )
+                
             )
             quality = entry.get("quality", {})
             if quality.get("checked"):
                 lines.append(
-                    (
+                    
                         f"[data-status:{name}] family={family} quality "
                         f"rows_checked={quality.get('rows_checked', 0)} "
                         f"cols_checked={quality.get('columns_checked', 0)} "
@@ -672,7 +675,7 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
                         f"all_null_cols={quality.get('all_null_column_count', 0)} "
                         f"constant_cols={quality.get('constant_column_count', 0)} "
                         f"duplicate_keys={quality.get('duplicate_key_count', 0)}"
-                    )
+                    
                 )
     elif name == "artifacts":
         lines.append(f"[data-status:{name}] total_size={layer.get('total_size', 0)}")
