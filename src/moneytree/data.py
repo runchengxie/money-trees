@@ -339,10 +339,16 @@ def filter_factor_columns(
     *,
     include_factor_prefixes: Iterable[str] | None = None,
     exclude_factor_prefixes: Iterable[str] | None = None,
+    exclude_factor_columns: Iterable[str] | None = None,
 ) -> tuple[list[str], dict[str, object]]:
     """Filter known alpha columns while preserving non-factor columns."""
     include_prefixes = normalize_factor_prefixes(include_factor_prefixes)
     exclude_prefixes = normalize_factor_prefixes(exclude_factor_prefixes)
+    exclude_columns = {
+        str(column).strip()
+        for column in (exclude_factor_columns or ())
+        if str(column).strip()
+    }
     column_names = [str(column) for column in columns]
     alpha_columns = factor_columns(column_names)
 
@@ -363,7 +369,9 @@ def filter_factor_columns(
             selected.append(column)
             continue
         included = not include_prefixes or any(column.startswith(prefix) for prefix in include_prefixes)
-        excluded = any(column.startswith(prefix) for prefix in exclude_prefixes)
+        excluded = column in exclude_columns or any(
+            column.startswith(prefix) for prefix in exclude_prefixes
+        )
         if included and not excluded:
             selected.append(column)
             selected_factor_count += 1
@@ -373,6 +381,7 @@ def filter_factor_columns(
     summary: dict[str, object] = {
         "include_factor_prefixes": list(include_prefixes),
         "exclude_factor_prefixes": list(exclude_prefixes),
+        "exclude_factor_columns": sorted(exclude_columns),
         "available_factor_columns": len(alpha_columns),
         "selected_factor_columns": selected_factor_count,
         "dropped_factor_columns": dropped_factor_count,
@@ -393,11 +402,16 @@ def load_market_data(
     *,
     include_factor_prefixes: Iterable[str] | None = None,
     exclude_factor_prefixes: Iterable[str] | None = None,
+    exclude_factor_columns: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     """Load market data from a pickle/parquet file."""
     file_path = Path(path)
     suffix = file_path.suffix.lower()
-    has_factor_filter = bool(include_factor_prefixes) or bool(exclude_factor_prefixes)
+    has_factor_filter = (
+        bool(include_factor_prefixes)
+        or bool(exclude_factor_prefixes)
+        or bool(exclude_factor_columns)
+    )
 
     if suffix in {".pkl", ".pickle"}:
         frame = pd.read_pickle(file_path)
@@ -406,6 +420,7 @@ def load_market_data(
                 frame.columns,
                 include_factor_prefixes=include_factor_prefixes,
                 exclude_factor_prefixes=exclude_factor_prefixes,
+                exclude_factor_columns=exclude_factor_columns,
             )
             frame = frame.loc[:, selected]
             summary["column_pruned"] = False
@@ -420,6 +435,7 @@ def load_market_data(
                 schema_columns,
                 include_factor_prefixes=include_factor_prefixes,
                 exclude_factor_prefixes=exclude_factor_prefixes,
+                exclude_factor_columns=exclude_factor_columns,
             )
             summary["column_pruned"] = True
         frame = pd.read_parquet(file_path, columns=columns)

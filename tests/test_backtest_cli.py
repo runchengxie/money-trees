@@ -530,11 +530,13 @@ def test_backtest_settings_resolves_factor_selection_from_config() -> None:
         overrides=[
             'features.include_factor_families=["alpha158"]',
             "features.exclude_factor_prefixes=alpha360_",
+            'features.exclude_factor_columns=["alpha191_030"]',
         ],
     )
 
     assert settings.include_factor_prefixes == ("alpha158_",)
     assert settings.exclude_factor_prefixes == ("alpha360_",)
+    assert settings.exclude_factor_columns == ("alpha191_030",)
 
 
 def test_legacy_notebook_preset_enables_missing_feature_warning_policy() -> None:
@@ -587,6 +589,7 @@ def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_p
     out_dir = tmp_path / "factor_selection_artifacts"
     frame = _build_smoke_dataset()
     frame["alpha158_signal"] = frame["f_signal"]
+    frame["alpha158_drop_me"] = frame["f_rank"]
     frame["alpha360_noise"] = frame["f_rank"]
     frame.to_parquet(data_path, index=False)
 
@@ -605,6 +608,8 @@ def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_p
                 "backtest.segment2_windows=1",
                 "--set",
                 'features.include_factor_prefixes=["alpha158_"]',
+                "--set",
+                'features.exclude_factor_columns=["alpha158_drop_me"]',
             ],
         ),
         cwd=root,
@@ -616,8 +621,10 @@ def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_p
     run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
 
     assert "alpha158_signal" in segment_a_features
+    assert "alpha158_drop_me" not in segment_a_features
     assert "alpha360_noise" not in segment_a_features
     assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
+    assert run_config["factor_selection"]["exclude_factor_columns"] == ["alpha158_drop_me"]
     assert run_config["factor_selection"]["column_pruned"] is True
 
 
@@ -627,6 +634,7 @@ def test_moneytree_cli_loads_factor_store_manifest_with_selected_families(tmp_pa
     out_dir = tmp_path / "factor_store_artifacts"
     frame = _build_smoke_dataset()
     frame["alpha158_signal"] = frame["f_signal"]
+    frame["alpha158_drop_me"] = frame["f_rank"]
     frame["alpha360_noise"] = frame["f_rank"]
     write_factor_store(frame, store_dir)
 
@@ -645,6 +653,8 @@ def test_moneytree_cli_loads_factor_store_manifest_with_selected_families(tmp_pa
                 "backtest.segment2_windows=1",
                 "--set",
                 'features.include_factor_families=["alpha158"]',
+                "--set",
+                'features.exclude_factor_columns=["alpha158_drop_me"]',
             ],
         ),
         cwd=root,
@@ -656,9 +666,11 @@ def test_moneytree_cli_loads_factor_store_manifest_with_selected_families(tmp_pa
     run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
 
     assert "alpha158_signal" in segment_a_features
+    assert "alpha158_drop_me" not in segment_a_features
     assert "alpha360_noise" not in segment_a_features
     assert run_config["factor_selection"]["source"] == "factor_store"
     assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
+    assert run_config["factor_selection"]["exclude_factor_columns"] == ["alpha158_drop_me"]
 
 
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:

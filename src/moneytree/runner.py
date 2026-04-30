@@ -65,16 +65,19 @@ def _load_backtest_data(settings: BacktestSettings) -> pd.DataFrame:
             settings.data,
             include_factor_prefixes=settings.include_factor_prefixes,
         )
-        if settings.exclude_factor_prefixes:
+        if settings.exclude_factor_prefixes or settings.exclude_factor_columns:
             selected, summary = filter_factor_columns(
                 frame.columns,
+                include_factor_prefixes=settings.include_factor_prefixes,
                 exclude_factor_prefixes=settings.exclude_factor_prefixes,
+                exclude_factor_columns=settings.exclude_factor_columns,
             )
             frame = frame.loc[:, selected]
         else:
             summary = {
                 "include_factor_prefixes": list(settings.include_factor_prefixes),
                 "exclude_factor_prefixes": [],
+                "exclude_factor_columns": [],
                 "column_pruned": True,
             }
         summary["source"] = "factor_store"
@@ -85,6 +88,7 @@ def _load_backtest_data(settings: BacktestSettings) -> pd.DataFrame:
         settings.data,
         include_factor_prefixes=settings.include_factor_prefixes,
         exclude_factor_prefixes=settings.exclude_factor_prefixes,
+        exclude_factor_columns=settings.exclude_factor_columns,
     )
 
 
@@ -984,6 +988,7 @@ def build_run_config(
         "factor_selection": {
             "include_factor_prefixes": list(settings.include_factor_prefixes),
             "exclude_factor_prefixes": list(settings.exclude_factor_prefixes),
+            "exclude_factor_columns": list(settings.exclude_factor_columns),
             **(factor_load_info or {}),
         },
     }

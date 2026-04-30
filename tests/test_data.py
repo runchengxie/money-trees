@@ -136,6 +136,14 @@ def test_filter_factor_columns_preserves_non_factors_and_reports_missing_prefix(
     assert summary["selected_factor_columns"] == 1
     assert summary["dropped_factor_columns"] == 1
 
+    selected, summary = filter_factor_columns(
+        ["date", "ticker", "alpha191_029", "alpha191_030", "alpha191_031"],
+        exclude_factor_columns=["alpha191_030"],
+    )
+    assert selected == ["date", "ticker", "alpha191_029", "alpha191_031"]
+    assert summary["exclude_factor_columns"] == ["alpha191_030"]
+    assert summary["dropped_factor_columns"] == 1
+
     with pytest.raises(ValueError, match="alpha101_"):
         filter_factor_columns(["date", "ticker", "alpha158_kmid"], include_factor_prefixes=["alpha101"])
 
@@ -247,15 +255,21 @@ def test_load_market_data_prunes_parquet_factor_columns(tmp_path) -> None:
             "date": pd.to_datetime(["2021-01-01", "2021-01-02"]),
             "ticker": ["A", "A"],
             "alpha158_kmid": [0.1, 0.2],
+            "alpha158_drop_me": [9.0, 9.0],
             "alpha360_close_lag00": [0.0, 0.0],
             "next_period_return": [0.01, 0.02],
             "benchmark_next_period_return": [0.0, 0.0],
         }
     ).to_parquet(data_path, index=False)
 
-    out = load_market_data(data_path, include_factor_prefixes=["alpha158_"])
+    out = load_market_data(
+        data_path,
+        include_factor_prefixes=["alpha158_"],
+        exclude_factor_columns=["alpha158_drop_me"],
+    )
 
     assert "alpha158_kmid" in out.columns
+    assert "alpha158_drop_me" not in out.columns
     assert "alpha360_close_lag00" not in out.columns
     assert "next_period_return" in out.columns
     assert out.attrs["factor_selection"]["column_pruned"] is True

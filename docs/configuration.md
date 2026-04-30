@@ -60,6 +60,7 @@ features:
   exclude_factor_families: []
   include_factor_prefixes: []
   exclude_factor_prefixes: []
+  exclude_factor_columns: []
   missing_feature_policy: error
 ```
 
@@ -67,6 +68,7 @@ features:
 
 - family 可取 `alpha101`、`alpha191`、`alpha158`、`alpha360`，会自动映射到对应列名前缀。
 - prefix 直接匹配列名前缀，例如 `alpha158_`。
+- `exclude_factor_columns` 用于排除单个因子列，例如暂时不可用的 `alpha191_030`。
 - `include_*` 非空时，只保留匹配的 Alpha 因子列；非因子列会保留，用于标签、基准、可交易过滤和报告。
 - `exclude_*` 会从已选 Alpha 因子列中排除对应前缀。
 - parquet 输入会根据 schema 做列裁剪；pickle 输入会先完整读取，再在内存中过滤。
