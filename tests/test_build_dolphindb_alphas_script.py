@@ -13,6 +13,7 @@ import pytest
 
 from moneytree.cli import dolphindb_alphas
 from moneytree.factors.external import external_alpha_columns
+from moneytree.resources import ParquetMemoryEstimate
 from scripts import build_dolphindb_alphas
 
 
@@ -149,6 +150,7 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "overwrite": False,
         "dolphindb_warmup_trade_dates": 260,
         "progress": False,
+        "skip_memory_check": False,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -228,6 +230,64 @@ def test_dolphindb_generation_rejects_empty_password(tmp_path: Path) -> None:
             _args(tmp_path / "input.parquet", tmp_path / "output.parquet", password=""),
             ddb_module=FakeDolphinDB(FakeSession()),
         )
+
+
+def test_dolphindb_generation_rejects_input_when_memory_preflight_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+
+    monkeypatch.setattr(
+        dolphindb_alphas,
+        "estimate_parquet_dataframe_memory",
+        lambda _path: ParquetMemoryEstimate(
+            rows=10_000_000,
+            columns=60,
+            file_size_bytes=1_500_000_000,
+            required_bytes=9_600_000_000,
+        ),
+    )
+    monkeypatch.setattr(dolphindb_alphas, "available_memory_bytes", lambda: 8_000_000_000)
+
+    with pytest.raises(RuntimeError, match="Input memory preflight failed"):
+        dolphindb_alphas.run_generation(
+            _args(input_path, output_path),
+            ddb_module=FakeDolphinDB(FakeSession()),
+        )
+
+    assert not output_path.exists()
+
+
+def test_dolphindb_generation_can_skip_memory_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.parquet"
+    output_path = tmp_path / "output.parquet"
+    _panel().to_parquet(input_path)
+
+    monkeypatch.setattr(
+        dolphindb_alphas,
+        "estimate_parquet_dataframe_memory",
+        lambda _path: ParquetMemoryEstimate(
+            rows=10_000_000,
+            columns=60,
+            file_size_bytes=1_500_000_000,
+            required_bytes=9_600_000_000,
+        ),
+    )
+    monkeypatch.setattr(dolphindb_alphas, "available_memory_bytes", lambda: 8_000_000_000)
+
+    result = dolphindb_alphas.run_generation(
+        _args(input_path, output_path, skip_memory_check=True),
+        ddb_module=FakeDolphinDB(FakeSession()),
+    )
+
+    assert result.output_path == output_path
+    assert output_path.exists()
 
 
 def test_dolphindb_generation_reports_connection_failure_before_preflight(tmp_path: Path) -> None:

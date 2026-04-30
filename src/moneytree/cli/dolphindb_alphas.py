@@ -32,6 +32,13 @@ from moneytree.factors.external import (
     normalize_external_families,
     write_external_alpha_manifest,
 )
+from moneytree.resources import (
+    ResourcePreflightError,
+    available_memory_bytes,
+    ensure_memory_available,
+    estimate_parquet_dataframe_memory,
+    format_bytes,
+)
 
 DEFAULT_ALPHA101_FUNCTION = "calcMoneyTreeAlpha101"
 DEFAULT_ALPHA191_FUNCTION = "calcMoneyTreeAlpha191"
@@ -211,6 +218,38 @@ def _validate_connection_args(args: argparse.Namespace) -> None:
         )
 
 
+def _run_input_memory_preflight(input_path: Path, args: argparse.Namespace) -> None:
+    if bool(getattr(args, "skip_memory_check", False)):
+        return
+
+    estimate = estimate_parquet_dataframe_memory(input_path)
+    available = available_memory_bytes()
+    if estimate is None or available is None:
+        return
+
+    try:
+        ensure_memory_available(
+            required_bytes=estimate.required_bytes,
+            available_bytes=available,
+            context="Input memory preflight failed for DolphinDB external-alpha generation",
+            detail=(
+                f"input rows={estimate.rows:,}, columns={estimate.columns:,}, "
+                f"file_size={format_bytes(estimate.file_size_bytes)}"
+            ),
+            remediation=(
+                "Current implementation reads and uploads the full input panel before "
+                "applying --chunk-trade-dates, so lowering --chunk-trade-dates will not "
+                "reduce this initial memory peak. Use a smaller smoke input, run on a "
+                "larger-memory host, or implement input-side streaming/chunked upload "
+                "before full-market Alpha101/191 generation. Pass --skip-memory-check "
+                "only if you intentionally accept the risk of the process being killed "
+                "by OOM."
+            ),
+        )
+    except ResourcePreflightError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
 def _connect_session(session: Any, args: argparse.Namespace) -> None:
     try:
         session.connect(args.host, int(args.port), args.user, args.password)
@@ -370,6 +409,7 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
         else None
     )
 
+    _run_input_memory_preflight(input_path, args)
     panel = load_market_data(input_path)
     ddb_input, field_mapping = build_dolphindb_input(
         panel,
@@ -636,6 +676,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--progress",
         action="store_true",
         help="Print factor-store partition write progress to stderr.",
+    )
+    parser.add_argument(
+        "--skip-memory-check",
+        action="store_true",
+        help=(
+            "Skip the input memory preflight. Current generation still reads and uploads "
+            "the full input panel before chunking, so this may allow an OOM kill."
+        ),
     )
     return parser
 

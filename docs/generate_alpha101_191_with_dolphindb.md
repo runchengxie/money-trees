@@ -212,6 +212,8 @@ uv run moneytrees-tushare \
 
 使用 `--no-wide-output` 写入 factor store 时，CLI 会按 `--chunk-trade-dates` 对 DolphinDB 计算本身分片：每次只下载目标交易日的 Alpha101/191 结果并立即写入对应分片，避免在 DolphinDB 或 Python 中构造多年全市场的完整宽表。每个计算分片会额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日作为滚动公式上下文，默认 `260`。重新生成已写入 manifest 的外部 family 时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
 
+内存边界：当前 `moneytrees-dolphindb-alphas` 在上述分片计算前，仍会一次性读取输入面板、构造 DolphinDB 输入并上传到 server。`--chunk-trade-dates` 不会降低这个初始输入内存峰值。多年全市场输入在 8GB 级机器上可能被 OOM killer 直接杀掉；CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。更稳的生产方案是使用小样本冒烟测试、在更大内存机器上运行，或先实现输入侧分片读取和上传。
+
 Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
 
 ```bash
@@ -252,7 +254,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-最终同时生成并写入正式 factor store：
+最终写入正式 factor store 时仍建议按 family 分开运行；同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单 family 验证的环境：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \

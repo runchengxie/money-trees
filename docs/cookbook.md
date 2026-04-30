@@ -142,6 +142,8 @@ uv run moneytrees-factor-store \
 
 Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个 factor store。详细环境和口径见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
+当前外部 Alpha CLI 会先一次性读取并上传完整输入面板，再按 `--chunk-trade-dates` 分片计算和落盘。这个参数不会降低初始输入内存峰值；多年全市场面板在 8GB 级机器上可能 OOM。先用小样本分别跑 `--alpha101` 和 `--alpha191` 冒烟测试，正式生成时优先按 family 分开运行，并确保机器内存足够。
+
 安装外部 Alpha 依赖：
 
 ```bash

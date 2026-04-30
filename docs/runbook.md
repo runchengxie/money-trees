@@ -92,6 +92,8 @@ Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年
 
 Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
+注意：`moneytrees-dolphindb-alphas` 当前会在分片计算前一次性读取并上传完整输入面板。`--chunk-trade-dates` 只控制 DolphinDB 计算目标日期、下载结果和因子仓库落盘分片，不降低初始输入内存峰值。多年全市场输入在 8GB 级机器上可能 OOM；正式运行前先用小样本验证，或者换到更大内存环境。CLI 默认会做输入内存预检，只有明确接受 OOM 风险时才使用 `--skip-memory-check`。
+
 ```bash
 uv sync --dev --extra external-alphas
 
@@ -430,6 +432,30 @@ uv sync --dev --extra external-alphas
 ```
 
 普通 `moneytrees` 回测不需要该依赖；只有运行 `moneytrees-dolphindb-alphas` 时才需要。
+
+### DolphinDB Alpha101/191 生成被 SIGKILL 或内存预检失败
+
+生成 Alpha101/191 时如果 shell 显示：
+
+```text
+[SIGKILL]
+```
+
+或者 CLI 报：
+
+```text
+Input memory preflight failed for DolphinDB external-alpha generation
+```
+
+通常是当前机器内存不足以一次性读取、转换并上传完整输入面板。`--chunk-trade-dates` 不能解决这个初始输入峰值。
+
+处理：
+
+- 先用较小日期区间或 ticker 子集跑冒烟测试。
+- 按 family 分开运行 `--alpha101` 和 `--alpha191`。
+- 使用更大内存机器或增加 WSL/Docker 可用内存。
+- 不要为了继续跑而默认加 `--skip-memory-check`；它只会跳过保护，不能降低实际内存使用。
+- 长期方案是改造为输入侧分片读取和上传，并为每个计算窗口带上 `--dolphindb-warmup-trade-dates` 历史上下文。
 
 ### DolphinDB Alpha101/191 模块或 wrapper 预检失败
 
