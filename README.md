@@ -2,9 +2,7 @@
 
 Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列规范展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征由 DolphinDB 等外部生产器离线生成后写入因子仓库（factor store）或兼容并入标准 `date, ticker` 面板。
 
-核心链路包括 TuShare 日频数据拉取、原始缓存、因子仓库、特征滞后、模型适配器、组合构建、滚动回测、留出验证和可复现产物输出。Python import 包名仍然是 `moneytree`；`moneytree` 单数 CLI 作为兼容入口保留，新文档优先使用 `moneytrees`。
-
-兼容 CLI alias 包括 `moneytree`、`moneytree-tushare`、`moneytree-data-status`、`moneytree-data-snapshot`、`moneytree-dolphindb-alphas`、`moneytree-factor-store` 和 `moneytree-parquet-rewrite`。对应复数入口为 `moneytrees`、`moneytrees-tushare`、`moneytrees-data-status`、`moneytrees-data-snapshot`、`moneytrees-dolphindb-alphas`、`moneytrees-factor-store` 和 `moneytrees-parquet-rewrite`。
+核心链路包括 TuShare 日频数据拉取、原始缓存、因子仓库、特征滞后、模型适配器、组合构建、滚动回测、留出验证和可复现产物输出。Python import 包名仍然是 `moneytree`。新文档优先使用 `moneytrees*` CLI；旧的 `moneytree*` CLI alias 保留为兼容入口，并与对应 `moneytrees*` 命令指向同一实现。
 
 ## 使用路径
 

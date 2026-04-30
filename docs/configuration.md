@@ -2,6 +2,8 @@
 
 `moneytrees` 使用多个 YAML、JSON 或 TOML 配置文件叠加生成一次运行配置。推荐把市场、模型、回测和本地预设拆开维护。旧的 `moneytree` CLI 仍然可用。
 
+兼容单数入口包括 `moneytree`、`moneytree-tushare`、`moneytree-data-status`、`moneytree-data-snapshot`、`moneytree-dolphindb-alphas`、`moneytree-factor-store` 和 `moneytree-parquet-rewrite`。新文档优先使用对应的 `moneytrees*` 入口。
+
 ## 默认配置栈
 
 不传 `--config` 时，CLI 默认读取：
