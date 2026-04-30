@@ -58,8 +58,8 @@ uv run moneytrees-tushare \
 uv run moneytrees-factor-store \
   --input data/panel/cn/cn_daily_raw.parquet \
   --output-dir data/factor_store/cn_daily \
-  --family alpha158 \
-  --family alpha360 \
+  --factor-family alpha158 \
+  --factor-family alpha360 \
   --chunk-trade-dates 60 \
   --progress
 ```
@@ -71,7 +71,7 @@ uv sync --dev --extra external-alphas
 
 uv run moneytrees-dolphindb-alphas \
   --input data/panel/cn/cn_daily_raw.parquet \
-  --factor-store data/factor_store/cn_daily \
+  --factor-store-output data/factor_store/cn_daily \
   --no-wide-output \
   --host 127.0.0.1 \
   --port 8848 \
@@ -95,7 +95,7 @@ uv run moneytrees \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-DolphinDB 容器和模块路径见 [docs/dolphindb_alpha101_191.md](docs/dolphindb_alpha101_191.md)，本仓库也提供 `docker-compose.alpha.yml` 作为本地联调入口。
+DolphinDB 容器和模块路径见 [docs/generate_alpha101_191_with_dolphindb.md](docs/generate_alpha101_191_with_dolphindb.md)，本仓库也提供 `docker-compose.alpha.yml` 作为本地联调入口。
 
 ## 常用命令
 
@@ -150,7 +150,7 @@ pickle 只能读取可信文件；正常研究路径推荐 parquet。
 
 ## 文档导航
 
-- [docs/minimal_run.md](docs/minimal_run.md): 最小跑通路径和最小数据列。
+- [docs/smoke_test.md](docs/smoke_test.md): 冒烟测试、最小跑通路径和最小数据列。
 - [docs/architecture.md](docs/architecture.md): 数据层、市场层、因子层、模型层、组合层、回测层和输出层设计。
 - [docs/data_contract.md](docs/data_contract.md): 标准面板索引、必需列、可选列、标签和特征口径。
 - [docs/data_status.md](docs/data_status.md): 原始缓存、基础面板、因子仓库和回测产物的只读状态检查。
@@ -160,9 +160,9 @@ pickle 只能读取可信文件；正常研究路径推荐 parquet。
 - [docs/cookbook.md](docs/cookbook.md): 常见研究任务示例。
 - [docs/runbook.md](docs/runbook.md): 日常运行、缓存刷新、排障和归档检查。
 - [docs/testing.md](docs/testing.md): 测试命令、测试覆盖和当前测试缺口。
-- [docs/daily_alpha_research.md](docs/daily_alpha_research.md): Alpha101/191/158/360 日频研究说明。
+- [docs/factor_families.md](docs/factor_families.md): Alpha101/191/158/360 因子家族来源、用途和项目边界。
 - [docs/factor_catalog.md](docs/factor_catalog.md): 因子列级清单说明，机器可读版本在 [docs/factor_catalog.csv](docs/factor_catalog.csv)。
-- [docs/dolphindb_alpha101_191.md](docs/dolphindb_alpha101_191.md): DolphinDB 外部 Alpha101/191 生产说明。
+- [docs/generate_alpha101_191_with_dolphindb.md](docs/generate_alpha101_191_with_dolphindb.md): 使用 DolphinDB 生成 Alpha101/191 并写入因子仓库。
 - [docs/maintenance.md](docs/maintenance.md): 维护 backlog、迁移工具和后续重构候选项。
 
 ## 项目结构

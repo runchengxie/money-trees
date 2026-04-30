@@ -1,4 +1,4 @@
-# DolphinDB Alpha101/191 外部因子生产
+# 使用 DolphinDB 生成 Alpha101/191
 
 本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入 factor store；旧的宽 parquet 面板输出继续保留用于兼容。
 

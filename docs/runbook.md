@@ -90,7 +90,7 @@ Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年
 
 5. 可选：离线生成外部 Alpha101/191。
 
-Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -445,7 +445,7 @@ DolphinDB Alpha101/191 preflight failed
 - 使用 `docker-compose.alpha.yml` 时，确认该目录已挂载到 DolphinDB server 的 `/data/ddb/server/data/modules`。
 - 确认 `moneytreeAlpha.dos` 定义了 `calcMoneyTreeAlpha101(rawData, startTime, endTime)` 和 `calcMoneyTreeAlpha191(rawData, startTime, endTime)`，或者命令中传入了正确的 `--alpha101-function` / `--alpha191-function`。
 - 注意 `--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB `use` 的模块名。
-- 先按 [DolphinDB Alpha101/191 外部因子生产](dolphindb_alpha101_191.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式 factor store。
+- 先按 [使用 DolphinDB 生成 Alpha101/191](generate_alpha101_191_with_dolphindb.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式 factor store。
 
 ### Alpha101/191 输出列不完整
 

@@ -1,6 +1,6 @@
-# A 股日频 Alpha 因子研究
+# 因子家族说明
 
-本文说明 Money Trees 当前如何承接 A 股日频 Alpha101、Alpha191、Alpha158 和 Alpha360 研究。数据契约见 [data_contract.md](data_contract.md)，TuShare 拉取示例见 [cookbook.md](cookbook.md)，运行排障见 [runbook.md](runbook.md)。
+本文说明 Money Trees 当前支持的 A 股日频 Alpha101、Alpha191、Alpha158 和 Alpha360 因子家族：来源、用途、输入字段、项目内生成边界和研究链路。列级清单见 [factor_catalog.md](factor_catalog.md)，数据契约见 [data_contract.md](data_contract.md)，TuShare 拉取示例见 [cookbook.md](cookbook.md)，运行排障见 [runbook.md](runbook.md)。
 
 ## 研究链路
 

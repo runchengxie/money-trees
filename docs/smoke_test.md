@@ -1,6 +1,6 @@
-# 最小运行路径
+# 冒烟测试
 
-本文给出最小本地回测路径，用来确认 A 股主链路可以跑通。完整数据契约见 [data_contract.md](data_contract.md)。
+本文给出最小本地回测路径，用来确认 A 股主链路可以跑通。完整数据契约见 [data_contract.md](data_contract.md)，常见研究任务见 [cookbook.md](cookbook.md)。
 
 ## 1. 安装依赖
 

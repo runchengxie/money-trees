@@ -13,7 +13,7 @@
 
 合计 810 行。Alpha101/191 的逐条公式由外部实现维护；CSV 中对应行是接入清单。
 
-当前项目内可计算 Alpha158/360 共 518 个本地特征。Alpha101/191 共 292 个列由 DolphinDB 等外部生产器生成；本仓库维护标准列名、输入依赖、校验规则和并入口径。`add_factor_family_features()` 支持本地 Alpha158/360。推荐将外部 Alpha101/191 写入标准 `date, ticker` 面板或因子仓库，流程见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+当前项目内可计算 Alpha158/360 共 518 个本地特征。Alpha101/191 共 292 个列由 DolphinDB 等外部生产器生成；本仓库维护标准列名、输入依赖、校验规则和并入口径。`add_factor_family_features()` 支持本地 Alpha158/360。推荐将外部 Alpha101/191 写入标准 `date, ticker` 面板或因子仓库，流程见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
 ## CSV 字段
 

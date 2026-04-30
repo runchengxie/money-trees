@@ -140,7 +140,7 @@ uv run moneytrees-factor-store \
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
 
-Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个 factor store。详细环境和口径见 [dolphindb_alpha101_191.md](dolphindb_alpha101_191.md)。
+Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个 factor store。详细环境和口径见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
 安装外部 Alpha 依赖：
 
