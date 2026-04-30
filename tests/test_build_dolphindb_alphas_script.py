@@ -150,6 +150,7 @@ def _args(input_path: Path, output_path: Path, **overrides: Any) -> argparse.Nam
         "overwrite": False,
         "dolphindb_warmup_trade_dates": 260,
         "progress": False,
+        "stream_input": "auto",
         "skip_memory_check": False,
     }
     values.update(overrides)

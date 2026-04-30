@@ -144,10 +144,11 @@ uv run moneytrees-dolphindb-alphas \
   --alpha101 \
   --alpha191 \
   --factor-dtype float32 \
-  --chunk-trade-dates 60
+  --chunk-trade-dates 60 \
+  --stream-input auto
 ```
 
-当前外部 Alpha CLI 会按 `--chunk-trade-dates` 分片计算、下载和落盘，但在此之前仍会一次性读取并上传完整输入面板。多年全市场输入可能先在 Python/DolphinDB 输入阶段 OOM；内存紧张时先用小样本验证，或在更大内存机器上生成。后续若加入输入侧分片上传，应继续保留 `--dolphindb-warmup-trade-dates` 这类历史上下文，避免滚动窗口、delay、rank 和 correlation 类算子的边界污染。
+parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认按 `--stream-input auto` 分片读取输入、上传到 DolphinDB、下载结果并落盘。每个窗口应保留 `--dolphindb-warmup-trade-dates` 历史上下文，避免滚动窗口、delay、rank 和 correlation 类算子的边界污染。宽表输出或 `--stream-input off` 仍会走完整输入上传路径，内存紧张时先用小样本验证。
 
 ## 空间估算
 

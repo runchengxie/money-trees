@@ -23,6 +23,7 @@ from moneytree.data import (
 from moneytree.factor_store import (
     write_external_factor_store,
     write_external_factor_store_partitioned,
+    write_external_factor_store_partitioned_from_parquet,
 )
 from moneytree.factors.external import (
     build_dolphindb_input,
@@ -237,13 +238,12 @@ def _run_input_memory_preflight(input_path: Path, args: argparse.Namespace) -> N
                 f"file_size={format_bytes(estimate.file_size_bytes)}"
             ),
             remediation=(
-                "Current implementation reads and uploads the full input panel before "
+                "This generation path reads and uploads the full input panel before "
                 "applying --chunk-trade-dates, so lowering --chunk-trade-dates will not "
-                "reduce this initial memory peak. Use a smaller smoke input, run on a "
-                "larger-memory host, or implement input-side streaming/chunked upload "
-                "before full-market Alpha101/191 generation. Pass --skip-memory-check "
-                "only if you intentionally accept the risk of the process being killed "
-                "by OOM."
+                "reduce this initial memory peak. For parquet factor-store output, use "
+                "--no-wide-output --stream-input auto. Otherwise use a smaller smoke "
+                "input or a larger-memory host. Pass --skip-memory-check only if you "
+                "intentionally accept the risk of the process being killed by OOM."
             ),
         )
     except ResourcePreflightError as exc:
@@ -370,6 +370,80 @@ def _write_streamed_factor_store(
     return store_dir / "manifest.json"
 
 
+def _write_streamed_factor_store_from_parquet(
+    session: Any,
+    args: argparse.Namespace,
+    *,
+    input_path: Path,
+    families: Sequence[str],
+    factor_dtype: str,
+    version: str | None,
+) -> dict[str, Any]:
+    store_dir = Path(args.factor_store_output)
+    warmup_trade_dates = int(getattr(args, "dolphindb_warmup_trade_dates", 260))
+    field_mappings: dict[str, Any] = {}
+
+    def generate_family_part(
+        family: str,
+        calc_panel: pd.DataFrame,
+        target_dates: pd.Index,
+        calc_dates: pd.Index,
+        part_index: int,
+        part_count: int,
+    ) -> pd.DataFrame:
+        del calc_dates, part_index, part_count
+        ddb_input, field_mapping = build_dolphindb_input(
+            calc_panel,
+            [family],
+            use_adjusted_prices=not args.raw_price_fields,
+        )
+        field_mappings.setdefault(family, field_mapping)
+        session.upload({"rawData": ddb_input})
+        _run_setup_script(session, [family])
+        all_dates = pd.Index(calc_panel.index.get_level_values("date").unique()).sort_values()
+        return _run_dolphindb_family_part(
+            session,
+            args,
+            family,
+            all_dates=all_dates,
+            target_dates=target_dates,
+            warmup_trade_dates=warmup_trade_dates,
+        )
+
+    manifest = write_external_factor_store_partitioned_from_parquet(
+        input_path,
+        store_dir,
+        families=families,
+        generate_family_part=generate_family_part,
+        factor_dtype=factor_dtype,
+        chunk_trade_dates=int(getattr(args, "chunk_trade_dates", 60)),
+        warmup_trade_dates=warmup_trade_dates,
+        compression=args.compression,
+        compression_level=getattr(args, "compression_level", None),
+        row_group_size=getattr(args, "row_group_size", None),
+        overwrite=bool(getattr(args, "overwrite", False)),
+        metadata={
+            "source": "moneytrees-dolphindb-alphas",
+            "input": str(input_path),
+            "families": list(families),
+            "field_mapping": field_mappings,
+            "dolphindb": {
+                "host": args.host,
+                "port": int(args.port),
+                "user": args.user,
+                "server_version": version,
+                "python_client_version": _package_version("dolphindb"),
+            },
+            "module_versions": _module_versions(args),
+            "dolphindb_warmup_trade_dates": warmup_trade_dates,
+            "row_group_size": getattr(args, "row_group_size", None),
+            "stream_input": getattr(args, "stream_input", "auto"),
+        },
+        show_progress=bool(getattr(args, "progress", False)),
+    )
+    return manifest
+
+
 def _positive_int(raw: str) -> int:
     value = int(raw)
     if value < 1:
@@ -408,6 +482,35 @@ def run_generation(args: argparse.Namespace, *, ddb_module: Any | None = None) -
         if output_path is not None
         else None
     )
+
+    use_input_streaming = (
+        no_wide_output
+        and bool(factor_store_output)
+        and input_path.suffix.lower() == ".parquet"
+        and str(getattr(args, "stream_input", "auto")).lower() == "auto"
+    )
+
+    if use_input_streaming:
+        ddb = ddb_module if ddb_module is not None else load_dolphindb_client()
+        session = ddb.Session()
+        _connect_session(session, args)
+        version = _server_version(session)
+        _run_preflight(session, args, families)
+        manifest = _write_streamed_factor_store_from_parquet(
+            session,
+            args,
+            input_path=input_path,
+            families=families,
+            factor_dtype=factor_dtype,
+            version=version,
+        )
+        return GenerationResult(
+            output_path=None,
+            manifest_path=None,
+            rows=int(manifest["base_panel"]["rows"]),
+            alpha_columns=_family_alpha_column_count(families),
+            factor_store_manifest_path=Path(factor_store_output) / "manifest.json",
+        )
 
     _run_input_memory_preflight(input_path, args)
     panel = load_market_data(input_path)
@@ -676,6 +779,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--progress",
         action="store_true",
         help="Print factor-store partition write progress to stderr.",
+    )
+    parser.add_argument(
+        "--stream-input",
+        choices=["auto", "off"],
+        default="auto",
+        help=(
+            "Input streaming mode for parquet --no-wide-output factor-store generation. "
+            "'auto' reads and uploads each target/warmup window separately; 'off' uses "
+            "the legacy full-input upload path."
+        ),
     )
     parser.add_argument(
         "--skip-memory-check",

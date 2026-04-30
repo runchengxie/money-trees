@@ -64,7 +64,7 @@ uv run moneytrees-factor-store \
 
 追加外部 Alpha101/191：
 
-注意：当前 `moneytrees-dolphindb-alphas` 会在分片计算前一次性读取并上传完整输入面板。`--no-wide-output` 和 `--chunk-trade-dates` 能降低下载和落盘压力，但不能降低这个初始输入内存峰值；多年全市场面板在 8GB 级机器上可能触发 OOM。正式全量生成前先用小样本冒烟测试，或使用更大内存环境，直到输入侧分片上传实现后再在小内存机器上直接全量运行。
+注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免多年全市场输入一次性进入内存。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径，内存紧张时可能 OOM。正式全量生成前仍建议先用小样本冒烟测试，并按 family 分开运行。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -79,6 +79,7 @@ uv run moneytrees-dolphindb-alphas \
   --password 123456 \
   --alpha101 \
   --alpha191 \
+  --stream-input auto \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
   --moneytree-alpha-module-version <your-wrapper-version>

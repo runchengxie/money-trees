@@ -210,9 +210,9 @@ uv run moneytrees-tushare \
 
 首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式 factor store。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
 
-使用 `--no-wide-output` 写入 factor store 时，CLI 会按 `--chunk-trade-dates` 对 DolphinDB 计算本身分片：每次只下载目标交易日的 Alpha101/191 结果并立即写入对应分片，避免在 DolphinDB 或 Python 中构造多年全市场的完整宽表。每个计算分片会额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日作为滚动公式上下文，默认 `260`。重新生成已写入 manifest 的外部 family 时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
+使用 `--no-wide-output` 写入 factor store 且输入是 parquet 时，CLI 默认使用 `--stream-input auto`：按 `--chunk-trade-dates` 划分目标交易日，每个计算窗口额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日，随后只读取并上传该窗口、调用 DolphinDB、只下载目标交易日结果并立即写入分片。这个路径避免在 Python 或 DolphinDB client 中构造多年全市场的完整输入/输出宽表。重新生成已写入 manifest 的外部 family 时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
 
-内存边界：当前 `moneytrees-dolphindb-alphas` 在上述分片计算前，仍会一次性读取输入面板、构造 DolphinDB 输入并上传到 server。`--chunk-trade-dates` 不会降低这个初始输入内存峰值。多年全市场输入在 8GB 级机器上可能被 OOM killer 直接杀掉；CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。更稳的生产方案是使用小样本冒烟测试、在更大内存机器上运行，或先实现输入侧分片读取和上传。
+内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的 factor store 路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径；多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
 
 Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
 
@@ -227,6 +227,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha101 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --stream-input auto \
   --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \
@@ -247,6 +248,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha191 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --stream-input auto \
   --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \
@@ -268,6 +270,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha191 \
   --factor-dtype float32 \
   --chunk-trade-dates 60 \
+  --stream-input auto \
   --overwrite \
   --dolphindb-warmup-trade-dates 260 \
   --wq101-module-version <your-wq101-version> \

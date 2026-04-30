@@ -92,7 +92,7 @@ Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年
 
 Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
-注意：`moneytrees-dolphindb-alphas` 当前会在分片计算前一次性读取并上传完整输入面板。`--chunk-trade-dates` 只控制 DolphinDB 计算目标日期、下载结果和因子仓库落盘分片，不降低初始输入内存峰值。多年全市场输入在 8GB 级机器上可能 OOM；正式运行前先用小样本验证，或者换到更大内存环境。CLI 默认会做输入内存预检，只有明确接受 OOM 风险时才使用 `--skip-memory-check`。
+注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径；多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按 family 分开运行。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -107,6 +107,7 @@ uv run moneytrees-dolphindb-alphas \
   --alpha101 \
   --alpha191 \
   --factor-dtype float32 \
+  --stream-input auto \
   --wq101-module-version <your-wq101-version> \
   --gtja191-module-version <your-gtja191-version> \
   --moneytree-alpha-module-version <your-wrapper-version>
@@ -447,15 +448,16 @@ uv sync --dev --extra external-alphas
 Input memory preflight failed for DolphinDB external-alpha generation
 ```
 
-通常是当前机器内存不足以一次性读取、转换并上传完整输入面板。`--chunk-trade-dates` 不能解决这个初始输入峰值。
+通常是命令走了完整输入上传路径：宽表输出、pickle 输入、或显式传了 `--stream-input off`。parquet + `--no-wide-output` 默认会用 `--stream-input auto` 分片读取和上传。
 
 处理：
 
 - 先用较小日期区间或 ticker 子集跑冒烟测试。
 - 按 family 分开运行 `--alpha101` 和 `--alpha191`。
-- 使用更大内存机器或增加 WSL/Docker 可用内存。
+- 确认输入是 parquet，并使用 `--no-wide-output --stream-input auto`。
+- 如果必须用宽表输出或 `--stream-input off`，使用更大内存机器或增加 WSL/Docker 可用内存。
 - 不要为了继续跑而默认加 `--skip-memory-check`；它只会跳过保护，不能降低实际内存使用。
-- 长期方案是改造为输入侧分片读取和上传，并为每个计算窗口带上 `--dolphindb-warmup-trade-dates` 历史上下文。
+- 保留 `--dolphindb-warmup-trade-dates` 历史上下文，避免滚动公式边界污染。
 
 ### DolphinDB Alpha101/191 模块或 wrapper 预检失败
 

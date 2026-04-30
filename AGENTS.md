@@ -46,7 +46,7 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Add or update tests when changing data contracts, output files, model adapters, portfolio logic, config parsing, or TuShare cache behavior.
 - Preserve optional dependency behavior: XGBoost, TuShare, DolphinDB, and Optuna should fail with clear messages when their extras are not installed.
 - Keep DolphinDB out of core dependencies. Alpha101/191 production must remain an external-alpha path with manifest validation.
-- Document OOM risk for full-market `moneytrees-dolphindb-alphas`: current `--no-wide-output` chunks DolphinDB calculation/download/output, but still reads and uploads the full input panel before chunking. On constrained machines, use a smoke subset, a larger-memory host, or implement input-side streaming before recommending full Alpha101/191 generation.
+- Document memory behavior for full-market `moneytrees-dolphindb-alphas`: parquet `--no-wide-output` defaults to `--stream-input auto`, which reads/uploads each target plus warmup window separately. Legacy full-input upload remains available with `--stream-input off` or wide output and can OOM on constrained machines.
 - Treat `configs/preset/legacy_notebook_compat.yaml` as a legacy reproduction preset, not the default research path.
 - Treat `configs/preset/notebook_compat.yaml` as a transitional compatibility preset.
 - Avoid absolute local paths in documentation.
