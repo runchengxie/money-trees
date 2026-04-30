@@ -97,6 +97,7 @@ factor store 检查：
 - 因子族、前缀、列数、行数、分片数量。
 - manifest 指向的 base/factor 文件是否存在。
 - `key_validation` 中的对齐状态。
+- 因子值卫生检查会按 parquet 分片 streaming 扫描，不把完整 factor store 一次性读进 pandas；检查项包括实际行数/列数、分片行数元数据、重复 `date, ticker`、NaN 数量、Inf 数量、最大空值率、整列全空和整列常数。
 
 artifacts 检查：
 

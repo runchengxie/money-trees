@@ -181,6 +181,16 @@ backtest:
   train_months: 60
   gap_months: 3
   test_months: 3
+  segment_a:
+    train_start: "2004-01-01"
+    train_end: "2009-01-01"
+    valid_start: "2009-04-01"
+    valid_end: "2009-07-01"
+  segment_b:
+    train_start: "2009-01-01"
+    train_end: "2014-01-01"
+    valid_start: "2014-04-01"
+    valid_end: "2014-07-01"
   segment1_start: "2004-04-01"
   segment1_windows: 60
   segment2_start: "2009-04-01"
@@ -194,6 +204,7 @@ backtest:
 说明：
 
 - `train_months`、`gap_months`、`test_months` 控制滚动窗口形状。
+- `segment_a` 和 `segment_b` 下的 `train_*`、`valid_*` 控制两套固定模型选择/验证区间；默认值保持早期 2004-2014 配置，2016 以后数据需要显式覆盖。
 - `segment1_windows` 和 `segment2_windows` 控制两个 segment 的滚动窗口数量。
 - holdout 需要同时设置 `start` 和 `end`。
 - `model_segment` 可以设为 `segment_a` 或 `segment_b`。

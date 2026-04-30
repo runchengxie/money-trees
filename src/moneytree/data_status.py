@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import json
+import math
+import numpy as np
 import sqlite3
 from typing import Any
 
@@ -251,6 +253,181 @@ def _factor_store_manifest_path(path: str | Path) -> Path:
     return store_path
 
 
+def _factor_store_family_quality(
+    root: Path,
+    entry: dict[str, Any],
+    *,
+    family: str,
+    max_null_rate: float = 0.95,
+    batch_size: int = 250_000,
+) -> dict[str, Any]:
+    try:
+        import pyarrow.parquet as pq
+    except ModuleNotFoundError as exc:  # pragma: no cover - pyarrow is a core dependency
+        raise RuntimeError("Factor-store quality checks require pyarrow.") from exc
+
+    raw_paths = entry.get("paths")
+    paths = list(raw_paths) if isinstance(raw_paths, list) else []
+    if not paths and entry.get("path"):
+        paths = [str(entry["path"])]
+    prefix = str(entry.get("prefix") or f"{family}_")
+    expected_columns = entry.get("columns")
+    expected_rows = entry.get("rows")
+
+    rows_checked = 0
+    partitions_checked = 0
+    row_mismatch_count = 0
+    duplicate_key_count = 0
+    factor_columns: list[str] = []
+    column_stats: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for raw_path in paths:
+        part_path = root / str(raw_path)
+        if not part_path.exists():
+            continue
+        parquet_file = pq.ParquetFile(part_path)
+        schema_names = [str(name) for name in parquet_file.schema_arrow.names]
+        part_factor_columns = [name for name in schema_names if name.startswith(prefix)]
+        if not part_factor_columns:
+            errors.append(f"{family} factor file has no columns with prefix {prefix}: {raw_path}")
+            continue
+        if not factor_columns:
+            factor_columns = part_factor_columns
+            column_stats = {
+                column: {
+                    "nan_count": 0,
+                    "inf_count": 0,
+                    "finite_count": 0,
+                    "min": math.inf,
+                    "max": -math.inf,
+                }
+                for column in factor_columns
+            }
+        elif part_factor_columns != factor_columns:
+            errors.append(f"{family} factor schema differs in {raw_path}")
+
+        part_rows = int(parquet_file.metadata.num_rows)
+        rows_checked += part_rows
+        partitions_checked += 1
+
+        part_meta = None
+        for candidate in entry.get("parts", []):
+            if isinstance(candidate, dict) and str(candidate.get("path")) == str(raw_path):
+                part_meta = candidate
+                break
+        if part_meta is not None and int(part_meta.get("rows", part_rows)) != part_rows:
+            row_mismatch_count += 1
+
+        scan_columns = [
+            column
+            for column in ("date", "ticker", *part_factor_columns)
+            if column in schema_names
+        ]
+        if "date" not in scan_columns or "ticker" not in scan_columns:
+            errors.append(f"{family} factor file missing date/ticker keys: {raw_path}")
+
+        for batch in parquet_file.iter_batches(columns=scan_columns, batch_size=batch_size):
+            names = batch.schema.names
+            if "date" in names and "ticker" in names:
+                keys = batch.select(["date", "ticker"]).to_pandas(ignore_metadata=True)
+                duplicate_key_count += int(keys.duplicated(["date", "ticker"]).sum())
+
+            for column in part_factor_columns:
+                if column not in names or column not in column_stats:
+                    continue
+                values = batch.column(names.index(column)).to_numpy(zero_copy_only=False)
+                numeric = np.asarray(values, dtype="float64")
+                nan_mask = np.isnan(numeric)
+                inf_mask = np.isinf(numeric)
+                finite_mask = np.isfinite(numeric)
+                stats = column_stats[column]
+                stats["nan_count"] += int(nan_mask.sum())
+                stats["inf_count"] += int(inf_mask.sum())
+                finite_count = int(finite_mask.sum())
+                stats["finite_count"] += finite_count
+                if finite_count:
+                    finite_values = numeric[finite_mask]
+                    stats["min"] = min(float(stats["min"]), float(finite_values.min()))
+                    stats["max"] = max(float(stats["max"]), float(finite_values.max()))
+
+    observed_columns = len(factor_columns)
+    if expected_columns is not None and observed_columns != int(expected_columns):
+        errors.append(
+            f"{family} observed factor columns {observed_columns} != manifest columns {expected_columns}"
+        )
+    if expected_rows is not None and rows_checked != int(expected_rows):
+        errors.append(f"{family} observed rows {rows_checked} != manifest rows {expected_rows}")
+    if row_mismatch_count:
+        errors.append(f"{family} has {row_mismatch_count} partitions with row-count metadata mismatch")
+    if duplicate_key_count:
+        errors.append(f"{family} has duplicate date/ticker keys: {duplicate_key_count}")
+
+    total_nan = int(sum(stats["nan_count"] for stats in column_stats.values()))
+    total_inf = int(sum(stats["inf_count"] for stats in column_stats.values()))
+    all_null_columns = [
+        column
+        for column, stats in column_stats.items()
+        if rows_checked > 0 and int(stats["finite_count"]) == 0 and int(stats["inf_count"]) == 0
+    ]
+    constant_columns = [
+        column
+        for column, stats in column_stats.items()
+        if int(stats["finite_count"]) == rows_checked
+        and math.isfinite(float(stats["min"]))
+        and math.isfinite(float(stats["max"]))
+        and float(stats["min"]) == float(stats["max"])
+    ]
+    high_null_rate_columns = []
+    for column, stats in column_stats.items():
+        null_rate = float(stats["nan_count"]) / float(rows_checked) if rows_checked else 0.0
+        if null_rate > float(max_null_rate):
+            high_null_rate_columns.append(
+                {
+                    "column": column,
+                    "null_rate": null_rate,
+                    "nan_count": int(stats["nan_count"]),
+                }
+            )
+    high_null_rate_columns.sort(key=lambda item: item["null_rate"], reverse=True)
+    max_null_rate_observed = (
+        max((float(stats["nan_count"]) / float(rows_checked) for stats in column_stats.values()), default=0.0)
+        if rows_checked
+        else 0.0
+    )
+
+    if total_inf:
+        errors.append(f"{family} has {total_inf} infinite factor values")
+    if all_null_columns:
+        errors.append(f"{family} has {len(all_null_columns)} all-null factor columns")
+    if high_null_rate_columns:
+        warnings.append(
+            f"{family} has {len(high_null_rate_columns)} factor columns with null_rate > {max_null_rate:.2f}"
+        )
+    if constant_columns:
+        warnings.append(f"{family} has {len(constant_columns)} constant factor columns")
+
+    return {
+        "checked": True,
+        "rows_checked": rows_checked,
+        "partitions_checked": partitions_checked,
+        "columns_checked": observed_columns,
+        "nan_count": total_nan,
+        "inf_count": total_inf,
+        "max_null_rate": max_null_rate_observed,
+        "high_null_rate_columns": high_null_rate_columns[:10],
+        "all_null_column_count": len(all_null_columns),
+        "all_null_columns": all_null_columns[:20],
+        "constant_column_count": len(constant_columns),
+        "constant_columns": constant_columns[:20],
+        "duplicate_key_count": duplicate_key_count,
+        "row_mismatch_count": row_mismatch_count,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
 def _factor_store_layer(path: str | Path) -> dict[str, Any]:
     manifest_path = _factor_store_manifest_path(path)
     if not manifest_path.exists():
@@ -293,6 +470,7 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
     if not isinstance(raw_families, dict):
         errors.append("factor-store manifest factor_families must be an object")
         raw_families = {}
+    warnings: list[str] = []
     for family, entry in raw_families.items():
         if not isinstance(entry, dict):
             errors.append(f"{family} factor entry must be an object")
@@ -304,6 +482,13 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
         missing_paths = [path for path in paths if not (root / str(path)).exists()]
         for missing in missing_paths:
             errors.append(f"{family} factor file does not exist: {root / str(missing)}")
+        quality = (
+            _factor_store_family_quality(root, entry, family=str(family))
+            if not missing_paths
+            else {"checked": False, "errors": [], "warnings": []}
+        )
+        errors.extend(str(error) for error in quality.get("errors", []))
+        warnings.extend(str(warning) for warning in quality.get("warnings", []))
         families[str(family)] = {
             "prefix": entry.get("prefix"),
             "rows": entry.get("rows"),
@@ -313,6 +498,7 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
             "paths": paths,
             "missing_paths": missing_paths,
             "chunk_trade_dates": entry.get("chunk_trade_dates"),
+            "quality": quality,
         }
 
     return {
@@ -330,7 +516,7 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
         "row_group_size": manifest.get("row_group_size"),
         "key_validation": manifest.get("key_validation", {}),
         "errors": errors,
-        "warnings": [],
+        "warnings": warnings,
     }
 
 
@@ -473,6 +659,21 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
                     f"partitions={entry.get('partitions', 0)}"
                 )
             )
+            quality = entry.get("quality", {})
+            if quality.get("checked"):
+                lines.append(
+                    (
+                        f"[data-status:{name}] family={family} quality "
+                        f"rows_checked={quality.get('rows_checked', 0)} "
+                        f"cols_checked={quality.get('columns_checked', 0)} "
+                        f"nan={quality.get('nan_count', 0)} "
+                        f"inf={quality.get('inf_count', 0)} "
+                        f"max_null_rate={float(quality.get('max_null_rate', 0.0)):.4f} "
+                        f"all_null_cols={quality.get('all_null_column_count', 0)} "
+                        f"constant_cols={quality.get('constant_column_count', 0)} "
+                        f"duplicate_keys={quality.get('duplicate_key_count', 0)}"
+                    )
+                )
     elif name == "artifacts":
         lines.append(f"[data-status:{name}] total_size={layer.get('total_size', 0)}")
 

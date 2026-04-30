@@ -517,6 +517,36 @@ def test_backtest_settings_resolves_factor_selection_from_config() -> None:
     assert settings.exclude_factor_prefixes == ("alpha360_",)
 
 
+def test_backtest_settings_resolves_segment_date_overrides() -> None:
+    settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/ridge.yaml",
+            "configs/backtest/smoke.yaml",
+        ],
+        data_path="dummy.parquet",
+        overrides=[
+            "backtest.segment_a.train_start=2016-01-01",
+            "backtest.segment_a.train_end=2017-01-01",
+            "backtest.segment_a.valid_start=2017-04-01",
+            "backtest.segment_a.valid_end=2017-07-01",
+            "backtest.segment_b.train_start=2017-01-01",
+            "backtest.segment_b.train_end=2018-01-01",
+            "backtest.segment_b.valid_start=2018-04-01",
+            "backtest.segment_b.valid_end=2018-07-01",
+        ],
+    )
+
+    assert settings.segment_a_train_start == "2016-01-01"
+    assert settings.segment_a_train_end == "2017-01-01"
+    assert settings.segment_a_valid_start == "2017-04-01"
+    assert settings.segment_a_valid_end == "2017-07-01"
+    assert settings.segment_b_train_start == "2017-01-01"
+    assert settings.segment_b_train_end == "2018-01-01"
+    assert settings.segment_b_valid_start == "2018-04-01"
+    assert settings.segment_b_valid_end == "2018-07-01"
+
+
 def test_moneytree_cli_factor_prefix_selection_excludes_unselected_factors(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     data_path = tmp_path / "factor_selection.parquet"

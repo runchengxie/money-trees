@@ -1015,19 +1015,19 @@ def run_backtest(settings: BacktestSettings) -> dict[str, Any]:
 
     segment_a_spec = SegmentSpec(
         name="segment_a",
-        train_start="2004-01-01",
-        train_end="2009-01-01",
-        valid_start="2009-04-01",
-        valid_end="2009-07-01",
+        train_start=settings.segment_a_train_start,
+        train_end=settings.segment_a_train_end,
+        valid_start=settings.segment_a_valid_start,
+        valid_end=settings.segment_a_valid_end,
         rolling_start=settings.segment1_start,
         rolling_windows=settings.segment1_windows,
     )
     segment_b_spec = SegmentSpec(
         name="segment_b",
-        train_start="2009-01-01",
-        train_end="2014-01-01",
-        valid_start="2014-04-01",
-        valid_end="2014-07-01",
+        train_start=settings.segment_b_train_start,
+        train_end=settings.segment_b_train_end,
+        valid_start=settings.segment_b_valid_start,
+        valid_end=settings.segment_b_valid_end,
         rolling_start=settings.segment2_start,
         rolling_windows=settings.segment2_windows,
     )

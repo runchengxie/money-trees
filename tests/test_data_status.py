@@ -171,6 +171,7 @@ def test_data_status_reports_panel_raw_cache_factor_store_and_artifacts(tmp_path
     assert "api=tushare.daily" in out
     assert "schema_hashes=" in out
     assert "family=alpha158" in out
+    assert "family=alpha158 quality" in out
     assert "total_size=" in out
 
 
@@ -339,3 +340,28 @@ def test_data_status_reports_missing_factor_store_file(tmp_path) -> None:
 
     assert not report.ok
     assert "factor file does not exist" in report.errors[0]
+
+
+def test_data_status_reports_factor_store_value_quality_errors(tmp_path) -> None:
+    store_dir = tmp_path / "store"
+    panel = _panel()
+    panel["alpha158_inf"] = [1.0, 2.0]
+    panel["alpha158_all_null"] = [1.0, 2.0]
+    panel["alpha158_constant"] = [3.0, 3.0]
+    manifest = write_factor_store(panel, store_dir, families=["alpha158"])
+    factor_path = store_dir / manifest["factor_families"]["alpha158"]["path"]
+    factors = pd.read_parquet(factor_path)
+    factors.loc[factors.index[0], "alpha158_inf"] = float("inf")
+    factors["alpha158_all_null"] = pd.NA
+    factors.to_parquet(factor_path, index=True)
+
+    report = build_data_status_report(factor_store=store_dir)
+    quality = report.layers["factor_store"]["factor_families"]["alpha158"]["quality"]
+
+    assert not report.ok
+    assert quality["inf_count"] == 1
+    assert quality["all_null_column_count"] == 1
+    assert quality["constant_column_count"] == 1
+    assert any("infinite factor values" in error for error in report.errors)
+    assert any("all-null factor columns" in error for error in report.errors)
+    assert any("constant factor columns" in warning for warning in report.warnings)

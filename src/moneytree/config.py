@@ -148,6 +148,14 @@ class BacktestSettings:
     train_months: int = 60
     gap_months: int = 3
     test_months: int = 3
+    segment_a_train_start: str = "2004-01-01"
+    segment_a_train_end: str = "2009-01-01"
+    segment_a_valid_start: str = "2009-04-01"
+    segment_a_valid_end: str = "2009-07-01"
+    segment_b_train_start: str = "2009-01-01"
+    segment_b_train_end: str = "2014-01-01"
+    segment_b_valid_start: str = "2014-04-01"
+    segment_b_valid_end: str = "2014-07-01"
     segment1_start: str = "2004-04-01"
     segment1_windows: int = 60
     segment2_start: str = "2009-04-01"
@@ -189,6 +197,8 @@ def load_backtest_settings(
     model = mapping.get("model", {})
     portfolio = mapping.get("portfolio", {})
     backtest = mapping.get("backtest", {})
+    segment_a = backtest.get("segment_a", {})
+    segment_b = backtest.get("segment_b", {})
     holdout = backtest.get("holdout", {})
     output = mapping.get("output", {})
 
@@ -270,6 +280,14 @@ def load_backtest_settings(
         train_months=int(backtest.get("train_months", 60)),
         gap_months=int(backtest.get("gap_months", 3)),
         test_months=int(backtest.get("test_months", 3)),
+        segment_a_train_start=str(segment_a.get("train_start", "2004-01-01")),
+        segment_a_train_end=str(segment_a.get("train_end", "2009-01-01")),
+        segment_a_valid_start=str(segment_a.get("valid_start", "2009-04-01")),
+        segment_a_valid_end=str(segment_a.get("valid_end", "2009-07-01")),
+        segment_b_train_start=str(segment_b.get("train_start", "2009-01-01")),
+        segment_b_train_end=str(segment_b.get("train_end", "2014-01-01")),
+        segment_b_valid_start=str(segment_b.get("valid_start", "2014-04-01")),
+        segment_b_valid_end=str(segment_b.get("valid_end", "2014-07-01")),
         segment1_start=str(backtest.get("segment1_start", "2004-04-01")),
         segment1_windows=int(backtest.get("segment1_windows", 60)),
         segment2_start=str(backtest.get("segment2_start", "2009-04-01")),
