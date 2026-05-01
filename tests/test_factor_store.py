@@ -3,6 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import moneytree._factor_store_validation as factor_store_validation
+import moneytree.factor_store as factor_store
 from moneytree.cli.factor_store import build_parser, run_generation
 from moneytree.data import load_market_data
 from moneytree.factor_store import (
@@ -16,6 +18,11 @@ from moneytree.factor_store import (
     write_local_factor_store_from_parquet,
 )
 from moneytree.factors.external import external_alpha_columns
+
+
+def test_factor_store_facade_preserves_validation_exports() -> None:
+    assert factor_store.FactorStoreValidationError is factor_store_validation.FactorStoreValidationError
+    assert factor_store.validate_factor_store_keys is factor_store_validation.validate_factor_store_keys
 
 
 def _panel() -> pd.DataFrame:

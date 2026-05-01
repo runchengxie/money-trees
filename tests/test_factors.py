@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import moneytree.factors as factors_api
 from moneytree.factors import (
     add_factor_family_features,
     build_alpha158_features,
@@ -122,3 +123,8 @@ def test_ops_rank_and_decay_linear() -> None:
     assert np.isclose(float(ranked.iloc[0]["A"]), 0.5)
     assert np.isclose(float(ranked.iloc[0]["B"]), 1.0)
     assert np.isclose(float(decayed.iloc[1]["A"]), (1.0 + 2.0 * 2.0) / 3.0)
+
+
+def test_ops_remain_internal_submodule_helpers() -> None:
+    assert "cs_rank" not in factors_api.__all__
+    assert "decay_linear" not in factors_api.__all__

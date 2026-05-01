@@ -41,5 +41,7 @@ def test_convert_pickle_to_parquet_script_smoke(tmp_path: Path) -> None:
     out = pd.read_parquet(output_path)
     assert len(out) == len(frame)
     assert list(out.columns) == list(frame.columns)
+    assert "Compatibility notice:" in result.stdout
+    assert "moneytrees-parquet-rewrite" in result.stdout
     assert "Rows:" in result.stdout
     assert "Columns:" in result.stdout

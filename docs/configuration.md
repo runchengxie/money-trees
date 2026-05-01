@@ -285,6 +285,6 @@ TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成命令都支
 - `template_smoke.yaml`: 写入本地 `data_path` 和 `output_dir`，方便本地 smoke 运行。
 - `tuning.yaml`: 显式开启随机森林 Optuna 调参。
 - `legacy_notebook_compat.yaml`: 只用于复现早期 notebook 结果，使用 `pred_rel_return`、关闭特征滞后、切换到 notebook 兼容的随机森林调参和特征选择路径。
-- `notebook_compat.yaml`: 过渡兼容路径，后续文档应优先使用 `legacy_notebook_compat.yaml`。
+- `notebook_compat.yaml`: deprecated 过渡兼容路径，仍可读取；后续文档应优先使用 `legacy_notebook_compat.yaml`。
 
 预设应放在配置列表最后，让它覆盖前面的基础配置。

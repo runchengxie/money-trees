@@ -17,7 +17,7 @@ uv run moneytrees-parquet-rewrite \
   --output data/old.parquet
 ```
 
-旧脚本 `scripts/convert_pickle_to_parquet.py` 作为兼容迁移工具保留。
+旧脚本 `scripts/convert_pickle_to_parquet.py` 作为 deprecated 兼容迁移工具保留，会提示优先使用 `moneytrees-parquet-rewrite`。
 
 ## 索引
 

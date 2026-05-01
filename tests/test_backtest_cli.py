@@ -30,6 +30,19 @@ DEFAULT_CONFIGS = [
 ]
 
 
+def test_runner_facade_preserves_refactored_helper_exports() -> None:
+    import moneytree._runner_holdout as runner_holdout
+    import moneytree._runner_outputs as runner_outputs
+    import moneytree._runner_summary as runner_summary
+    import moneytree.runner as runner
+
+    assert runner.HoldoutResult is runner_holdout.HoldoutResult
+    assert runner._build_holdout_result is runner_holdout._build_holdout_result
+    assert runner.build_run_summary_text is runner_summary.build_run_summary_text
+    assert runner.write_outputs is runner_outputs.write_outputs
+    assert runner.write_holdout_outputs is runner_outputs.write_holdout_outputs
+
+
 def _build_smoke_dataset(freq: str = "QE") -> pd.DataFrame:
     start = "2004-03-31" if freq == "QE" else "2004-01-31"
     dates = pd.date_range(start, "2015-12-31", freq=freq)

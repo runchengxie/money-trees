@@ -12,6 +12,18 @@ from typing import Any
 
 import pandas as pd
 
+from moneytree._factor_store_manifest import (
+    FACTOR_STORE_MANIFEST_VERSION,
+    _part_metadata_by_path,
+    _require_local_entry_compatible,
+    new_factor_store_manifest,
+    read_factor_store_manifest,
+)
+from moneytree._factor_store_validation import (
+    FactorStoreValidationError,
+    _validate_unique_date_ticker,
+    validate_factor_store_keys,
+)
 from moneytree.data import (
     DEFAULT_PARQUET_COMPRESSION,
     FACTOR_FAMILY_PREFIXES,
@@ -31,14 +43,9 @@ from moneytree.factors.external import (
 from moneytree.factors.qlib import build_alpha158_features, build_alpha360_features
 from moneytree.metadata import dataframe_schema_hash
 
-FACTOR_STORE_MANIFEST_VERSION = "1.0"
 LOCAL_FACTOR_FAMILIES = ("alpha158", "alpha360")
 EXTERNAL_FACTOR_FAMILIES = ("alpha101", "alpha191")
 LOCAL_FACTOR_COUNTS = {"alpha158": 158, "alpha360": 360}
-
-
-class FactorStoreValidationError(ValueError):
-    """Raised when factor-store files cannot be aligned on date/ticker."""
 
 
 @dataclass(frozen=True)
@@ -189,113 +196,6 @@ def _local_factor_input_columns_from_names(
         columns.append("amount")
     return list(dict.fromkeys(columns))
 
-
-def _entry_option(
-    entry: dict[str, Any] | None,
-    manifest: dict[str, Any] | None,
-    key: str,
-    *,
-    local_key: str | None = None,
-) -> Any:
-    if entry is not None and key in entry:
-        return entry[key]
-    local_generation = dict((manifest or {}).get("local_generation", {}))
-    lookup_key = local_key or key
-    if lookup_key in local_generation:
-        return local_generation[lookup_key]
-    return (manifest or {}).get(key)
-
-
-def _normalize_comparable_option(value: Any) -> Any:
-    if isinstance(value, Path):
-        return str(value)
-    return value
-
-
-def _require_local_entry_compatible(
-    entry: dict[str, Any],
-    manifest: dict[str, Any],
-    family: str,
-    *,
-    adjusted: bool,
-    factor_dtype: str,
-    chunk_trade_dates: int,
-    compression: str,
-    compression_level: int | None,
-    row_group_size: int | None,
-) -> None:
-    if not entry.get("partitioned") or not entry.get("paths"):
-        raise FactorStoreValidationError(
-            f"Existing {family} factor entry is not partitioned; use --overwrite to regenerate it."
-        )
-
-    expected = {
-        "factor_dtype": factor_dtype,
-        "adjusted": bool(adjusted),
-        "chunk_trade_dates": int(chunk_trade_dates),
-        "compression": compression,
-        "compression_level": compression_level,
-        "row_group_size": row_group_size,
-    }
-    found = {
-        "factor_dtype": _entry_option(entry, manifest, "factor_dtype"),
-        "adjusted": _entry_option(entry, manifest, "adjusted"),
-        "chunk_trade_dates": _entry_option(entry, manifest, "chunk_trade_dates"),
-        "compression": _entry_option(entry, manifest, "compression"),
-        "compression_level": _entry_option(entry, manifest, "compression_level"),
-        "row_group_size": _entry_option(entry, manifest, "row_group_size"),
-    }
-    if found["chunk_trade_dates"] is not None:
-        found["chunk_trade_dates"] = int(found["chunk_trade_dates"])
-    if found["adjusted"] is not None:
-        found["adjusted"] = bool(found["adjusted"])
-
-    mismatches = [
-        key
-        for key, expected_value in expected.items()
-        if _normalize_comparable_option(found.get(key)) != _normalize_comparable_option(expected_value)
-    ]
-    if mismatches:
-        details = ", ".join(
-            f"{key}: existing={found.get(key)!r} requested={expected[key]!r}"
-            for key in mismatches
-        )
-        raise FactorStoreValidationError(
-            f"Existing {family} factors were generated with different options ({details}); "
-            "use --overwrite to regenerate them."
-        )
-
-
-def _part_metadata_by_path(entry: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    parts = (entry or {}).get("parts", [])
-    if not isinstance(parts, list):
-        return {}
-    return {
-        str(part["path"]): part
-        for part in parts
-        if isinstance(part, dict) and part.get("path")
-    }
-
-
-def _validate_unique_date_ticker(frame: pd.DataFrame, *, source_name: str) -> pd.DataFrame:
-    indexed = ensure_date_ticker_index(frame)
-    if indexed.index.has_duplicates:
-        raise FactorStoreValidationError(f"{source_name} has duplicate date/ticker keys.")
-    return indexed
-
-
-def validate_factor_store_keys(
-    base_frame: pd.DataFrame,
-    factor_frames: dict[str, pd.DataFrame],
-) -> None:
-    """Validate unique and aligned date/ticker keys for factor-store frames."""
-    base = _validate_unique_date_ticker(base_frame, source_name="base panel")
-    for family, frame in factor_frames.items():
-        factors = _validate_unique_date_ticker(frame, source_name=f"{family} factors")
-        if not factors.index.equals(base.index):
-            raise FactorStoreValidationError(
-                f"{family} factors are not aligned with the base panel date/ticker keys."
-            )
 
 
 def _date_range_overlaps(
@@ -974,9 +874,7 @@ def write_external_factor_store_partitioned(
 
     manifest_path = root / "manifest.json"
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        manifest = read_factor_store_manifest(manifest_path)
         existing_base_path = _resolve_store_path(root, manifest["base_panel"]["path"])
         if existing_base_path.exists():
             existing_base = _validate_unique_date_ticker(
@@ -988,17 +886,7 @@ def write_external_factor_store_partitioned(
                     "Existing factor store base panel index does not match the input panel."
                 )
     else:
-        manifest = {
-            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-            "kind": "moneytree_factor_store",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "factor_families": {},
-            "key_validation": {
-                "date_ticker_unique": True,
-                "aligned": True,
-            },
-            "metadata": {},
-        }
+        manifest = new_factor_store_manifest()
 
     base_path = root / "base.parquet"
     save_market_data(
@@ -1228,21 +1116,9 @@ def write_external_factor_store_partitioned_from_parquet(
 
     manifest_path = root / "manifest.json"
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        manifest = read_factor_store_manifest(manifest_path)
     else:
-        manifest = {
-            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-            "kind": "moneytree_factor_store",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "factor_families": {},
-            "key_validation": {
-                "date_ticker_unique": True,
-                "aligned": True,
-            },
-            "metadata": {},
-        }
+        manifest = new_factor_store_manifest()
 
     factor_entries = dict(manifest.get("factor_families", {}))
     non_requested_existing = [
@@ -1502,9 +1378,7 @@ def write_local_factor_store(
     manifest_path = root / "manifest.json"
     existing_base: pd.DataFrame | None = None
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        manifest = read_factor_store_manifest(manifest_path)
         existing_base_path = _resolve_store_path(root, manifest["base_panel"]["path"])
         if existing_base_path.exists():
             existing_base = _validate_unique_date_ticker(
@@ -1512,17 +1386,7 @@ def write_local_factor_store(
                 source_name="base panel",
             )
     else:
-        manifest = {
-            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-            "kind": "moneytree_factor_store",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "factor_families": {},
-            "key_validation": {
-                "date_ticker_unique": True,
-                "aligned": True,
-            },
-            "metadata": {},
-        }
+        manifest = new_factor_store_manifest()
 
     factor_entries = dict(manifest.get("factor_families", {}))
     non_requested_existing = [
@@ -1665,21 +1529,9 @@ def write_local_factor_store_from_parquet(
 
     manifest_path = root / "manifest.json"
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        manifest = read_factor_store_manifest(manifest_path)
     else:
-        manifest = {
-            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-            "kind": "moneytree_factor_store",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "factor_families": {},
-            "key_validation": {
-                "date_ticker_unique": True,
-                "aligned": True,
-            },
-            "metadata": {},
-        }
+        manifest = new_factor_store_manifest()
 
     factor_entries = dict(manifest.get("factor_families", {}))
     non_requested_existing = [
@@ -1857,9 +1709,7 @@ def write_external_factor_store(
 
     manifest_path = root / "manifest.json"
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-            raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+        manifest = read_factor_store_manifest(manifest_path)
         existing_base_path = _resolve_store_path(root, manifest["base_panel"]["path"])
         if existing_base_path.exists():
             existing_base = _validate_unique_date_ticker(
@@ -1871,17 +1721,7 @@ def write_external_factor_store(
                     "Existing factor store base panel index does not match the input panel."
                 )
     else:
-        manifest = {
-            "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-            "kind": "moneytree_factor_store",
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "factor_families": {},
-            "key_validation": {
-                "date_ticker_unique": True,
-                "aligned": True,
-            },
-            "metadata": {},
-        }
+        manifest = new_factor_store_manifest()
 
     base_path = root / "base.parquet"
     save_market_data(
@@ -2020,26 +1860,22 @@ def write_factor_store(
             "columns": int(len(frame.columns)),
         }
 
-    manifest = {
-        "manifest_schema_version": FACTOR_STORE_MANIFEST_VERSION,
-        "kind": "moneytree_factor_store",
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "base_panel": {
-            "path": _relative_path(root, base_path),
-            "rows": int(len(base_frame)),
-            "columns": int(len(base_frame.columns)),
-        },
-        "factor_families": factor_entries,
-        "factor_dtype": dtype,
-        "compression": compression,
-        "compression_level": compression_level,
-        "row_group_size": row_group_size,
-        "key_validation": {
-            "date_ticker_unique": True,
-            "aligned": True,
-        },
-        "metadata": metadata or {},
-    }
+    manifest = new_factor_store_manifest()
+    manifest.update(
+        {
+            "base_panel": {
+                "path": _relative_path(root, base_path),
+                "rows": int(len(base_frame)),
+                "columns": int(len(base_frame.columns)),
+            },
+            "factor_families": factor_entries,
+            "factor_dtype": dtype,
+            "compression": compression,
+            "compression_level": compression_level,
+            "row_group_size": row_group_size,
+            "metadata": metadata or {},
+        }
+    )
     manifest_path = root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
@@ -2112,10 +1948,7 @@ def estimate_factor_store_load_memory(
     copy_factor: float = 3.0,
 ) -> FactorStoreLoadEstimate:
     """Estimate peak in-memory size for loading selected factor-store families."""
-    manifest_file = Path(manifest_path)
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-        raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+    manifest = read_factor_store_manifest(manifest_path)
 
     selected = _select_manifest_families(
         manifest,
@@ -2157,9 +1990,7 @@ def load_factor_store(
 ) -> pd.DataFrame:
     """Load a factor-store manifest and join selected factor families to the base panel."""
     manifest_file = Path(manifest_path)
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-        raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+    manifest = read_factor_store_manifest(manifest_file)
 
     root = manifest_file.parent
     base_path = _resolve_store_path(root, str(manifest["base_panel"]["path"]))

@@ -32,6 +32,10 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(output_path, index=False)
 
+    print(
+        "Compatibility notice: scripts/convert_pickle_to_parquet.py is deprecated; "
+        "prefer `moneytrees-parquet-rewrite` for new migrations."
+    )
     print(f"Wrote: {output_path}")
     print(f"Rows: {len(frame)}")
     print(f"Columns: {len(frame.columns)}")

@@ -327,7 +327,15 @@ uv run moneytrees \
 
 ## 12. 迁移旧 pickle 数据
 
-`scripts/convert_pickle_to_parquet.py` 是迁移工具，不属于主研究路径：
+`scripts/convert_pickle_to_parquet.py` 是 deprecated 兼容迁移工具，不属于主研究路径。新迁移优先使用 `moneytrees-parquet-rewrite`：
+
+```bash
+uv run moneytrees-parquet-rewrite \
+  --input data_small.pkl \
+  --output data_small.parquet
+```
+
+旧脚本仍可用于可信 pickle 的简单迁移：
 
 ```bash
 uv run python scripts/convert_pickle_to_parquet.py \

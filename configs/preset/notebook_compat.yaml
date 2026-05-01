@@ -1,3 +1,5 @@
+# Deprecated transitional alias. Prefer configs/preset/legacy_notebook_compat.yaml
+# when reproducing early notebook results.
 market:
   label_source: pred_rel_return
   label_threshold: 0.05
