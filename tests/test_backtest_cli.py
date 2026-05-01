@@ -539,6 +539,28 @@ def test_backtest_settings_resolves_factor_selection_from_config() -> None:
     assert settings.exclude_factor_columns == ("alpha191_030",)
 
 
+def test_backtest_settings_resolves_memory_safe_load_controls() -> None:
+    settings = load_backtest_settings(
+        config_paths=[
+            "configs/market/cn.yaml",
+            "configs/model/rf.yaml",
+            "configs/backtest/default.yaml",
+        ],
+        data_path="dummy.parquet",
+        overrides=[
+            "backtest.load_mode=date_range",
+            "backtest.load_warmup_days=120",
+            "backtest.memory_budget_gb=8",
+            "backtest.memory_budget_fraction=0.5",
+        ],
+    )
+
+    assert settings.load_mode == "date_range"
+    assert settings.load_warmup_days == 120
+    assert np.isclose(settings.memory_budget_gb, 8.0)
+    assert np.isclose(settings.memory_budget_fraction, 0.5)
+
+
 def test_legacy_notebook_preset_enables_missing_feature_warning_policy() -> None:
     settings = load_backtest_settings(
         config_paths=[
@@ -671,6 +693,10 @@ def test_moneytree_cli_loads_factor_store_manifest_with_selected_families(tmp_pa
     assert run_config["factor_selection"]["source"] == "factor_store"
     assert run_config["factor_selection"]["include_factor_prefixes"] == ["alpha158_"]
     assert run_config["factor_selection"]["exclude_factor_columns"] == ["alpha158_drop_me"]
+    assert run_config["input_load"]["mode"] == "auto"
+    assert run_config["input_load"]["date_start"]
+    assert run_config["input_load"]["date_end"]
+    assert run_config["input_load"]["preflight"]["selected_families"] == ["alpha158"]
 
 
 def test_combine_backtest_segments_uses_last_value_on_duplicate_dates() -> None:

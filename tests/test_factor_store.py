@@ -7,6 +7,7 @@ from moneytree.cli.factor_store import build_parser, run_generation
 from moneytree.data import load_market_data
 from moneytree.factor_store import (
     FactorStoreValidationError,
+    estimate_factor_store_load_memory,
     load_factor_store,
     validate_factor_store_keys,
     write_external_factor_store,
@@ -129,6 +130,37 @@ def test_write_local_factor_store_generates_partitioned_family(tmp_path) -> None
     assert "open" in out.columns
     assert "alpha158_kmid" in out.columns
     assert str(out["alpha158_kmid"].dtype) == "float32"
+
+
+def test_load_factor_store_can_prune_partitioned_dates(tmp_path) -> None:
+    write_local_factor_store(
+        _base_panel(days=6),
+        tmp_path / "store",
+        families=["alpha158"],
+        adjusted=False,
+        chunk_trade_dates=2,
+    )
+
+    out = load_factor_store(
+        tmp_path / "store" / "manifest.json",
+        include_factor_families=["alpha158"],
+        date_start="2021-01-06",
+        date_end="2021-01-08",
+    )
+    estimate = estimate_factor_store_load_memory(
+        tmp_path / "store" / "manifest.json",
+        include_factor_families=["alpha158"],
+        date_start="2021-01-06",
+        date_end="2021-01-08",
+    )
+
+    loaded_dates = out.index.get_level_values("date")
+    assert loaded_dates.min() == pd.Timestamp("2021-01-06")
+    assert loaded_dates.max() == pd.Timestamp("2021-01-08")
+    assert len(out) == 6
+    assert "alpha158_kmid" in out.columns
+    assert estimate.rows == 8
+    assert estimate.columns >= 158
 
 
 def test_write_local_factor_store_from_parquet_matches_in_memory_output(tmp_path) -> None:

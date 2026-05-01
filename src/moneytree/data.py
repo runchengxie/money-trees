@@ -397,12 +397,51 @@ def _parquet_schema_columns(path: Path) -> list[str]:
     return [str(name) for name in pq.read_schema(path).names]
 
 
+def _date_range_filters(
+    date_start: object | None,
+    date_end: object | None,
+) -> list[tuple[str, str, pd.Timestamp]] | None:
+    filters: list[tuple[str, str, pd.Timestamp]] = []
+    if date_start:
+        filters.append(("date", ">=", pd.Timestamp(date_start)))
+    if date_end:
+        filters.append(("date", "<=", pd.Timestamp(date_end)))
+    return filters or None
+
+
+def _filter_frame_date_range(
+    frame: pd.DataFrame,
+    *,
+    date_start: object | None,
+    date_end: object | None,
+) -> pd.DataFrame:
+    if not date_start and not date_end:
+        return frame
+    start_ts = pd.Timestamp(date_start) if date_start else None
+    end_ts = pd.Timestamp(date_end) if date_end else None
+    if isinstance(frame.index, pd.MultiIndex) and "date" in frame.index.names:
+        dates = pd.to_datetime(frame.index.get_level_values("date"))
+    elif "date" in frame.columns:
+        dates = pd.to_datetime(frame["date"])
+    else:
+        return frame
+
+    mask = pd.Series(True, index=frame.index)
+    if start_ts is not None:
+        mask &= dates >= start_ts
+    if end_ts is not None:
+        mask &= dates <= end_ts
+    return frame.loc[mask.to_numpy() if hasattr(mask, "to_numpy") else mask]
+
+
 def load_market_data(
     path: str | Path,
     *,
     include_factor_prefixes: Iterable[str] | None = None,
     exclude_factor_prefixes: Iterable[str] | None = None,
     exclude_factor_columns: Iterable[str] | None = None,
+    date_start: object | None = None,
+    date_end: object | None = None,
 ) -> pd.DataFrame:
     """Load market data from a pickle/parquet file."""
     file_path = Path(path)
@@ -415,6 +454,7 @@ def load_market_data(
 
     if suffix in {".pkl", ".pickle"}:
         frame = pd.read_pickle(file_path)
+        frame = _filter_frame_date_range(frame, date_start=date_start, date_end=date_end)
         if has_factor_filter:
             selected, summary = filter_factor_columns(
                 frame.columns,
@@ -429,8 +469,8 @@ def load_market_data(
     if suffix == ".parquet":
         columns = None
         summary: dict[str, object] | None = None
+        schema_columns = _parquet_schema_columns(file_path) if has_factor_filter or date_start or date_end else []
         if has_factor_filter:
-            schema_columns = _parquet_schema_columns(file_path)
             columns, summary = filter_factor_columns(
                 schema_columns,
                 include_factor_prefixes=include_factor_prefixes,
@@ -438,7 +478,14 @@ def load_market_data(
                 exclude_factor_columns=exclude_factor_columns,
             )
             summary["column_pruned"] = True
-        frame = pd.read_parquet(file_path, columns=columns)
+        filters = (
+            _date_range_filters(date_start, date_end)
+            if (date_start or date_end) and "date" in schema_columns
+            else None
+        )
+        frame = pd.read_parquet(file_path, columns=columns, filters=filters)
+        if filters is None and (date_start or date_end):
+            frame = _filter_frame_date_range(frame, date_start=date_start, date_end=date_end)
         if summary is not None:
             frame.attrs["factor_selection"] = summary
         return frame

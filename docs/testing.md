@@ -77,6 +77,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |
 | `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重、换手惩罚和 fallback 诊断。 |
 | `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |
+| `tests/test_resources.py` | 内存预检、parquet 加载估算和字节格式化。 |
 | `tests/test_smoke.py` | 冒烟测试配置栈端到端运行。 |
 | `tests/test_tushare_data_source.py` | TuShare 标准化、token、原始缓存、`manifest.sqlite` 元数据、旧元数据清单迁移、近期刷新和最新名称 ST 标记。 |
 

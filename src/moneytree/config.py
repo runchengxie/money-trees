@@ -148,6 +148,10 @@ class BacktestSettings:
     exclude_factor_columns: tuple[str, ...] = ()
     missing_feature_policy: str = "error"
     feature_lag_periods: int = 1
+    load_mode: str = "auto"
+    load_warmup_days: int = 370
+    memory_budget_gb: float = 0.0
+    memory_budget_fraction: float = 0.85
     train_months: int = 60
     gap_months: int = 3
     test_months: int = 3
@@ -283,6 +287,10 @@ def load_backtest_settings(
         exclude_factor_columns=_as_str_tuple(features.get("exclude_factor_columns")),
         missing_feature_policy=str(features.get("missing_feature_policy", "error")),
         feature_lag_periods=int(market.get("feature_lag_periods", 1)),
+        load_mode=str(backtest.get("load_mode", "auto")),
+        load_warmup_days=int(backtest.get("load_warmup_days", 370)),
+        memory_budget_gb=float(backtest.get("memory_budget_gb", 0.0)),
+        memory_budget_fraction=float(backtest.get("memory_budget_fraction", 0.85)),
         train_months=int(backtest.get("train_months", 60)),
         gap_months=int(backtest.get("gap_months", 3)),
         test_months=int(backtest.get("test_months", 3)),

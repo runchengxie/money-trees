@@ -185,10 +185,12 @@ uv run moneytrees \
   --config configs/model/xgb_regressor.yaml \
   --config configs/backtest/default.yaml \
   --data data/factor_store/cn_daily/manifest.json \
-  --output-dir artifacts/xgb-alpha-all
+  --output-dir artifacts/xgb-alpha-all \
+  --set backtest.memory_budget_gb=32
 ```
 
 `xgb_regressor` 训练目标是 `rel_return`，输出连续 score 后进入组合构建。
+默认 `backtest.load_mode: auto` 会按回测日期裁剪读取，并在读取因子仓库前做内存预检。如果完整 810 因子估算超预算，先按因子族分批跑，不要切到 `backtest.load_mode=full` 硬跑。
 
 调试模型时可以只读取某个因子族，避免把完整 810 因子都读入内存：
 

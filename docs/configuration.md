@@ -83,6 +83,37 @@ uv run moneytrees \
   --set 'features.include_factor_families=["alpha158"]'
 ```
 
+## 回测加载与内存配置
+
+回测加载控制字段位于 `backtest`。默认配置会按回测窗口日期裁剪输入，并在读取因子仓库（factor store）前做内存预检：
+
+```yaml
+backtest:
+  load_mode: auto
+  load_warmup_days: 370
+  memory_budget_gb: 0.0
+  memory_budget_fraction: 0.85
+```
+
+说明：
+
+- `load_mode` 可取 `auto`、`date_range` 或 `full`。`auto` 当前等同于按回测窗口日期读取；`full` 保留旧的完整读取路径。
+- `load_warmup_days` 会把最早训练日期向前扩展一段时间，用于特征滞后和 ticker 级前向填充。
+- `memory_budget_gb: 0.0` 表示使用系统可用内存估算；设为正数时按显式预算做预检。
+- `memory_budget_fraction` 控制可用内存里允许用于本次加载的比例。
+- 内存预检不会自动删因子、抽样股票或缩短训练期；如果估算超预算，会失败并提示用 `features.include_factor_families`、`features.include_factor_prefixes` 或更短日期范围降载。
+- `run_config.json` 会记录 `input_load`，包括实际加载日期、预检估算和选中的因子族。
+
+完整 810 因子树模型建议先显式限制因子族或设置内存预算：
+
+```bash
+uv run moneytrees \
+  --data data/factor_store/cn_daily/manifest.json \
+  --output-dir artifacts/xgb-alpha158 \
+  --set 'features.include_factor_families=["alpha158"]' \
+  --set backtest.memory_budget_gb=16
+```
+
 ## 市场配置
 
 文件：`configs/market/cn.yaml`

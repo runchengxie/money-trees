@@ -176,7 +176,7 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cach
 - 新写入的 Money Trees parquet 输出默认使用 `zstd` 压缩，默认压缩级别为 3；需要兼容旧行为时显式传 `--compression snappy`。
 - 推荐先用 `moneytrees-tushare` 生成基础面板，再用 `moneytrees-factor-store` 按需生成 `alpha158` 或 `alpha360` 分族因子文件。
 - 需要精度敏感复核时，生成命令显式传 `--factor-dtype float64`。
-- 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。
+- 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。默认 `backtest.load_mode: auto` 会按回测窗口日期裁剪读取，并在读取因子仓库前做内存预检；估算超预算时先降因子族或缩短日期范围，不要直接改成 `full` 硬跑。
 - `output.export_parquet` 会额外保存预处理后的面板，只建议用于调试和复现实验。
 
 建议把数据分成四层理解：

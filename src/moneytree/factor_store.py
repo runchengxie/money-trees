@@ -48,6 +48,14 @@ class _FamilyWriteStats:
     skipped_parts: int
 
 
+@dataclass(frozen=True)
+class FactorStoreLoadEstimate:
+    rows: int
+    columns: int
+    selected_families: tuple[str, ...]
+    required_bytes: int
+
+
 def _normalize_families(families: Iterable[str] | None) -> tuple[str, ...]:
     if families is None:
         return ()
@@ -290,16 +298,79 @@ def validate_factor_store_keys(
             )
 
 
-def _read_factor_entry(root: Path, entry: dict[str, Any]) -> pd.DataFrame:
+def _date_range_overlaps(
+    *,
+    start_date: object | None,
+    end_date: object | None,
+    date_start: object | None,
+    date_end: object | None,
+) -> bool:
+    if start_date is None or end_date is None:
+        return True
+    part_start = pd.Timestamp(start_date)
+    part_end = pd.Timestamp(end_date)
+    requested_start = pd.Timestamp(date_start) if date_start else None
+    requested_end = pd.Timestamp(date_end) if date_end else None
+    if requested_start is not None and part_end < requested_start:
+        return False
+    if requested_end is not None and part_start > requested_end:
+        return False
+    return True
+
+
+def _entry_paths_for_date_range(
+    entry: dict[str, Any],
+    *,
+    date_start: object | None,
+    date_end: object | None,
+) -> list[str]:
+    paths = [str(path) for path in entry.get("paths", [])]
+    if not paths or (not date_start and not date_end):
+        return paths
+    parts = _part_metadata_by_path(entry)
+    if not parts:
+        return paths
+    return [
+        path
+        for path in paths
+        if _date_range_overlaps(
+            start_date=parts.get(path, {}).get("start_date"),
+            end_date=parts.get(path, {}).get("end_date"),
+            date_start=date_start,
+            date_end=date_end,
+        )
+    ]
+
+
+def _read_factor_entry(
+    root: Path,
+    entry: dict[str, Any],
+    *,
+    date_start: object | None = None,
+    date_end: object | None = None,
+) -> pd.DataFrame:
     if "paths" in entry:
         frames = [
-            load_market_data(_resolve_store_path(root, path))
-            for path in entry.get("paths", [])
+            load_market_data(
+                _resolve_store_path(root, path),
+                date_start=date_start,
+                date_end=date_end,
+            )
+            for path in _entry_paths_for_date_range(
+                entry,
+                date_start=date_start,
+                date_end=date_end,
+            )
         ]
         if not frames:
-            return pd.DataFrame()
+            empty_index = pd.MultiIndex.from_arrays([[], []], names=["date", "ticker"])
+            return pd.DataFrame(index=empty_index)
         return ensure_date_ticker_index(pd.concat(frames, axis=0)).sort_index()
-    return load_market_data(_resolve_store_path(root, str(entry["path"])))
+    return load_market_data(
+        _resolve_store_path(root, str(entry["path"])),
+        date_start=date_start,
+        date_end=date_end,
+    )
 
 
 def _date_chunks(dates: pd.Index, chunk_trade_dates: int) -> list[pd.Index]:
@@ -1985,22 +2056,12 @@ def _families_from_prefixes(prefixes: Iterable[str] | None) -> tuple[str, ...]:
     return tuple(requested)
 
 
-def load_factor_store(
-    manifest_path: str | Path,
+def _select_manifest_families(
+    manifest: dict[str, Any],
     *,
     include_factor_families: Iterable[str] | None = None,
     include_factor_prefixes: Iterable[str] | None = None,
-) -> pd.DataFrame:
-    """Load a factor-store manifest and join selected factor families to the base panel."""
-    manifest_file = Path(manifest_path)
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
-        raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
-
-    root = manifest_file.parent
-    base_path = _resolve_store_path(root, str(manifest["base_panel"]["path"]))
-    base_frame = _validate_unique_date_ticker(load_market_data(base_path), source_name="base panel")
-
+) -> tuple[str, ...]:
     selected = _normalize_families(include_factor_families)
     prefix_selected = _families_from_prefixes(include_factor_prefixes)
     if include_factor_prefixes and not prefix_selected:
@@ -2020,13 +2081,104 @@ def load_factor_store(
         raise FactorStoreValidationError(
             f"Requested factor families are missing from factor-store manifest: {', '.join(missing)}."
         )
+    return selected
+
+
+def _entry_rows_for_date_range(
+    entry: dict[str, Any],
+    *,
+    date_start: object | None,
+    date_end: object | None,
+) -> int:
+    if not date_start and not date_end:
+        return int(entry.get("rows", 0))
+    parts = _part_metadata_by_path(entry)
+    if not parts:
+        return int(entry.get("rows", 0))
+    rows = 0
+    for path in _entry_paths_for_date_range(entry, date_start=date_start, date_end=date_end):
+        rows += int(parts.get(path, {}).get("rows", 0))
+    return rows
+
+
+def estimate_factor_store_load_memory(
+    manifest_path: str | Path,
+    *,
+    include_factor_families: Iterable[str] | None = None,
+    include_factor_prefixes: Iterable[str] | None = None,
+    date_start: object | None = None,
+    date_end: object | None = None,
+    per_cell_bytes: int = 16,
+    copy_factor: float = 3.0,
+) -> FactorStoreLoadEstimate:
+    """Estimate peak in-memory size for loading selected factor-store families."""
+    manifest_file = Path(manifest_path)
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
+        raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+
+    selected = _select_manifest_families(
+        manifest,
+        include_factor_families=include_factor_families,
+        include_factor_prefixes=include_factor_prefixes,
+    )
+    base_panel = dict(manifest.get("base_panel", {}))
+    row_candidates = [int(base_panel.get("rows", 0))]
+    if date_start or date_end:
+        row_candidates = []
+    for family in selected:
+        row_candidates.append(
+            _entry_rows_for_date_range(
+                manifest["factor_families"][family],
+                date_start=date_start,
+                date_end=date_end,
+            )
+        )
+    rows = max(row_candidates) if row_candidates else int(base_panel.get("rows", 0))
+    columns = int(base_panel.get("columns", 0)) + sum(
+        int(manifest["factor_families"][family].get("columns", 0)) for family in selected
+    )
+    required = int(max(0, rows) * max(1, columns) * int(per_cell_bytes) * float(copy_factor))
+    return FactorStoreLoadEstimate(
+        rows=int(rows),
+        columns=int(columns),
+        selected_families=tuple(selected),
+        required_bytes=required,
+    )
+
+
+def load_factor_store(
+    manifest_path: str | Path,
+    *,
+    include_factor_families: Iterable[str] | None = None,
+    include_factor_prefixes: Iterable[str] | None = None,
+    date_start: object | None = None,
+    date_end: object | None = None,
+) -> pd.DataFrame:
+    """Load a factor-store manifest and join selected factor families to the base panel."""
+    manifest_file = Path(manifest_path)
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("manifest_schema_version") != FACTOR_STORE_MANIFEST_VERSION:
+        raise FactorStoreValidationError("Unsupported factor-store manifest schema version.")
+
+    root = manifest_file.parent
+    base_path = _resolve_store_path(root, str(manifest["base_panel"]["path"]))
+    base_frame = _validate_unique_date_ticker(
+        load_market_data(base_path, date_start=date_start, date_end=date_end),
+        source_name="base panel",
+    )
+    selected = _select_manifest_families(
+        manifest,
+        include_factor_families=include_factor_families,
+        include_factor_prefixes=include_factor_prefixes,
+    )
 
     out = base_frame.copy()
     factor_frames: dict[str, pd.DataFrame] = {}
     for family in selected:
         entry = manifest["factor_families"][family]
         frame = _validate_unique_date_ticker(
-            _read_factor_entry(root, entry),
+            _read_factor_entry(root, entry, date_start=date_start, date_end=date_end),
             source_name=f"{family} factors",
         )
         factor_frames[family] = frame
