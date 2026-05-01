@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -261,8 +263,10 @@ def _factor_store_family_quality(
     entry: dict[str, Any],
     *,
     family: str,
+    allowed_factor_columns: set[str] | None = None,
     max_null_rate: float = 0.95,
     batch_size: int = 250_000,
+    show_progress: bool = False,
 ) -> dict[str, Any]:
     try:
         import pyarrow.parquet as pq
@@ -276,6 +280,7 @@ def _factor_store_family_quality(
     prefix = str(entry.get("prefix") or f"{family}_")
     expected_columns = entry.get("columns")
     expected_rows = entry.get("rows")
+    allowed_columns = set(allowed_factor_columns or set())
 
     rows_checked = 0
     partitions_checked = 0
@@ -285,8 +290,17 @@ def _factor_store_family_quality(
     column_stats: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
     warnings: list[str] = []
+    started_at = time.perf_counter()
 
-    for raw_path in paths:
+    if show_progress:
+        print(
+            f"[data-status:factor_store] family={family} quality_start partitions={len(paths)}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    for part_index, raw_path in enumerate(paths, start=1):
+        part_started_at = time.perf_counter()
         part_path = root / str(raw_path)
         if not part_path.exists():
             continue
@@ -354,6 +368,23 @@ def _factor_store_family_quality(
                     finite_values = numeric[finite_mask]
                     stats["min"] = min(float(stats["min"]), float(finite_values.min()))
                     stats["max"] = max(float(stats["max"]), float(finite_values.max()))
+        if show_progress:
+            elapsed = time.perf_counter() - started_at
+            remaining = (
+                (elapsed / part_index) * (len(paths) - part_index)
+                if part_index
+                else 0.0
+            )
+            print(
+                (
+                    f"[data-status:factor_store] family={family} "
+                    f"part={part_index}/{len(paths)} rows_checked={rows_checked} "
+                    f"part_elapsed={part_started_at and time.perf_counter() - part_started_at:.1f}s "
+                    f"elapsed={elapsed:.1f}s eta={remaining:.1f}s"
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
 
     observed_columns = len(factor_columns)
     if expected_columns is not None and observed_columns != int(expected_columns):
@@ -369,12 +400,12 @@ def _factor_store_family_quality(
 
     total_nan = int(sum(stats["nan_count"] for stats in column_stats.values()))
     total_inf = int(sum(stats["inf_count"] for stats in column_stats.values()))
-    all_null_columns = [
+    all_null_columns_total = [
         column
         for column, stats in column_stats.items()
         if rows_checked > 0 and int(stats["finite_count"]) == 0 and int(stats["inf_count"]) == 0
     ]
-    constant_columns = [
+    constant_columns_total = [
         column
         for column, stats in column_stats.items()
         if int(stats["finite_count"]) == rows_checked
@@ -382,18 +413,40 @@ def _factor_store_family_quality(
         and math.isfinite(float(stats["max"]))
         and float(stats["min"]) == float(stats["max"])
     ]
-    high_null_rate_columns = []
+    high_null_rate_columns_total = []
     for column, stats in column_stats.items():
         null_rate = float(stats["nan_count"]) / float(rows_checked) if rows_checked else 0.0
         if null_rate > float(max_null_rate):
-            high_null_rate_columns.append(
+            high_null_rate_columns_total.append(
                 {
                     "column": column,
                     "null_rate": null_rate,
                     "nan_count": int(stats["nan_count"]),
                 }
             )
-    high_null_rate_columns.sort(key=lambda item: item["null_rate"], reverse=True)
+    high_null_rate_columns_total.sort(key=lambda item: item["null_rate"], reverse=True)
+    all_null_columns = [
+        column for column in all_null_columns_total if column not in allowed_columns
+    ]
+    constant_columns = [
+        column for column in constant_columns_total if column not in allowed_columns
+    ]
+    high_null_rate_columns = [
+        item
+        for item in high_null_rate_columns_total
+        if str(item.get("column")) not in allowed_columns
+    ]
+    allowed_all_null_columns = [
+        column for column in all_null_columns_total if column in allowed_columns
+    ]
+    allowed_constant_columns = [
+        column for column in constant_columns_total if column in allowed_columns
+    ]
+    allowed_high_null_rate_columns = [
+        item
+        for item in high_null_rate_columns_total
+        if str(item.get("column")) in allowed_columns
+    ]
     max_null_rate_observed = (
         max((float(stats["nan_count"]) / float(rows_checked) for stats in column_stats.values()), default=0.0)
         if rows_checked
@@ -420,10 +473,13 @@ def _factor_store_family_quality(
         "inf_count": total_inf,
         "max_null_rate": max_null_rate_observed,
         "high_null_rate_columns": high_null_rate_columns[:10],
+        "allowed_high_null_rate_columns": allowed_high_null_rate_columns[:10],
         "all_null_column_count": len(all_null_columns),
         "all_null_columns": all_null_columns[:20],
+        "allowed_all_null_columns": allowed_all_null_columns[:20],
         "constant_column_count": len(constant_columns),
         "constant_columns": constant_columns[:20],
+        "allowed_constant_columns": allowed_constant_columns[:20],
         "duplicate_key_count": duplicate_key_count,
         "row_mismatch_count": row_mismatch_count,
         "errors": errors,
@@ -431,7 +487,14 @@ def _factor_store_family_quality(
     }
 
 
-def _factor_store_layer(path: str | Path) -> dict[str, Any]:
+def _factor_store_layer(
+    path: str | Path,
+    *,
+    factor_families: set[str] | None = None,
+    check_factor_quality: bool = True,
+    allowed_factor_columns: set[str] | None = None,
+    show_progress: bool = False,
+) -> dict[str, Any]:
     manifest_path = _factor_store_manifest_path(path)
     if not manifest_path.exists():
         return {
@@ -459,6 +522,7 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
 
     root = manifest_path.parent
     errors: list[str] = []
+    warnings: list[str] = []
     base_panel = dict(manifest.get("base_panel", {}))
     base_path_text = base_panel.get("path")
     if not base_path_text:
@@ -467,14 +531,29 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
         base_path = root / str(base_path_text)
         if not base_path.exists():
             errors.append(f"base panel file does not exist: {base_path}")
+        else:
+            try:
+                import pyarrow.parquet as pq
+
+                parquet_file = pq.ParquetFile(base_path)
+                base_panel["file_rows"] = int(parquet_file.metadata.num_rows)
+                base_panel["file_columns"] = int(len(parquet_file.schema_arrow.names))
+            except Exception as exc:
+                warnings.append(f"could not inspect base panel parquet metadata: {exc}")
 
     families: dict[str, dict[str, Any]] = {}
     raw_families = manifest.get("factor_families", {})
     if not isinstance(raw_families, dict):
         errors.append("factor-store manifest factor_families must be an object")
         raw_families = {}
-    warnings: list[str] = []
+    requested_families = set(factor_families or set())
+    if requested_families:
+        missing_requested = sorted(requested_families.difference(raw_families))
+        if missing_requested:
+            errors.append(f"requested factor families not found: {missing_requested}")
     for family, entry in raw_families.items():
+        if requested_families and str(family) not in requested_families:
+            continue
         if not isinstance(entry, dict):
             errors.append(f"{family} factor entry must be an object")
             continue
@@ -485,11 +564,16 @@ def _factor_store_layer(path: str | Path) -> dict[str, Any]:
         missing_paths = [path for path in paths if not (root / str(path)).exists()]
         for missing in missing_paths:
             errors.append(f"{family} factor file does not exist: {root / str(missing)}")
-        quality = (
-            _factor_store_family_quality(root, entry, family=str(family))
-            if not missing_paths
-            else {"checked": False, "errors": [], "warnings": []}
-        )
+        if missing_paths or not check_factor_quality:
+            quality = {"checked": False, "errors": [], "warnings": []}
+        else:
+            quality = _factor_store_family_quality(
+                root,
+                entry,
+                family=str(family),
+                allowed_factor_columns=allowed_factor_columns,
+                show_progress=show_progress,
+            )
         errors.extend(str(error) for error in quality.get("errors", []))
         warnings.extend(str(warning) for warning in quality.get("warnings", []))
         families[str(family)] = {
@@ -569,6 +653,10 @@ def build_data_status_report(
     raw_cache: str | Path | None = None,
     factor_store: str | Path | None = None,
     artifacts: str | Path | None = None,
+    factor_families: set[str] | None = None,
+    check_factor_quality: bool = True,
+    allowed_factor_columns: set[str] | None = None,
+    show_progress: bool = False,
 ) -> DataStatusReport:
     layers: dict[str, dict[str, Any]] = {}
     if panel is not None:
@@ -576,7 +664,13 @@ def build_data_status_report(
     if raw_cache is not None:
         layers["raw_cache"] = _raw_cache_layer(raw_cache)
     if factor_store is not None:
-        layers["factor_store"] = _factor_store_layer(factor_store)
+        layers["factor_store"] = _factor_store_layer(
+            factor_store,
+            factor_families=factor_families,
+            check_factor_quality=check_factor_quality,
+            allowed_factor_columns=allowed_factor_columns,
+            show_progress=show_progress,
+        )
     if artifacts is not None:
         layers["artifacts"] = _artifact_layer(artifacts)
     if not layers:
@@ -650,7 +744,8 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
         lines.append(
             
                 f"[data-status:{name}] base_rows={base.get('rows', 'NA')} "
-                f"base_cols={base.get('columns', 'NA')} "
+                f"base_data_cols={base.get('columns', 'NA')} "
+                f"base_file_cols={base.get('file_columns', 'NA')} "
                 f"families={','.join(layer.get('factor_families', {}))}"
             
         )
@@ -677,6 +772,46 @@ def _layer_lines(name: str, layer: dict[str, Any]) -> list[str]:
                         f"duplicate_keys={quality.get('duplicate_key_count', 0)}"
                     
                 )
+                if quality.get("all_null_columns"):
+                    lines.append(
+                        f"[data-status:{name}] family={family} all_null_columns="
+                        f"{','.join(map(str, quality.get('all_null_columns', [])))}"
+                    )
+                if quality.get("constant_columns"):
+                    lines.append(
+                        f"[data-status:{name}] family={family} constant_columns="
+                        f"{','.join(map(str, quality.get('constant_columns', [])))}"
+                    )
+                high_null = quality.get("high_null_rate_columns", [])
+                if high_null:
+                    rendered = [
+                        f"{item.get('column')}:{float(item.get('null_rate', 0.0)):.4f}"
+                        for item in high_null
+                    ]
+                    lines.append(
+                        f"[data-status:{name}] family={family} high_null_columns="
+                        f"{','.join(rendered)}"
+                    )
+                if quality.get("allowed_all_null_columns"):
+                    lines.append(
+                        f"[data-status:{name}] family={family} allowed_all_null_columns="
+                        f"{','.join(map(str, quality.get('allowed_all_null_columns', [])))}"
+                    )
+                if quality.get("allowed_constant_columns"):
+                    lines.append(
+                        f"[data-status:{name}] family={family} allowed_constant_columns="
+                        f"{','.join(map(str, quality.get('allowed_constant_columns', [])))}"
+                    )
+                allowed_high_null = quality.get("allowed_high_null_rate_columns", [])
+                if allowed_high_null:
+                    rendered = [
+                        f"{item.get('column')}:{float(item.get('null_rate', 0.0)):.4f}"
+                        for item in allowed_high_null
+                    ]
+                    lines.append(
+                        f"[data-status:{name}] family={family} allowed_high_null_columns="
+                        f"{','.join(rendered)}"
+                    )
     elif name == "artifacts":
         lines.append(f"[data-status:{name}] total_size={layer.get('total_size', 0)}")
 

@@ -44,6 +44,29 @@ uv run moneytrees-data-status \
   --format text
 ```
 
+全量 factor store 质量检查会逐分片扫描所有因子值。需要快速确认元数据时先跳过值扫描；需要定位单个因子族时只扫对应 family：
+
+```bash
+uv run moneytrees-data-status \
+  --factor-store data/factor_store/cn/manifest.json \
+  --skip-factor-quality
+
+uv run moneytrees-data-status \
+  --factor-store data/factor_store/cn/manifest.json \
+  --factor-family alpha191 \
+  --progress
+```
+
+对已知不可用或定义上恒定的列，可用 `--allow-factor-column` 标记为允许，从而把状态检查聚焦到新的异常。例如 Alpha191 的 `alpha191_030` 依赖外部 `MKT/SMB/HML` 输入；Alpha360 的 lag0 相对变化列按定义为 0：
+
+```bash
+uv run moneytrees-data-status \
+  --factor-store data/factor_store/cn/manifest.json \
+  --allow-factor-column alpha191_030 \
+  --allow-factor-column alpha360_close_lag00,alpha360_volume_lag00 \
+  --mode error
+```
+
 检查回测产物：
 
 ```bash
@@ -98,6 +121,7 @@ factor store 检查：
 - manifest 指向的 base/factor 文件是否存在。
 - `key_validation` 中的对齐状态。
 - 因子值卫生检查会按 parquet 分片 streaming 扫描，不把完整 factor store 一次性读进 pandas；检查项包括实际行数/列数、分片行数元数据、重复 `date, ticker`、NaN 数量、Inf 数量、最大空值率、整列全空和整列常数。
+- 文本输出会列出整列全空、整列常数和高空值率列名；`--factor-family` 可只检查指定因子族，`--skip-factor-quality` 可只检查 manifest 和文件存在性，`--progress` 可把分片扫描进度输出到 stderr。
 
 artifacts 检查：
 

@@ -10,6 +10,16 @@ from moneytree.data_quality import DATA_QUALITY_MODES, validate_data_quality_mod
 from moneytree.data_status import build_data_status_report
 
 
+def _csv_values(values: Sequence[str] | None) -> set[str]:
+    found: set[str] = set()
+    for value in values or ():
+        for item in str(value).split(","):
+            normalized = item.strip()
+            if normalized:
+                found.add(normalized)
+    return found
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Inspect Money Trees data layers without modifying files."
@@ -18,6 +28,37 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--raw-cache", help="TuShare raw cache directory or manifest.sqlite path.")
     parser.add_argument("--factor-store", help="Factor-store directory or manifest.json path.")
     parser.add_argument("--artifacts", help="Backtest artifact directory.")
+    parser.add_argument(
+        "--factor-family",
+        "--factor-families",
+        action="append",
+        default=[],
+        metavar="FAMILY[,FAMILY...]",
+        help=(
+            "Only inspect selected factor-store families. Can be repeated or comma-separated, "
+            "for example --factor-family alpha191,alpha360."
+        ),
+    )
+    parser.add_argument(
+        "--skip-factor-quality",
+        action="store_true",
+        help="Only validate factor-store manifest paths and row metadata; skip value scans.",
+    )
+    parser.add_argument(
+        "--allow-factor-column",
+        action="append",
+        default=[],
+        metavar="COLUMN[,COLUMN...]",
+        help=(
+            "Treat known all-null/high-null/constant factor columns as allowed. Can be "
+            "repeated or comma-separated."
+        ),
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print factor-store quality scan progress to stderr.",
+    )
     parser.add_argument(
         "--format",
         choices=["text", "json"],
@@ -48,6 +89,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             raw_cache=Path(args.raw_cache) if args.raw_cache else None,
             factor_store=Path(args.factor_store) if args.factor_store else None,
             artifacts=Path(args.artifacts) if args.artifacts else None,
+            factor_families=_csv_values(args.factor_family),
+            check_factor_quality=not args.skip_factor_quality,
+            allowed_factor_columns=_csv_values(args.allow_factor_column),
+            show_progress=bool(args.progress),
         )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)

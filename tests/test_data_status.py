@@ -365,3 +365,47 @@ def test_data_status_reports_factor_store_value_quality_errors(tmp_path) -> None
     assert any("infinite factor values" in error for error in report.errors)
     assert any("all-null factor columns" in error for error in report.errors)
     assert any("constant factor columns" in warning for warning in report.warnings)
+    lines = "\n".join(report.to_lines())
+    assert "all_null_columns=alpha158_all_null" in lines
+    assert "constant_columns=alpha158_constant" in lines
+
+
+def test_data_status_allows_known_factor_quality_columns(tmp_path) -> None:
+    store_dir = tmp_path / "store"
+    panel = _panel()
+    panel["alpha158_all_null"] = [1.0, 2.0]
+    manifest = write_factor_store(panel, store_dir, families=["alpha158"])
+    factor_path = store_dir / manifest["factor_families"]["alpha158"]["path"]
+    factors = pd.read_parquet(factor_path)
+    factors["alpha158_all_null"] = pd.NA
+    factors.to_parquet(factor_path, index=True)
+
+    report = build_data_status_report(factor_store=store_dir)
+    allowed = build_data_status_report(
+        factor_store=store_dir,
+        allowed_factor_columns={"alpha158_all_null"},
+    )
+
+    assert not report.ok
+    assert allowed.ok
+    quality = allowed.layers["factor_store"]["factor_families"]["alpha158"]["quality"]
+    assert quality["all_null_column_count"] == 0
+    assert quality["allowed_all_null_columns"] == ["alpha158_all_null"]
+    assert "allowed_all_null_columns=alpha158_all_null" in "\n".join(allowed.to_lines())
+
+
+def test_data_status_filters_factor_families_and_can_skip_quality(tmp_path) -> None:
+    store_dir = tmp_path / "store"
+    panel = _panel()
+    panel["alpha360_close_lag00"] = [0.0, 0.0]
+    write_factor_store(panel, store_dir, families=["alpha158", "alpha360"])
+
+    report = build_data_status_report(
+        factor_store=store_dir,
+        factor_families={"alpha360"},
+        check_factor_quality=False,
+    )
+
+    families = report.layers["factor_store"]["factor_families"]
+    assert list(families) == ["alpha360"]
+    assert families["alpha360"]["quality"]["checked"] is False
