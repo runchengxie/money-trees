@@ -1,6 +1,6 @@
 # money-trees
 
-Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列规范展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征由 DolphinDB 等外部生产器离线生成后写入因子仓库（factor store）或兼容并入标准 `date, ticker` 面板。
+Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具。项目围绕 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子的标准列规范展开：Alpha158/360 共 518 个特征在本地生成，Alpha101/191 共 292 个特征通过 DolphinDB 外部生成路径离线生成后写入因子仓库（factor store）或兼容并入标准 `date, ticker` 面板。仓库包含 `docker/dolphindb/modules/` 下的 DolphinDB 模块和包装模块；Python 核心包不在回测过程中实时计算 Alpha101/191。
 
 核心链路包括 TuShare 日频数据拉取、原始缓存、因子仓库、特征滞后、模型适配器、组合构建、滚动回测、留出验证和可复现产物输出。Python import 包名仍然是 `moneytree`。新文档优先使用 `moneytrees*` CLI；旧的 `moneytree*` CLI alias 保留为兼容入口，并与对应 `moneytrees*` 命令指向同一实现。
 
@@ -64,7 +64,7 @@ uv run moneytrees-factor-store \
 
 追加外部 Alpha101/191：
 
-注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免多年全市场输入一次性进入内存。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径，内存紧张时可能 OOM。正式全量生成前仍建议先用小样本冒烟测试，并按 family 分开运行。
+注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免多年全市场输入一次性进入内存。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径，内存紧张时可能 OOM。正式全量生成前仍建议先用小样本冒烟测试，并按因子族分开运行。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -157,6 +157,7 @@ pickle 只能读取可信文件；正常研究路径推荐 parquet。
 - [docs/data_status.md](docs/data_status.md): 原始缓存、基础面板、因子仓库和回测产物的只读状态检查。
 - [docs/data_snapshot.md](docs/data_snapshot.md): 基础面板、原始缓存和因子仓库的轻量元数据快照与校验码。
 - [docs/configuration.md](docs/configuration.md): 配置文件分层、合并规则和常用字段。
+- [docs/cli_reference.md](docs/cli_reference.md): `moneytrees*` CLI、兼容别名和高风险参数索引。
 - [docs/outputs.md](docs/outputs.md): `metrics.json`、`run_config.json`、CSV 和留出验证产物说明。
 - [docs/cookbook.md](docs/cookbook.md): 常见研究任务示例。
 - [docs/runbook.md](docs/runbook.md): 日常运行、缓存刷新、排障和归档检查。
@@ -164,7 +165,7 @@ pickle 只能读取可信文件；正常研究路径推荐 parquet。
 - [docs/factor_families.md](docs/factor_families.md): Alpha101/191/158/360 因子家族来源、用途和项目边界。
 - [docs/factor_catalog.md](docs/factor_catalog.md): 因子列级清单说明，机器可读版本在 [docs/factor_catalog.csv](docs/factor_catalog.csv)。
 - [docs/generate_alpha101_191_with_dolphindb.md](docs/generate_alpha101_191_with_dolphindb.md): 使用 DolphinDB 生成 Alpha101/191 并写入因子仓库。
-- [docs/maintenance.md](docs/maintenance.md): 维护 backlog、迁移工具和后续重构候选项。
+- [docs/maintenance.md](docs/maintenance.md): 维护待办、迁移工具和后续重构候选项。
 
 ## 项目结构
 

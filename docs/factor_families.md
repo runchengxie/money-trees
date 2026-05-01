@@ -11,7 +11,7 @@ TuShare / 外部日频数据
 -> feature_lag_periods 控制特征可见时间
 -> 分类或回归模型生成 score
 -> cn 市场配置档做可交易过滤
--> 组合构建、滚动回测、holdout 和报告输出
+-> 组合构建、滚动回测、留出验证和报告输出
 ```
 
 `xgboost_regressor` 和线性模型训练连续目标：
@@ -45,7 +45,7 @@ rel_performance in {-1, 0, 1}
 
 ## 列名和清单
 
-机器可读清单见 [factor_catalog.csv](factor_catalog.csv)，说明文档见 [factor_catalog.md](factor_catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`；Alpha158/360 行给出本地公式，Alpha101/191 行标明外部公式未内置。
+机器可读清单见 [factor_catalog.csv](factor_catalog.csv)，说明文档见 [factor_catalog.md](factor_catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`；Alpha158/360 行给出本地公式，Alpha101/191 行标明 DolphinDB 外部生成路径。
 
 | 因子/字段组 | 列名规则 | 数量 | 输入口径 | 生成方式 |
 | --- | --- | ---: | --- | --- |
@@ -55,7 +55,7 @@ rel_performance in {-1, 0, 1}
 | Alpha360 local baseline | `alpha360_{field}_lag{00..59}` | 360 | `open/high/low/close/vwap` 优先复权，`volume` 不复权 | `build_alpha360_features` |
 | TuShare `daily_basic` 派生字段 | `turnover_rate`、`volume_ratio`、`total_mv`、`circ_mv` 等 | 随接口返回变化 | TuShare `daily_basic` | 数据拉取层并入面板。 |
 
-Alpha101/191 的公式实现由上游系统维护。研究时要固定行业、市值、VWAP、停牌、涨跌停、缺失值和复权口径。
+Alpha101/191 的公式实现由 DolphinDB 外部生成路径维护。研究时要固定行业、市值、VWAP、停牌、涨跌停、缺失值和复权口径。
 
 ## 存储 dtype 策略
 
@@ -67,7 +67,7 @@ Money Trees 的生成型 CLI 默认把 `alpha101_`、`alpha191_`、`alpha158_` �
 --factor-dtype float64
 ```
 
-`float32` 可能带来很小的数值差异，但对常见截面排序、树模型和线性模型基线通常比 `float64` 更适合日常迭代。正式复核时建议在 manifest 或 run config 中记录 dtype。
+`float32` 可能带来很小的数值差异，但对常见截面排序、树模型和线性模型基线通常比 `float64` 更适合日常迭代。正式复核时建议在元数据清单或 run config 中记录 dtype。
 
 ## 本地 Alpha158
 

@@ -65,9 +65,9 @@ uv run moneytrees-data-status \
   --mode warn
 ```
 
-这个检查会流式扫描 parquet 面板，检查 `date,ticker`、关键列空值、派生收益一致性、复权列一致性，并检查 raw cache 中 `daily` 有行但 `adj_factor` 或 `daily_basic` 空分片的问题。收益列只允许自然边界空值：每个 ticker 的首尾以及基准首尾交易日。
+这个检查会流式扫描 parquet 面板，检查 `date,ticker`、关键列空值、派生收益一致性、复权列一致性，并检查原始缓存中 `daily` 有行但 `adj_factor` 或 `daily_basic` 空分片的问题。收益列只允许自然边界空值：每个 ticker 的首尾以及基准首尾交易日。
 
-## 3. 按需生成本地 Alpha158/360 factor store
+## 3. 按需生成本地 Alpha158/360 因子仓库
 
 ```bash
 uv run moneytrees-tushare \
@@ -81,7 +81,7 @@ uv run moneytrees-tushare \
   --sanity-check warn
 ```
 
-基础面板生成后，再按需生成本地因子族。factor store 会把基础面板和因子族分开保存，避免把所有列写进单个超宽 parquet。
+基础面板生成后，再按需生成本地因子族。因子仓库会把基础面板和因子族分开保存，避免把所有列写进单个超宽 parquet。
 
 回测从因子仓库读取选中特征时，缺失列默认报错。迁移旧数据时可以临时设置：
 
@@ -118,7 +118,7 @@ uv run moneytrees-factor-store \
 
 `--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量。
 
-回测时可直接把 factor store manifest 作为数据入口，并用配置限定实际加载的因子族：
+回测时可直接把因子仓库 `manifest.json` 作为数据入口，并用配置限定实际加载的因子族：
 
 ```bash
 uv run moneytrees \
@@ -140,9 +140,9 @@ uv run moneytrees-factor-store \
 
 ## 4. 用 DolphinDB 补齐 Alpha101/191，共 292 个外部列
 
-Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个 factor store。详细环境和口径见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
+Alpha101/191 不在项目内本地计算。推荐先用 DolphinDB 离线生成，再写入同一个因子仓库。详细环境和口径见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
-parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认用 `--stream-input auto` 按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免完整输入面板一次性进入内存。宽表输出或显式 `--stream-input off` 仍会走完整输入上传路径；先用小样本分别跑 `--alpha101` 和 `--alpha191` 冒烟测试，正式生成时优先按 family 分开运行。
+parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认用 `--stream-input auto` 按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免完整输入面板一次性进入内存。宽表输出或显式 `--stream-input off` 仍会走完整输入上传路径；先用小样本分别跑 `--alpha101` 和 `--alpha191` 冒烟测试，正式生成时优先按因子族分开运行。
 
 安装外部 Alpha 依赖：
 
@@ -150,7 +150,7 @@ parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认用 `--stre
 uv sync --dev --extra external-alphas
 ```
 
-生成 Alpha101/191 并写入 factor store：
+生成 Alpha101/191 并写入因子仓库：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -169,13 +169,13 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-兼容旧宽表路径时仍可传 `--output data/cn_daily_alpha_all.parquet`。factor store 路径的 manifest 写到：
+兼容旧宽表路径时仍可传 `--output data/cn_daily_alpha_all.parquet`。因子仓库路径的元数据清单写到：
 
 ```text
 data/factor_store/cn_daily/manifest.json
 ```
 
-## 5. 使用完整 810 因子 factor store 跑 XGBoost 回归
+## 5. 使用完整 810 因子仓库跑 XGBoost 回归
 
 ```bash
 uv sync --dev --extra research
@@ -286,7 +286,7 @@ uv run moneytrees \
 
 QP 会用训练窗口 `next_period_return` 估计协方差。求解失败时默认回退到启发式权重。
 
-## 10. 跑最终 holdout
+## 10. 跑最终留出验证
 
 ```bash
 uv run moneytrees \
@@ -297,7 +297,7 @@ uv run moneytrees \
   --set backtest.holdout.model_segment=segment_b
 ```
 
-holdout 结果写到：
+留出验证结果写到：
 
 ```text
 artifacts/holdout-check/holdout/

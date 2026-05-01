@@ -1,6 +1,6 @@
 # 使用 DolphinDB 生成 Alpha101/191
 
-本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入 factor store；旧的宽 parquet 面板输出继续保留用于兼容。
+本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入因子仓库；旧的宽 parquet 面板输出继续保留用于兼容。
 
 ## 当前边界
 
@@ -8,12 +8,12 @@
 
 | 因子族 | 数量 | 项目内计算状态 |
 | --- | ---: | --- |
-| Alpha101 | 101 | 外部生成后写入 factor store，或兼容并入宽面板 |
-| Alpha191 | 191 | 外部生成后写入 factor store，或兼容并入宽面板 |
+| Alpha101 | 101 | 外部生成后写入因子仓库，或兼容并入宽面板 |
+| Alpha191 | 191 | 外部生成后写入因子仓库，或兼容并入宽面板 |
 | Alpha158 | 158 | 本地 `build_alpha158_features` 生成 |
 | Alpha360 | 360 | 本地 `build_alpha360_features` 生成 |
 
-也就是说，当前本地可计算特征是 Alpha158/360 共 518 个。Alpha101/191 共 292 个列是外部生成契约，不是本仓库内置公式实现。
+也就是说，当前本地可计算特征是 Alpha158/360 共 518 个。Alpha101/191 共 292 个列属于外部生成契约；仓库提供 DolphinDB 模块路径和包装模块，Python 核心包不在回测过程中实时计算这些公式。
 
 推荐数据流：
 
@@ -21,7 +21,7 @@
 TuShare / 标准日频面板
 -> DolphinDB 离线计算 Alpha101/191
 -> 写入 data/factor_store/cn 的 alpha101 / alpha191 分族分片
--> moneytrees 使用 factor store manifest 正常回测
+-> moneytrees 使用因子仓库元数据清单正常回测
 ```
 
 兼容数据流仍可用：
@@ -137,7 +137,7 @@ gtja191Prepare.dos
 moneytreeAlpha.dos
 ```
 
-这些 `.dos` 文件不提交到仓库。`wq101alpha.dos` / `gtja191Alpha.dos` 是外部公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是外部准备模块，生产用 `moneytreeAlpha.dos` 是本地适配包装模块。`moneytreeAlpha.dos` 建议提供两个函数：
+当前项目快照包含这些 `.dos` 文件。`wq101alpha.dos` / `gtja191Alpha.dos` 是 DolphinDB 公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是准备模块，`moneytreeAlpha.dos` 是 Money Trees 适配包装模块。生产使用前应确认模块来源、授权和版本，并在生成命令中记录 module version。`moneytreeAlpha.dos` 建议提供两个函数：
 
 ```text
 calcMoneyTreeAlpha101(rawData, startTime, endTime)
@@ -151,7 +151,7 @@ tradetime, securityid, alpha101_001, ..., alpha101_101
 tradetime, securityid, alpha191_001, ..., alpha191_191
 ```
 
-Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列，并写入 factor store 或兼容合并回宽面板。
+Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列，并写入因子仓库或兼容合并回宽面板。
 
 补齐模块并重启 DolphinDB 后，可以先只验证模块加载：
 
@@ -159,7 +159,7 @@ Python 脚本只负责上传标准化输入、调用包装函数、下载结果�
 uv run python -c 'import dolphindb as ddb; s=ddb.Session(); s.connect("127.0.0.1",8848,"admin","123456"); print(s.run("use wq101alpha; use prepare101; use gtja191Alpha; use gtja191Prepare; use moneytreeAlpha; 1"))'
 ```
 
-返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB 的 `use` 模块名。
+返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录元数据清单，不会改变 DolphinDB 的 `use` 模块名。
 
 CLI 默认从 `DOLPHINDB_PASSWORD` 读取密码；环境变量未设置或为空时，回退到本地开发默认密码 `123456`。如果显式传 `--password`，该值必须非空。
 
@@ -206,13 +206,13 @@ uv run moneytrees-tushare \
   --factor-family alpha360
 ```
 
-推荐直接写入 factor store：
+推荐直接写入因子仓库：
 
-首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式 factor store。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
+首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式因子仓库。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
 
-使用 `--no-wide-output` 写入 factor store 且输入是 parquet 时，CLI 默认使用 `--stream-input auto`：按 `--chunk-trade-dates` 划分目标交易日，每个计算窗口额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日，随后只读取并上传该窗口、调用 DolphinDB、只下载目标交易日结果并立即写入分片。这个路径避免在 Python 或 DolphinDB client 中构造多年全市场的完整输入/输出宽表。重新生成已写入 manifest 的外部 family 时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
+使用 `--no-wide-output` 写入因子仓库且输入是 parquet 时，CLI 默认使用 `--stream-input auto`：按 `--chunk-trade-dates` 划分目标交易日，每个计算窗口额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日，随后只读取并上传该窗口、调用 DolphinDB、只下载目标交易日结果并立即写入分片。这个路径避免在 Python 或 DolphinDB client 中构造多年全市场的完整输入/输出宽表。重新生成已写入元数据清单的外部因子族时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
 
-内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的 factor store 路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径；多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
+内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的因子仓库路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径；多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
 
 Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
 
@@ -256,7 +256,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-最终写入正式 factor store 时仍建议按 family 分开运行；同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单 family 验证的环境：
+最终写入正式因子仓库时仍建议按因子族分开运行；同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单因子族验证的环境：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -278,7 +278,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-然后直接从 factor store 回测：
+然后直接从因子仓库回测：
 
 ```bash
 uv run moneytrees \
@@ -325,9 +325,9 @@ uv run moneytrees \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-## Manifest
+## 元数据清单
 
-每次成功生成都会写 manifest，记录：
+每次成功生成都会写元数据清单，记录：
 
 - 因子来源和家族。
 - 输入/输出文件 hash。
@@ -338,7 +338,7 @@ uv run moneytrees \
 - fallback 字段和缺失可选字段。
 - 列完整性和键匹配校验结果。
 
-manifest 不记录密码、token、`.env` 内容或 TuShare token。
+元数据清单不记录密码、token、`.env` 内容或 TuShare token。
 
 ## 校验规则
 
@@ -351,7 +351,7 @@ manifest 不记录密码、token、`.env` 内容或 TuShare token。
 - DolphinDB 返回了不在输入面板内的 `date, ticker`。
 - 输出与输入没有任何匹配键，或匹配键上所有请求因子值都是空。
 
-这些校验的目标是让外部因子生产保持为正式数据契约，而不是临时拼接。
+这些校验用于保证外部因子生产遵守正式数据契约。
 
 ## 研究风险
 

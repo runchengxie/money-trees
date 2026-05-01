@@ -52,6 +52,8 @@ uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/tes
 uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
 ```
 
+文档 guard 测试覆盖测试文件登记、console script 名称、README 文档导航、内部 Markdown 链接、部分文风规则、核心术语反向检查、CLI 高风险参数覆盖和因子目录状态一致性。它们不会逐条执行 README 或 docs 中的完整命令示例；涉及 TuShare token、DolphinDB server、大型数据文件或长时间运行的命令仍需按运行手册单独验证。
+
 ## 当前覆盖
 
 | 文件 | 覆盖重点 |
@@ -64,10 +66,10 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
 | `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
 | `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
-| `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts 在 README 或 docs 中的覆盖。 |
+| `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts、兼容别名和 CLI 高风险参数在 README 或 docs 中的覆盖。 |
 | `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
-| `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在。 |
-| `tests/test_docs_style.py` | 中文文档中高风险间接句式和核心术语漂移。 |
+| `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |
+| `tests/test_docs_style.py` | 中文文档中高风险间接句式、核心术语漂移、DolphinDB 模块事实和因子目录状态一致性。 |
 | `tests/test_export_repo_source.py` | 源码导出工具是否包含配置和因子清单，同时继续排除运行数据目录。 |
 | `tests/test_external_alphas.py` | 外部 Alpha101/191 列名、字段映射、输入依赖、并入和元数据清单校验。 |
 | `tests/test_factor_store.py` | 本地因子仓库、外部因子仓库、元数据清单、分区、压缩、覆盖和选择加载。 |
@@ -115,7 +117,7 @@ uv sync --dev --extra tuning
 
 ## 当前测试缺口
 
-- 文档命令执行检查：README 和 docs 中出现的完整 CLI 示例目前只做存在性保护，尚未逐条运行。
+- 文档命令执行检查：README 和 docs 中出现的完整 CLI 示例目前只做存在性、链接和关键参数覆盖保护，尚未逐条运行。
 - 输出文件 hash 检查：`experiment_manifest.json` 已记录输入和配置 hash，后续可继续记录每个 CSV/JSON 产物 hash。
 - 更真实的 A 股执行模型：当前组合测试覆盖权重、暴露和换手，尚未覆盖涨跌停无法成交、成交量容量和冲击成本。
 - 历史 point-in-time ST 和行业归属：当前测试只保证最新名称 ST 标记被明确标注语义。

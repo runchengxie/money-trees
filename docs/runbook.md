@@ -14,7 +14,7 @@ Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cook
 
 ### 模式 C：完整 810 因子
 
-在模式 B 的基础上，用 DolphinDB 离线生成 Alpha101/191，写入同一个 factor store 后再回测。
+在模式 B 的基础上，用 DolphinDB 离线生成 Alpha101/191，写入同一个因子仓库后再回测。
 
 ## 日常运行顺序
 
@@ -24,7 +24,7 @@ Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cook
 uv sync --dev --extra research
 ```
 
-2. 刷新 TuShare raw cache 并生成基础 `date, ticker` 面板。
+2. 刷新 TuShare 原始缓存并生成基础 `date, ticker` 面板。
 
 ```bash
 uv run moneytrees-tushare \
@@ -38,7 +38,7 @@ uv run moneytrees-tushare \
   --sanity-check warn
 ```
 
-3. 按需生成本地 Alpha158/360 factor store。
+3. 按需生成本地 Alpha158/360 因子仓库。
 
 ```bash
 uv run moneytrees-factor-store \
@@ -64,9 +64,9 @@ uv run moneytrees-factor-store \
 
 `moneytrees-factor-store` 对 parquet 输入会按日期窗口流式读取基础面板：每个 partition 只加载目标交易日和本地因子所需的历史 overlap，然后立即落盘，避免把大面板整表读进内存。`--chunk-trade-dates` 控制每个 partition 的目标交易日数；内存紧张时可降到 `20` 或 `10`。
 
-`moneytrees-factor-store` 会按分区复用已生成的本地因子文件。重复运行同一 family 时，已完成且输入一致的 partition 会跳过；基础面板扩展到新日期后，只补缺失或输入变化的 partition。需要强制全量重算时传 `--overwrite`。`--progress` 会输出 ASCII 进度条、每个 partition 的 `generated/skipped` 状态、单块耗时、累计耗时和 ETA。
+`moneytrees-factor-store` 会按分区复用已生成的本地因子文件。重复运行同一因子族时，已完成且输入一致的 partition 会跳过；基础面板扩展到新日期后，只补缺失或输入变化的 partition。需要强制全量重算时传 `--overwrite`。`--progress` 会输出 ASCII 进度条、每个 partition 的 `generated/skipped` 状态、单块耗时、累计耗时和 ETA。
 
-回测入口可以直接读取 factor store manifest，并按配置只加载需要的因子族：
+回测入口可以直接读取因子仓库 `manifest.json`，并按配置只加载需要的因子族：
 
 ```bash
 uv run moneytrees \
@@ -90,9 +90,9 @@ Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年
 
 5. 可选：离线生成外部 Alpha101/191。
 
-Alpha101/191 需要先由 DolphinDB 等外部生产器生成后写入 factor store。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
+Alpha101/191 需要先由 DolphinDB 外部生成路径生成后写入因子仓库。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
 
-注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径；多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按 family 分开运行。
+注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径；多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按因子族分开运行。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -156,7 +156,7 @@ uv run ruff check .
 - 行业字段最好是 point-in-time 口径，避免历史回测未来信息污染。
 - DolphinDB wrapper 函数版本已记录。
 - `wq101alpha`、`gtja191Alpha` 和 `moneytreeAlpha` 模块版本已记录。
-- factor store manifest 已保存并归档。
+- 因子仓库 `manifest.json` 已保存并归档。
 - 回测输入优先使用 `data/factor_store/cn_daily/manifest.json`。
 
 ## 存储压力与因子数据管理
@@ -168,7 +168,7 @@ uv run ruff check .
 6000000 * 810 * 4 bytes  ~= 19.4 GB  # float32 裸数据
 ```
 
-Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cache、基础行情列、`daily_basic`、可交易过滤、基准列、factor store 分片、兼容宽表输出、`export_parquet` 和多次实验产物。完整 810 因子全市场多年运行应按几十 GB 到上百 GB 的本地空间规划。
+Parquet 压缩通常能降低落盘体积，但真实占用还会叠加原始缓存、基础行情列、`daily_basic`、可交易过滤、基准列、因子仓库分片、兼容宽表输出、`export_parquet` 和多次实验产物。完整 810 因子全市场多年运行应按几十 GB 到上百 GB 的本地空间规划。
 
 当前默认策略：
 
@@ -185,12 +185,12 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加 raw cach
 data/raw/tushare/       TuShare 原始接口缓存，可重建标准面板
 data/panel/             清洗后的基础 date,ticker 面板
 data/factor_store/      Alpha101/191/158/360 分族因子文件
-artifacts/              回测指标、信号、持仓、配置和 manifest
+artifacts/              回测指标、信号、持仓、配置和元数据清单
 ```
 
-raw cache、基础面板、factor store 和 experiment artifacts 的保留周期不同。不要自动删除这些目录；清理前先 dry-run 检查体积和文件列表。
+原始缓存、基础面板、因子仓库和回测产物的保留周期不同。不要自动删除这些目录；清理前先只预览检查体积和文件列表。
 
-### 存储检查 dry-run
+### 存储检查只预览
 
 以下命令只读取目录大小，不删除文件：
 
@@ -206,7 +206,7 @@ find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
   | head -20
 ```
 
-如果后续增加 `gc` 或清理命令，默认必须是 dry-run：先打印候选文件、大小和原因，只有显式传入非 dry-run 参数后才允许删除。不要对 `data/`、`artifacts/`、raw TuShare cache 或 factor store 做隐式清理。
+如果后续增加 `gc` 或清理命令，默认必须只预览：先打印候选文件、大小和原因，只有显式确认后才允许删除。不要对 `data/`、`artifacts/`、TuShare 原始缓存或因子仓库做隐式清理。
 
 ### Parquet 压缩迁移
 
@@ -246,9 +246,9 @@ Missing TuShare token.
 - 确认变量名在支持列表内。
 - 用 `--token` 临时覆盖。
 
-## Raw cache 检查
+## 原始缓存检查
 
-raw cache 默认结构：
+原始缓存默认结构：
 
 ```text
 data/raw/tushare/
@@ -260,7 +260,7 @@ data/raw/tushare/
   suspend_d/trade_date=YYYYMMDD.parquet
 ```
 
-检查 manifest：
+检查元数据清单：
 
 ```bash
 sqlite3 data/raw/tushare/manifest.sqlite \
@@ -415,7 +415,7 @@ pred_rel_return
 处理：
 
 - 补齐该列。
-- 移除 legacy preset。
+- 移除 legacy 预设配置。
 - 改回 `market.label_source=actual`。
 
 ### DolphinDB Python client 缺失
@@ -453,7 +453,7 @@ Input memory preflight failed for DolphinDB external-alpha generation
 处理：
 
 - 先用较小日期区间或 ticker 子集跑冒烟测试。
-- 按 family 分开运行 `--alpha101` 和 `--alpha191`。
+- 按因子族分开运行 `--alpha101` 和 `--alpha191`。
 - 确认输入是 parquet，并使用 `--no-wide-output --stream-input auto`。
 - 如果必须用宽表输出或 `--stream-input off`，使用更大内存机器或增加 WSL/Docker 可用内存。
 - 不要为了继续跑而默认加 `--skip-memory-check`；它只会跳过保护，不能降低实际内存使用。
@@ -472,8 +472,8 @@ DolphinDB Alpha101/191 preflight failed
 - 检查 `docker/dolphindb/modules/` 下是否有 `wq101alpha.dos`、`prepare101.dos`、`gtja191Alpha.dos`、`gtja191Prepare.dos` 和 `moneytreeAlpha.dos`。
 - 使用 `docker-compose.alpha.yml` 时，确认该目录已挂载到 DolphinDB server 的 `/data/ddb/server/data/modules`。
 - 确认 `moneytreeAlpha.dos` 定义了 `calcMoneyTreeAlpha101(rawData, startTime, endTime)` 和 `calcMoneyTreeAlpha191(rawData, startTime, endTime)`，或者命令中传入了正确的 `--alpha101-function` / `--alpha191-function`。
-- 注意 `--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录 manifest 元数据，不会改变 DolphinDB `use` 的模块名。
-- 先按 [使用 DolphinDB 生成 Alpha101/191](generate_alpha101_191_with_dolphindb.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式 factor store。
+- 注意 `--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录元数据清单，不会改变 DolphinDB `use` 的模块名。
+- 先按 [使用 DolphinDB 生成 Alpha101/191](generate_alpha101_191_with_dolphindb.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式因子仓库。
 
 ### Alpha101/191 输出列不完整
 
@@ -488,8 +488,8 @@ unexpected alpha columns
 
 - 检查 DolphinDB `moneytreeAlpha.dos` 包装函数是否返回宽表。
 - 检查列名是否严格为 `alpha101_001...alpha101_101` 或 `alpha191_001...alpha191_191`。
-- 检查是否只请求了一个 family，但 DolphinDB 返回了另一个 family 的 `alpha*_` 列。
-- 检查 manifest 中记录的模块版本和字段映射。
+- 检查是否只请求了一个因子族，但 DolphinDB 返回了另一个因子族的 `alpha*_` 列。
+- 检查元数据清单中记录的模块版本和字段映射。
 
 ## 结果归档检查
 
@@ -498,16 +498,16 @@ unexpected alpha columns
 - `metrics.json` 存在且包含关键指标。
 - `run_config.json` 包含 `git_commit`。
 - `experiment_manifest.json` 存在，并包含输入文件 hash、schema hash、配置 hash 和运行环境。
-- `run_summary.txt` 包含日期范围、segment 诊断和 holdout 信息。
+- `run_summary.txt` 包含日期范围、segment 诊断和留出验证信息。
 - `strategy_nav.csv` 与 `benchmark_nav.csv` 日期有重叠。
 - `oos_period_diagnostics.csv` 行数符合预期。
-- 使用 holdout 时，`holdout/metrics.json` 和 `holdout/holdout_config.json` 存在。
+- 使用留出验证时，`holdout/metrics.json` 和 `holdout/holdout_config.json` 存在。
 - 数据输入文件和配置文件路径写入实验记录。
-- 使用外部 Alpha101/191 时，保存 factor store manifest 或兼容 `.factor_manifest.json` 的 hash 和版本标签。
+- 使用外部 Alpha101/191 时，保存因子仓库 `manifest.json` 或兼容 `.factor_manifest.json` 的 hash 和版本标签。
 
 ## 数据保存元数据
 
-当前 raw parquet cache + `manifest.sqlite` + 标准面板 parquet + 回测产物的路线继续使用。已经落地：
+当前原始 parquet 缓存 + `manifest.sqlite` + 标准面板 parquet + 回测产物的路线继续使用。已经落地：
 
 - `request_hash`
 - `params_json`
@@ -530,4 +530,4 @@ data/derived/
       dataset_meta.json
 ```
 
-`dataset_meta.json` 应记录 raw cache manifest 版本、生成参数、因子家族、复权口径、基准、代码 commit 和依赖版本。
+`dataset_meta.json` 应记录原始缓存元数据清单版本、生成参数、因子族、复权口径、基准、代码 commit 和依赖版本。

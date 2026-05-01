@@ -28,7 +28,7 @@ uv run moneytrees-data-status \
   --mode warn
 ```
 
-检查 TuShare raw cache：
+检查 TuShare 原始缓存：
 
 ```bash
 uv run moneytrees-data-status \
@@ -36,7 +36,7 @@ uv run moneytrees-data-status \
   --format text
 ```
 
-检查 factor store：
+检查因子仓库：
 
 ```bash
 uv run moneytrees-data-status \
@@ -44,7 +44,7 @@ uv run moneytrees-data-status \
   --format text
 ```
 
-全量 factor store 质量检查会逐分片扫描所有因子值。需要快速确认元数据时先跳过值扫描；需要定位单个因子族时只扫对应 family：
+全量因子仓库质量检查会逐分片扫描所有因子值。需要快速确认元数据时先跳过值扫描；需要定位单个因子族时只扫对应因子族：
 
 ```bash
 uv run moneytrees-data-status \
@@ -87,7 +87,7 @@ uv run moneytrees-data-status \
   --mode error
 ```
 
-`--mode warn` 会报告问题但不因数据错误返回失败；`--mode error` 遇到错误会返回非零退出码。参数错误和无法读取输入仍会失败。`moneytrees-data-status` 仍然是只读命令：它不会刷新 raw cache、不会修复面板，也不会重写 factor store 或 artifacts。
+`--mode warn` 会报告问题但不因数据错误返回失败；`--mode error` 遇到错误会返回非零退出码。参数错误和无法读取输入仍会失败。`moneytrees-data-status` 仍然是只读命令：它不会刷新原始缓存、不会修复面板，也不会重写因子仓库或回测产物。
 
 ## 检查项
 
@@ -104,33 +104,33 @@ uv run moneytrees-data-status \
 - 允许自然边界空值：每个 ticker 第一条 `return_1d`、每个 ticker 最后一条 `next_period_return`、全局首日 `benchmark_return`、全局末日 `benchmark_next_period_return`。
 - 复权列一致性：当存在 `adj_factor` 和 `open_adj/high_adj/low_adj/close_adj/vwap_adj` 时，检查空值，并验证复权列约等于原始价格乘以 `adj_factor`。
 
-TuShare raw cache 检查：
+TuShare 原始缓存检查：
 
 - `manifest.sqlite` 是否存在。
 - 每个 API 的日期范围。
 - 分片数量和累计行数。
 - schema hash 和 content hash 数量。
-- raw cache 异常分片：当 `daily` 某交易日有行数，但同日 `adj_factor` 或 `daily_basic` 为 0 行或缺失时报告错误。
+- 原始缓存异常分片：当 `daily` 某交易日有行数，但同日 `adj_factor` 或 `daily_basic` 为 0 行或缺失时报告错误。
 - schema hash 多版本会作为 warning 展示，便于识别 TuShare 上游字段变化。
 
-factor store 检查：
+因子仓库检查：
 
 - `manifest.json` 是否存在。
-- base panel 行数、列数、schema hash。
+- 基础面板行数、列数、schema hash。
 - 因子族、前缀、列数、行数、分片数量。
-- manifest 指向的 base/factor 文件是否存在。
+- 元数据清单指向的 base/factor 文件是否存在。
 - `key_validation` 中的对齐状态。
-- 因子值卫生检查会按 parquet 分片 streaming 扫描，不把完整 factor store 一次性读进 pandas；检查项包括实际行数/列数、分片行数元数据、重复 `date, ticker`、NaN 数量、Inf 数量、最大空值率、整列全空和整列常数。
-- 文本输出会列出整列全空、整列常数和高空值率列名；`--factor-family` 可只检查指定因子族，`--skip-factor-quality` 可只检查 manifest 和文件存在性，`--progress` 可把分片扫描进度输出到 stderr。
+- 因子值卫生检查会按 parquet 分片 streaming 扫描，不把完整因子仓库一次性读进 pandas；检查项包括实际行数/列数、分片行数元数据、重复 `date, ticker`、NaN 数量、Inf 数量、最大空值率、整列全空和整列常数。
+- 文本输出会列出整列全空、整列常数和高空值率列名；`--factor-family` 可只检查指定因子族，`--skip-factor-quality` 可只检查元数据清单和文件存在性，`--progress` 可把分片扫描进度输出到 stderr。
 
-artifacts 检查：
+回测产物检查：
 
 - `experiment_manifest.json`、metrics、run config 和常见 parquet 输出是否存在。
 - 产物目录总大小。
 
 ## 刷新策略
 
-raw cache 适合增量刷新和重建基础面板：
+原始缓存适合增量刷新和重建基础面板：
 
 ```bash
 uv run moneytrees-tushare \
@@ -155,7 +155,7 @@ uv run moneytrees-factor-store \
   --chunk-trade-dates 60
 ```
 
-Alpha101/191 由 DolphinDB 外部生产器全量计算后写入同一个 factor store：
+Alpha101/191 由 DolphinDB 外部生产器全量计算后写入同一个因子仓库：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -183,7 +183,7 @@ parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认按 `--stre
 6000000 * 810 * 4 bytes ~= 19.4 GB  # float32 裸数据
 ```
 
-Parquet 压缩会降低落盘体积，但 raw cache、基础面板、factor store 和 artifacts 会叠加占用。完整 810 因子多年全市场实验应按几十 GB 到上百 GB 规划。
+Parquet 压缩会降低落盘体积，但原始缓存、基础面板、因子仓库和回测产物会叠加占用。完整 810 因子多年全市场实验应按几十 GB 到上百 GB 规划。
 
 ## Parquet 策略
 
@@ -201,10 +201,10 @@ Money Trees 新写入 parquet 默认使用 `zstd`，默认 level 3。需要兼�
 
 建议：
 
-- raw cache：默认 parquet 分片；空间紧张时新写入使用默认 `zstd` level 3。
+- 原始缓存：默认 parquet 分片；空间紧张时新写入使用默认 `zstd` level 3。
 - 基础面板：默认 `zstd` level 3。
-- factor store：默认 `float32` + `zstd` level 3。
-- artifacts：默认 `zstd`，避免默认导出完整预处理 parquet。
+- 因子仓库：默认 `float32` + `zstd` level 3。
+- 回测产物：默认 `zstd`，避免默认导出完整预处理 parquet。
 - pickle 不作为长期数据格式；CSV 只用于小报表。
 
 已有文件不会自动迁移。需要重写时使用旁路输出：
@@ -218,7 +218,7 @@ uv run moneytrees-parquet-rewrite \
   --row-group-size 100000
 ```
 
-## 清理前 dry-run
+## 清理前只预览
 
 当前没有自动清理命令。清理前先只读检查空间：
 
@@ -234,4 +234,4 @@ find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
   | head -20
 ```
 
-后续如果增加清理工具，默认必须 dry-run：先打印候选文件、大小和原因，只有显式确认后才允许删除。不要对 `data/`、`artifacts/`、raw TuShare cache 或 factor store 做隐式清理。
+后续如果增加清理工具，默认必须只预览：先打印候选文件、大小和原因，只有显式确认后才允许删除。不要对 `data/`、`artifacts/`、TuShare 原始缓存或因子仓库做隐式清理。

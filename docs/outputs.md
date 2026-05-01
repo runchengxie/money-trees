@@ -7,7 +7,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | `metrics.json` | 策略、基准、风险、换手、持仓数、IC 和 RankIC 指标。 |
-| `run_config.json` | 解析后的配置、基准净值口径、segment 规格、segment fit 元数据、holdout 信息、运行时间和 git commit。 |
+| `run_config.json` | 解析后的配置、基准净值口径、segment 规格、segment fit 元数据、留出验证信息、运行时间和 git commit。 |
 | `experiment_manifest.json` | 可复现实验元数据，包括输入 hash、schema hash、配置 hash、运行环境和数据版本。 |
 | `run_summary.txt` | 面向人工阅读的回测摘要。 |
 | `segment_a_features.txt` | Segment A 最终使用的特征列。 |
@@ -54,7 +54,7 @@
 | `segment_a_feature_score_curve.csv` | Segment A 特征数和验证收益曲线。 |
 | `segment_b_feature_score_curve.csv` | Segment B 特征数和验证收益曲线。 |
 
-## Holdout 子目录
+## 留出验证子目录
 
 配置 `backtest.holdout.start` 和 `backtest.holdout.end` 后，会生成 `holdout/` 子目录。
 
@@ -78,7 +78,7 @@
 - `metrics.json`
 - `holdout_config.json`
 
-`holdout_config.json` 记录 holdout 使用的模型 segment、训练区间、验证区间和基准名称。
+`holdout_config.json` 记录留出验证使用的模型 segment、训练区间、验证区间和基准名称。
 
 ## `metrics.json` 指标
 
@@ -105,7 +105,7 @@
 - 基准名称、基准列和 `benchmark_cum_mode`。
 - Segment A/B 的训练、验证和滚动回测规格。
 - Segment A/B 的模型 ID、验证区间、特征数、调参状态和调参最优值。
-- Holdout 是否开启及其区间。
+- 留出验证是否开启及其区间。
 - `reproducibility` 摘要，包括 `dataset_version`、输入文件 hash、schema hash、配置 hash 和 `experiment_manifest.json` 自身 hash。
 
 ## `experiment_manifest.json`
@@ -123,4 +123,4 @@
 - 市场配置摘要。
 - Python、平台和关键依赖包版本。
 
-后续仍可补充输出文件 hash、TuShare raw cache manifest 版本和外部数据源版本。
+后续仍可补充输出文件 hash、TuShare 原始缓存元数据清单版本和外部数据源版本。

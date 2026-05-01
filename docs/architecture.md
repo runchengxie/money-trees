@@ -12,7 +12,7 @@ TuShare / 外部数据
 -> 特征滞后
 -> 模型适配器训练
 -> 组合权重构建
--> 滚动回测和 holdout
+-> 滚动回测和留出验证
 -> 指标、CSV、JSON 和报告产物
 ```
 
@@ -83,7 +83,7 @@ configs/backtest/default.yaml
 - 生成本地 Alpha158-style 和 Alpha360-style 日频特征，共 518 列。
 - 维护 Alpha101、Alpha191、Alpha158、Alpha360 共 810 列的列名和接入口径。
 - 计算单因子 IC 和 RankIC。
-- 将 Alpha158/360 和外部 Alpha101/191 写入因子仓库，供回测按 family 或 prefix 按需读取。
+- 将 Alpha158/360 和外部 Alpha101/191 写入因子仓库，供回测按因子族或列名前缀按需读取。
 
 Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后写入因子仓库或兼容并入面板。本仓库维护列名约定、输入字段、校验、元数据清单和治理提醒；回测读取离线产物。
 
@@ -148,7 +148,7 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后写入因�
 - 生成策略、信号、基准、换手、持仓数、IC 和 RankIC。
 - 记录目标/实际暴露、未分配暴露和 QP fallback 诊断。
 - 计算收益、波动、回撤、IR、VaR、CVaR、Alpha/Beta 等指标。
-- 按配置执行最终 holdout 验证。
+- 按配置执行最终留出验证。
 
 当前固定的 segment 拟合区间在 `src/moneytree/runner.py` 中定义，滚动窗口数量、训练月数、间隔月数和测试月数由配置控制。
 
@@ -169,9 +169,9 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后写入因�
 - 样本外诊断 CSV
 - Notebook 风格报告数据
 - segment 特征清单
-- 可选 holdout 子目录
+- 可选留出验证子目录
 
-`run_config.json` 记录解析后的配置、基准净值口径、segment 规格、segment 验证区间、holdout 信息、git commit 和可复现摘要。`experiment_manifest.json` 记录输入文件 hash、raw 输入 schema hash、模型输入 schema hash、配置文件 hash、解析后配置 hash、数据版本和运行环境。
+`run_config.json` 记录解析后的配置、基准净值口径、segment 规格、segment 验证区间、留出验证信息、git commit 和可复现摘要。`experiment_manifest.json` 记录输入文件 hash、原始输入 schema hash、模型输入 schema hash、配置文件 hash、解析后配置 hash、数据版本和运行环境。
 
 ## 数据保存策略
 
@@ -179,12 +179,12 @@ Alpha101 和 Alpha191 共 292 列，公式值由外部实现生成后写入因�
 
 - 原始缓存：TuShare 按 `api_name/trade_date=YYYYMMDD.parquet` 保存接口返回。
 - 缓存索引：`manifest.sqlite` 记录 API、交易日、路径、行数、列信息和创建时间。
-- 因子仓库：`manifest.json` 记录基础面板、因子 family、分区文件、schema 和生成参数。
+- 因子仓库：`manifest.json` 记录基础面板、因子族、分区文件、schema 和生成参数。
 - 研究产物：标准面板 parquet、回测 CSV、JSON 和文本摘要。
 
-这个方向适合当前项目规模，raw cache 可复用，标准面板可重建，回测产物可审计。当前已经落地的版本和元数据：
+这个方向适合当前项目规模，原始缓存可复用，标准面板可重建，回测产物可审计。当前已经落地的版本和元数据：
 
-- TuShare raw cache 的请求参数 hash、schema hash、content hash、创建时间和更新时间。
+- TuShare 原始缓存的请求参数 hash、schema hash、content hash、创建时间和更新时间。
 - 回测输入文件 SHA-256。
 - raw 输入面板和模型输入面板 schema hash。
 - 配置文件集合 hash 和解析后配置 hash。

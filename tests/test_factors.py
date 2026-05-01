@@ -100,8 +100,8 @@ def test_factor_catalog_csv_is_generated_and_formula_status_is_explicit() -> Non
     alpha158 = next(row for row in csv_rows if row["column"] == "alpha158_kmid")
     alpha360 = next(row for row in csv_rows if row["column"] == "alpha360_volume_lag59")
 
-    assert alpha101["formula_status"] == "external_not_stored"
-    assert "Precompute WQAlpha1" in alpha101["formula_or_rule"]
+    assert alpha101["formula_status"] == "external_dolphindb_module"
+    assert "Generate WQAlpha1" in alpha101["formula_or_rule"]
     assert alpha158["formula_status"] == "implemented_local"
     assert alpha158["formula_or_rule"] == "(close - open) / open"
     assert alpha360["formula_status"] == "implemented_local"

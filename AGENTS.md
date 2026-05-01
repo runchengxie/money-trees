@@ -4,7 +4,7 @@
 
 `money-trees` / Money Trees is an A-share classic-alpha cross-sectional equity research and backtesting toolkit. The current built-in market profile is `cn`. The Python import package remains `moneytree`; prefer the `moneytrees` CLI in new docs while keeping `moneytree` aliases compatible.
 
-The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column standard. Alpha158/360 are 518 locally generated features. Alpha101/191 are 292 externally generated columns written to the factor store or merged into the canonical `date, ticker` panel.
+The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column standard. Alpha158/360 are 518 locally generated features. Alpha101/191 are 292 externally generated columns written to the factor store or merged into the canonical `date, ticker` panel. The repository includes DolphinDB module files under `docker/dolphindb/modules/` for the external-alpha path; the Python core package still does not calculate Alpha101/191 inside the backtest loop.
 
 ## Commands
 
@@ -46,6 +46,7 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Add or update tests when changing data contracts, output files, model adapters, portfolio logic, config parsing, or TuShare cache behavior.
 - Preserve optional dependency behavior: XGBoost, TuShare, DolphinDB, and Optuna should fail with clear messages when their extras are not installed.
 - Keep DolphinDB out of core dependencies. Alpha101/191 production must remain an external-alpha path with manifest validation.
+- Keep `docker/dolphindb/modules/*.dos` documented as repository-provided external-alpha modules/wrappers. Production docs should tell users to verify source, authorization, version, and module-version metadata before use.
 - Document memory behavior for full-market `moneytrees-dolphindb-alphas`: parquet `--no-wide-output` defaults to `--stream-input auto`, which reads/uploads each target plus warmup window separately. Legacy full-input upload remains available with `--stream-input off` or wide output and can OOM on constrained machines.
 - Treat `configs/preset/legacy_notebook_compat.yaml` as a legacy reproduction preset, not the default research path.
 - Treat `configs/preset/notebook_compat.yaml` as a transitional compatibility preset.
@@ -67,6 +68,9 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Use `可交易过滤` for tradability filters.
 - Use `冒烟测试` for smoke test.
 - Use `预设配置` for preset.
+- Use `因子族` for factor family when writing prose; keep `family` only in code identifiers, file names, CLI options, or schema fields.
+- Use `待办` for backlog in Chinese prose.
+- Use `只预览` for dry-run in Chinese prose, with `dry-run（只预览）` on first mention if helpful.
 - Use `注册表` for registry.
 - Use `面板` consistently in Chinese docs; use `panel` only in code identifiers, file names, or first-mention parentheses.
 - Use `因子仓库（factor store）` on first mention, then `因子仓库`.

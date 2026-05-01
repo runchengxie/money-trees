@@ -30,16 +30,17 @@ def _external_alpha101_rows() -> list[dict[str, str]]:
                 "group": "external_formula",
                 "count_scope": "101",
                 "input_fields": "open, high, low, close, volume, vwap, cap, indclass",
-                "formula_status": "external_not_stored",
-                "formula_source": "external WQ101 implementation",
+                "formula_status": "external_dolphindb_module",
+                "formula_source": "DolphinDB WQ101 module path",
                 "formula_or_rule": (
-                    f"Precompute WQAlpha{idx} in an external Formulaic Alpha implementation "
-                    "and merge the value into this column."
+                    f"Generate WQAlpha{idx} through the DolphinDB external-alpha module "
+                    "path and merge the value into this column."
                 ),
                 "generation": "external",
                 "notes": (
-                    "Exact formula is not stored in this repository. Use point-in-time "
-                    "industry and market-cap inputs where required."
+                    "Python core does not maintain this formula as a local factor builder. "
+                    "Verify module source, authorization, version, and point-in-time industry "
+                    "and market-cap inputs before production use."
                 ),
             }
         )
@@ -56,16 +57,17 @@ def _external_alpha191_rows() -> list[dict[str, str]]:
                 "group": "external_formula",
                 "count_scope": "191",
                 "input_fields": "open, high, low, close, volume, vwap, index_open, index_close",
-                "formula_status": "external_not_stored",
-                "formula_source": "external GTJA191 implementation",
+                "formula_status": "external_dolphindb_module",
+                "formula_source": "DolphinDB GTJA191 module path",
                 "formula_or_rule": (
-                    f"Precompute GTJA Alpha{idx} in an external Alpha191 implementation "
-                    "and merge the value into this column."
+                    f"Generate GTJA Alpha{idx} through the DolphinDB external-alpha module "
+                    "path and merge the value into this column."
                 ),
                 "generation": "external",
                 "notes": (
-                    "Exact formula is not stored in this repository. Fix SMA, DECAYLINEAR, "
-                    "suspension, limit-hit, and missing-value semantics in the upstream generator."
+                    "Python core does not maintain this formula as a local factor builder. "
+                    "Verify module source, authorization, version, SMA, DECAYLINEAR, suspension, "
+                    "limit-hit, and missing-value semantics before production use."
                 ),
             }
         )

@@ -66,7 +66,7 @@ features:
 
 说明：
 
-- family 可取 `alpha101`、`alpha191`、`alpha158`、`alpha360`，会自动映射到对应列名前缀。
+- 因子族可取 `alpha101`、`alpha191`、`alpha158`、`alpha360`，会自动映射到对应列名前缀。
 - prefix 直接匹配列名前缀，例如 `alpha158_`。
 - `exclude_factor_columns` 用于排除单个因子列，例如暂时不可用的 `alpha191_030`。
 - `include_*` 非空时，只保留匹配的 Alpha 因子列；非因子列会保留，用于标签、基准、可交易过滤和报告。
@@ -245,7 +245,7 @@ backtest:
 - `train_months`、`gap_months`、`test_months` 控制滚动窗口形状。
 - `segment_a` 和 `segment_b` 下的 `train_*`、`valid_*` 控制两套固定模型选择/验证区间；默认值保持早期 2004-2014 配置，2016 以后数据需要显式覆盖。
 - `segment1_windows` 和 `segment2_windows` 控制两个 segment 的滚动窗口数量。
-- holdout 需要同时设置 `start` 和 `end`。
+- 留出验证需要同时设置 `start` 和 `end`。
 - `model_segment` 可以设为 `segment_a` 或 `segment_b`。
 
 ## 输出配置

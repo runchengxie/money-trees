@@ -48,7 +48,7 @@
 3. `backtest.py`: 拆 metrics、rolling 和 diagnostics，保持公开函数 re-export。
 4. `portfolio.py`: 拆 heuristic、QP、risk/covariance 和 diagnostics。
 5. `model.py`: 收口 legacy random forest free functions 到兼容 facade。
-6. `data_sources/tushare.py`: 拆 client、cache、fetch、standardize 和 panel assembly。
+6. `data_sources/tushare.py`: 拆 client、cache、fetch、standardize 和面板组装。
 
 本轮治理已优先抽出 runner 的 outputs、留出验证、summary 以及因子仓库的元数据清单、validation helpers。因子仓库 writer、loader、partitioning 仍是后续拆分对象，拆分时继续保持 `moneytree.factor_store` facade。
 
@@ -67,8 +67,8 @@ Ruff 当前执行 `E/F/I/UP/B`，`line-length = 100` 但暂时忽略 `E501`。�
 
 | 规则 | 状态 | 说明 |
 | --- | --- | --- |
-| `C90` | backlog | 用于发现过高圈复杂度，先审计 `runner.py`、`factor_store.py`、`portfolio.py`。 |
-| `SIM` | backlog | 简化分支和表达式，适合在模块拆分后逐步启用。 |
-| `RET` | backlog | 清理 return 风格，先不全仓库开启。 |
-| `ARG` | backlog | 检查未使用参数，需谨慎处理 CLI callback、测试 fixture 和兼容 facade。 |
+| `C90` | 待办 | 用于发现过高圈复杂度，先审计 `runner.py`、`factor_store.py`、`portfolio.py`。 |
+| `SIM` | 待办 | 简化分支和表达式，适合在模块拆分后逐步启用。 |
+| `RET` | 待办 | 清理 return 风格，先不全仓库开启。 |
+| `ARG` | 待办 | 检查未使用参数，需谨慎处理 CLI callback、测试 fixture 和兼容 facade。 |
 | `E501` | scoped | 继续全局忽略；触及代码按 100 字符意图主动整理。 |

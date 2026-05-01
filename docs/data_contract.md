@@ -228,6 +228,6 @@ open_adj, high_adj, low_adj, close_adj, vwap_adj
 - 缺 `benchmark_cum_ret`：无法生成基准净值。
 - `benchmark_cum_mode` 设置错误：基准收益、超额收益和 IR 会失真。
 - 开启 ST 或停牌过滤但缺对应列：`cn` 市场配置档会立即报错。
-- 缺失配置选中的特征列：默认直接报错，检查因子仓库 family、prefix 或列名。
+- 缺失配置选中的特征列：默认直接报错，检查因子仓库的因子族、列名前缀或列名。
 - 使用 legacy notebook 兼容预设但缺 `pred_rel_return`：该预设依赖外部预测收益列。
 - 特征滞后后样本为空：检查每只股票是否至少有两期特征数据。
