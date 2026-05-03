@@ -1,6 +1,6 @@
 # 测试说明
 
-项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、因子仓库、数据状态、数据快照、外部 Alpha 生产、容器运行文件、维护脚本和文档清单。
+项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、因子仓库、数据状态、数据快照、数据发布资产、外部 Alpha 生产、容器运行文件、维护脚本和文档清单。
 
 ## 命令
 
@@ -43,7 +43,7 @@ uv run pytest -q tests/test_portfolio.py tests/test_backtest.py
 只跑工程化 CLI 测试：
 
 ```bash
-uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/test_factor_store.py tests/test_parquet_rewrite_cli.py
+uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/test_data_release.py tests/test_factor_store.py tests/test_parquet_rewrite_cli.py
 ```
 
 只跑文档 guard 测试：
@@ -64,6 +64,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_container_runtime.py` | Dockerfile、`.dockerignore`、DolphinDB compose 和 runtime 输出隔离。 |
 | `tests/test_convert_pickle_to_parquet_script.py` | 可信 pickle 到 parquet 的 deprecated 兼容迁移脚本和迁移提示。 |
 | `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
+| `tests/test_data_release.py` | 数据发布资产、本地分片、不压缩 tar、GitHub CLI 命令预览和敏感文件保护。 |
 | `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
 | `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
 | `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts、兼容别名和 CLI 高风险参数在 README 或 docs 中的覆盖。 |
@@ -76,6 +77,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_factors.py` | Alpha158/360 列数、本地因子追加、因子 IC、因子目录元数据和 internal factor ops 状态。 |
 | `tests/test_model.py` | 随机森林调参、时间序列 CV、特征选择、Optuna 可选依赖和 legacy notebook 兼容路径。 |
 | `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
+| `tests/test_package_script.py` | `project_tools/package.sh` 输出目录、运行数据包含策略、source-only 模式和压缩格式。 |
 | `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |
 | `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重、换手惩罚和 fallback 诊断。 |
 | `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |

@@ -12,6 +12,7 @@
 | `moneytrees-dolphindb-alphas` | `moneytree-dolphindb-alphas` | 通过 DolphinDB 外部生成 Alpha101/191，写入因子仓库或兼容宽面板。 |
 | `moneytrees-data-status` | `moneytree-data-status` | 只读检查原始缓存、基础面板、因子仓库和回测产物。 |
 | `moneytrees-data-snapshot` | `moneytree-data-snapshot` | 生成基础面板、原始缓存和因子仓库的轻量元数据快照。 |
+| `moneytrees-data-release` | `moneytree-data-release` | 生成 GitHub Releases 友好的数据发布资产并可选上传。 |
 | `moneytrees-parquet-rewrite` | `moneytree-parquet-rewrite` | 重写 parquet 或迁移可信 pickle。 |
 
 ## `moneytrees`
@@ -113,6 +114,32 @@
 | `--format` | 输出 `text` 或 `json`。 |
 
 快照记录元数据和校验码，引用大型数据文件，不复制完整数据。
+
+## `moneytrees-data-release`
+
+| 参数 | 说明 |
+| --- | --- |
+| `--output-dir` | 必填，发布资产输出目录，支持 `/mnt/d/...` 和 `D:/...` 形式。 |
+| `--panel` | 可选，基础面板 parquet 或可信 pickle。 |
+| `--raw-cache` | 可选，原始缓存目录或 `manifest.sqlite`。 |
+| `--factor-store` | 可选，因子仓库目录或 `manifest.json`。 |
+| `--max-asset-size-mb` | 单个生成资产的大小上限，默认 1536 MiB。 |
+| `--label` | 可选的人类可读发布标签。 |
+| `--note` | 可重复写入 `manifest.json` 和 README 的说明。 |
+| `--dry-run` | 只预览计划资产，不写文件，不上传。 |
+| `--overwrite` | 允许替换 `--output-dir` 中已有的同名生成文件。 |
+| `--no-resume` | 关闭可恢复输出复用，已有文件需要 `--overwrite`。 |
+| `--progress` | 在 stderr 输出发布资产生成进度。 |
+| `--skip-space-check` | 跳过目标文件系统剩余空间预检。 |
+| `--github-repo` | GitHub 仓库，格式为 `OWNER/REPO`。 |
+| `--github-tag` | GitHub release tag。 |
+| `--upload` | 使用 GitHub CLI 上传生成资产。 |
+| `--create-release` | 上传前先用 GitHub CLI 创建 release。 |
+| `--release-title` | 创建 release 时使用的标题。 |
+| `--clobber` | 上传时传给 GitHub CLI 的覆盖参数。 |
+| `--format` | 输出 `text` 或 `json`。 |
+
+目录型输入会生成不压缩的 tar 分片；单个超限文件会拆成 `.partNNNofMMM`。命令默认只生成本地资产，只有显式传入 `--upload` 才会联网调用 GitHub CLI。
 
 ## `moneytrees-parquet-rewrite`
 

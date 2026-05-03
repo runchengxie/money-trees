@@ -139,6 +139,16 @@ uv run moneytrees-data-snapshot \
   --label cn_daily_raw
 ```
 
+生成 GitHub Releases 友好的数据发布资产：
+
+```bash
+uv run moneytrees-data-release \
+  --panel data/panel/cn/cn_daily_raw.parquet \
+  --factor-store data/factor_store/cn_daily \
+  --output-dir data/releases/cn_daily_raw \
+  --label cn_daily_raw
+```
+
 重写 parquet 或迁移可信 pickle：
 
 ```bash
@@ -156,6 +166,7 @@ pickle 只能读取可信文件；正常研究路径推荐 parquet。
 - [docs/data_contract.md](docs/data_contract.md): 标准面板索引、必需列、可选列、标签和特征口径。
 - [docs/data_status.md](docs/data_status.md): 原始缓存、基础面板、因子仓库和回测产物的只读状态检查。
 - [docs/data_snapshot.md](docs/data_snapshot.md): 基础面板、原始缓存和因子仓库的轻量元数据快照与校验码。
+- [docs/data_release.md](docs/data_release.md): 面板、原始缓存和因子仓库的 GitHub Releases 发布资产生成与上传。
 - [docs/configuration.md](docs/configuration.md): 配置文件分层、合并规则和常用字段。
 - [docs/cli_reference.md](docs/cli_reference.md): `moneytrees*` CLI、兼容别名和高风险参数索引。
 - [docs/outputs.md](docs/outputs.md): `metrics.json`、`run_config.json`、CSV 和留出验证产物说明。

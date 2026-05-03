@@ -31,6 +31,8 @@ def test_console_script_aliases_point_to_expected_entrypoints() -> None:
     assert scripts["moneytrees-data-status"] == "moneytree.cli.data_status:main"
     assert scripts["moneytree-data-snapshot"] == "moneytree.cli.data_snapshot:main"
     assert scripts["moneytrees-data-snapshot"] == "moneytree.cli.data_snapshot:main"
+    assert scripts["moneytree-data-release"] == "moneytree.cli.data_release:main"
+    assert scripts["moneytrees-data-release"] == "moneytree.cli.data_release:main"
     assert scripts["moneytree-dolphindb-alphas"] == "moneytree.cli.dolphindb_alphas:main"
     assert scripts["moneytrees-dolphindb-alphas"] == "moneytree.cli.dolphindb_alphas:main"
     assert scripts["moneytree-factor-store"] == "moneytree.cli.factor_store:main"
