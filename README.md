@@ -83,6 +83,10 @@ src/moneytree/   核心包、CLI、数据层、模型、组合和回测逻辑
 tests/           单元测试、CLI 冒烟测试和数据源测试
 ```
 
+## 相关项目
+
+[guan-random-forest-cross-sectional](https://github.com/runchengxie/guan-random-forest-cross-sectional) 是本项目思路的美股姊妹版。它用随机森林做截面选股，使用 SPY 作为基准，回测框架与本项目一致，两边可以互为参考。
+
 ## 当前边界
 
 - 市场层只有 `cn` 市场配置档，默认基准是 `000300.SH`，可交易过滤和基准净值口径见 [docs/data-contract.md](docs/data-contract.md)。
