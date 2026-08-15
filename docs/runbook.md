@@ -88,9 +88,9 @@ uv run moneytrees-data-status \
 
 Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年全市场面板。预期的收益列边界空值是：每个 ticker 第一条 `return_1d`、每个 ticker 最后一条 `next_period_return`、全局首日 `benchmark_return`、全局末日 `benchmark_next_period_return`。其他派生收益空值、复权列空值、`daily` 有行但 `adj_factor` 或 `daily_basic` 空分片，都需要先修复再进入正式实验或备份归档。
 
-5. 可选：离线生成外部 Alpha101/191。
+5. 可选：生成 Alpha101/191。
 
-Alpha101/191 需要先由 DolphinDB 外部生成路径生成后写入因子仓库。详细 WSL/Docker 和 DolphinDB 模块说明见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
+Alpha101/191 有两条生成路径：纯 Python 本地生成（`moneytrees-alpha101-191-python`，横截面语义，见 [classic-alphas-python.md](classic-alphas-python.md)）和 DolphinDB 外部生成（见 [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md)）。生产推荐 DolphinDB 外部路径，正式运行前先小样本对拍两条路径的口径。
 
 注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径；多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按因子族分开运行。
 
@@ -473,7 +473,7 @@ DolphinDB Alpha101/191 preflight failed
 - 使用 `docker-compose.alpha.yml` 时，确认该目录已挂载到 DolphinDB server 的 `/data/ddb/server/data/modules`。
 - 确认 `moneytreeAlpha.dos` 定义了 `calcMoneyTreeAlpha101(rawData, startTime, endTime)` 和 `calcMoneyTreeAlpha191(rawData, startTime, endTime)`，或者命令中传入了正确的 `--alpha101-function` / `--alpha191-function`。
 - 注意 `--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录元数据清单，不会改变 DolphinDB `use` 的模块名。
-- 先按 [使用 DolphinDB 生成 Alpha101/191](generate_alpha101_191_with_dolphindb.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式因子仓库。
+- 先按 [使用 DolphinDB 生成 Alpha101/191](generate-alpha101-191-with-dolphindb.md) 中的模块加载命令验证环境，再分阶段运行 `--alpha101`、`--alpha191`，最后同时写入正式因子仓库。
 
 ### Alpha101/191 输出列不完整
 

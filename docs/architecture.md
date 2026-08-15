@@ -43,7 +43,7 @@ configs/backtest/default.yaml
 - 将原始接口结果按 API 和交易日缓存为 parquet。
 - 通过因子仓库保存基础面板、本地因子、外部因子、分区文件和元数据清单。
 
-标准输入是 `date, ticker` 面板。上游数据可以先保留普通列，运行时会转成 MultiIndex。详细列契约见 [data_contract.md](data_contract.md)。
+标准输入是 `date, ticker` 面板。上游数据可以先保留普通列，运行时会转成 MultiIndex。详细列契约见 [data-contract.md](data-contract.md)。
 
 ## 市场层
 
@@ -76,7 +76,7 @@ configs/backtest/default.yaml
 - `src/moneytree/factors/catalog.py`
 - `src/moneytree/factors/evaluate.py`
 - `src/moneytree/cli/factor_store.py`
-- `docs/factor_catalog.csv`
+- `docs/factor-catalog.csv`
 
 职责：
 

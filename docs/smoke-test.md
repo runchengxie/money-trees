@@ -1,6 +1,6 @@
 # 冒烟测试
 
-本文给出最小本地回测路径，用来确认 A 股主链路可以跑通。完整数据契约见 [data_contract.md](data_contract.md)，常见研究任务见 [cookbook.md](cookbook.md)。
+本文给出最小本地回测路径，用来确认 A 股主链路可以跑通。完整数据契约见 [data-contract.md](data-contract.md)，常见研究任务见 [cookbook.md](cookbook.md)。
 
 ## 1. 安装依赖
 
@@ -112,6 +112,6 @@ uv run moneytrees \
 建议顺序：
 
 1. 按你的上游数据修改 `configs/market/cn.yaml`。
-2. 确认 [data_contract.md](data_contract.md) 的必需列都存在。
+2. 确认 [data-contract.md](data-contract.md) 的必需列都存在。
 3. 用 [cookbook.md](cookbook.md) 里的任务示例扩展数据、因子和模型。
 4. 按 [runbook.md](runbook.md) 做缓存、排障和归档检查。

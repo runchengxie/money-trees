@@ -1,19 +1,19 @@
 # 因子列级清单
 
-本页说明完整列级清单的使用方式。机器可读清单见 [factor_catalog.csv](factor_catalog.csv)，生成脚本见 `project_tools/generate_factor_catalog.py`。
+本页说明完整列级清单的使用方式。机器可读清单见 [factor-catalog.csv](factor-catalog.csv)，生成脚本见 `project_tools/generate_factor_catalog.py`。
 
 ## 覆盖范围
 
 | 因子家族 | 行数 | 维护方式 |
 | --- | ---: | --- |
-| Alpha101 / WQ101 | 101 | 标准列名、输入依赖和外部并入口径；逐条公式未内置。 |
-| Alpha191 / GTJA191 | 191 | 标准列名、输入依赖和外部并入口径；逐条公式未内置。 |
+| Alpha101 / WQ101 | 101 | 与 `moneytree.factors.classic.build_alpha101_features` 当前实现对齐，横截面 rank/scale 语义。 |
+| Alpha191 / GTJA191 | 191 | 与 `moneytree.factors.classic.build_alpha191_features` 当前实现对齐，横截面 rank/scale 语义。 |
 | Alpha158 local baseline | 158 | 与 `moneytree.factors.qlib.build_alpha158_features` 当前实现对齐，每行包含本地公式。 |
 | Alpha360 local baseline | 360 | 与 `moneytree.factors.qlib.build_alpha360_features` 当前实现对齐，每行包含本地公式。 |
 
-合计 810 行。Alpha101/191 的逐条公式不由 Python 本地因子函数维护；CSV 中对应行是 DolphinDB 外部生成路径的接入清单。
+合计 810 行。Alpha101/191 的逐条公式由 `src/moneytree/factors/classic.py` 的 Python 本地因子函数维护，使用横截面 rank/scale 语义（按交易日分组）。
 
-当前项目内可计算 Alpha158/360 共 518 个本地特征。Alpha101/191 共 292 个列由 DolphinDB 外部生成路径生成；本仓库包含 `docker/dolphindb/modules/` 下的模块和 Money Trees 包装模块，并维护标准列名、输入依赖、校验规则和并入口径。`add_factor_family_features()` 支持本地 Alpha158/360。推荐将外部 Alpha101/191 写入标准 `date, ticker` 面板或因子仓库，流程见 [generate_alpha101_191_with_dolphindb.md](generate_alpha101_191_with_dolphindb.md)。
+当前项目内可计算 Alpha101/191/158/360 共 810 个特征。Alpha101/191 有两条生成路径：纯 Python 本地生成（`moneytree.factors.classic`，横截面语义）和 DolphinDB 外部生成（`docker/dolphindb/modules/` 下的模块和 Money Trees 包装模块）。两条路径的 rank/scale、缺失值和处理语义不同，生产使用前应对拍确认。推荐把 Alpha101/191 写入标准 `date, ticker` 面板或因子仓库，流程分别见 [classic-alphas-python.md](classic-alphas-python.md) 和 [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md)。
 
 ## CSV 字段
 
@@ -34,9 +34,7 @@
 
 本地 Alpha158/360 默认 `adjusted=True`，价格类字段优先使用 `open_adj/high_adj/low_adj/close_adj/vwap_adj`，没有复权列时退回未复权字段。`volume` 始终使用原始成交量。
 
-Alpha101/191 行的 `formula_status` 是 `external_dolphindb_module`。这些行的 `formula_or_rule` 说明如何通过 DolphinDB 外部生成路径把值并入面板；Python 核心包不维护对应逐条公式函数。生产使用前应确认模块来源、授权和版本，并在生成命令中记录 module version。
-
-如果要把 Alpha101/191 的逐条公式也作为独立说明放进 CSV，需要先选定公式来源和授权口径，然后把 `formula_status` 改成类似 `documented_external_formula`，并在 `formula_source` 中记录具体来源和版本。
+Alpha101/191 行的 `formula_status` 是 `implemented_local`，`formula_source` 指向 `src/moneytree/factors/classic.py`。这些行的 `formula_or_rule` 说明该因子由 Python 本地生成；rank/scale 按交易日横截面计算，`ts_*` 滚动算子按股票时间序列计算。DolphinDB 外部生成路径仍然可用，两条路径的结果可能不同，正式生成前建议先做小样本对拍。
 
 Alpha158 的 `amount_ma_*` 依赖 `amount`；如果面板没有 `amount`，实现会用 `close * volume` 近似。Alpha360 的价格类 lag 使用 `shift(field, lag) / current_close - 1`，成交量 lag 使用 `shift(volume, lag) / current_volume - 1`。
 

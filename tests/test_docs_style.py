@@ -96,7 +96,7 @@ def test_dolphindb_module_docs_match_repository_files() -> None:
         "moneytreeAlpha.dos",
     }
     present = {path.name for path in module_dir.glob("*.dos")}
-    doc = (root / "docs" / "generate_alpha101_191_with_dolphindb.md").read_text(
+    doc = (root / "docs" / "generate-alpha101-191-with-dolphindb.md").read_text(
         encoding="utf-8"
     )
 
@@ -107,8 +107,8 @@ def test_dolphindb_module_docs_match_repository_files() -> None:
 
 def test_factor_catalog_external_status_matches_docs() -> None:
     root = Path(__file__).resolve().parents[1]
-    catalog_doc = (root / "docs" / "factor_catalog.md").read_text(encoding="utf-8")
-    catalog_path = root / "docs" / "factor_catalog.csv"
+    catalog_doc = (root / "docs" / "factor-catalog.md").read_text(encoding="utf-8")
+    catalog_path = root / "docs" / "factor-catalog.csv"
     with catalog_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
 
@@ -118,6 +118,7 @@ def test_factor_catalog_external_status_matches_docs() -> None:
         if row["family"] in {"alpha101", "alpha191"}
     }
 
-    assert alpha_statuses == {"external_dolphindb_module"}
-    assert "external_dolphindb_module" in catalog_doc
+    assert alpha_statuses == {"implemented_local"}
+    assert "src/moneytree/factors/classic.py" in catalog_doc
+    assert "DolphinDB" in catalog_doc
     assert "external_not_stored" not in catalog_doc

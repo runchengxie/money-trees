@@ -10,6 +10,8 @@
 | `moneytrees-tushare` | `moneytree-tushare` | 拉取 TuShare A 股日频数据，生成标准 `date, ticker` 面板。 |
 | `moneytrees-factor-store` | `moneytree-factor-store` | 从基础面板生成本地 Alpha158/360 因子仓库。 |
 | `moneytrees-dolphindb-alphas` | `moneytree-dolphindb-alphas` | 通过 DolphinDB 外部生成 Alpha101/191，写入因子仓库或兼容宽面板。 |
+| `moneytrees-alpha101-191-python` | `moneytree-alpha101-191-python` | 用纯 Python（横截面语义）本地生成 Alpha101/191，写入因子仓库或兼容宽面板。 |
+| `moneytrees-factor-mining` | `moneytree-factor-mining` | 用遗传算法在已有 Alpha 因子上挖掘新因子，输出训练适应度和留出 IC/ICIR/分位收益。 |
 | `moneytrees-data-status` | `moneytree-data-status` | 只读检查原始缓存、基础面板、因子仓库和回测产物。 |
 | `moneytrees-data-snapshot` | `moneytree-data-snapshot` | 生成基础面板、原始缓存和因子仓库的轻量元数据快照。 |
 | `moneytrees-data-release` | `moneytree-data-release` | 生成 GitHub Releases 友好的数据发布资产并可选上传。 |
@@ -83,6 +85,43 @@
 | `--stream-input` | parquet + `--no-wide-output` 路径的输入模式；`auto` 分窗口读取上传，`off` 使用旧的完整输入上传。 |
 | `--skip-memory-check` | 跳过输入内存预检；只在明确接受 OOM 风险时使用。 |
 | `--progress` | 输出分片写入进度。 |
+
+## `moneytrees-alpha101-191-python`
+
+| 参数 | 说明 |
+| --- | --- |
+| `--input` | Money Trees 标准面板 parquet 或可信 pickle。 |
+| `--output` | 兼容宽面板输出路径。 |
+| `--manifest-output` | 宽面板路径的元数据清单输出；默认写到 `<output>.factor_manifest.json`。 |
+| `--factor-store-output` | Alpha101/191 因子仓库输出目录。 |
+| `--no-wide-output` | 只写入因子仓库，不生成兼容宽面板。 |
+| `--family`, `--alpha101`, `--alpha191` | 选择要本地生成的 Alpha 因子族。 |
+| `--raw-price-fields` | 使用未复权价格字段；默认优先使用复权字段。 |
+| `--factor-dtype` | 输出因子列 dtype：`float32` 或 `float64`。 |
+| `--compression`, `--compression-level`, `--row-group-size` | 输出 parquet 写入参数。 |
+| `--chunk-trade-dates` | 因子仓库分片交易日数量。 |
+| `--overwrite` | 已存在同名外部因子族时强制重算。 |
+| `--progress` | 输出逐因子计算和分片写入进度。 |
+
+口径差异见 [classic-alphas-python.md](classic-alphas-python.md)。
+
+## `moneytrees-factor-mining`
+
+| 参数 | 说明 |
+| --- | --- |
+| `--data` | 标准面板 parquet/pickle 或因子仓库 `manifest.json`。 |
+| `--factor-prefixes` | 可重复传入的因子列前缀，作为 GP 终端集合。 |
+| `--factor-column` | 可重复传入的显式因子列名。 |
+| `--start-date`, `--end-date` | 训练窗口。 |
+| `--test-start-date`, `--test-end-date` | 留出验证窗口。 |
+| `--future-return-period` | 未来收益周期（交易日），默认 5。 |
+| `--pop-size`, `--max-gen`, `--max-depth` | 种群大小、最大进化代数、表达式树最大深度。 |
+| `--seed` | 随机种子。 |
+| `--complexity-penalty`, `--crossover-rate`, `--mutation-rate`, `--elitism-rate`, `--tournament-size` | GP 超参数。 |
+| `--neutralize` | 验证时对市值中性化后再计算分位收益。 |
+| `--output-dir` | 必填，写入 `mining_report.json` 和 `best_factor.txt`。 |
+
+用法见 [factor-mining.md](factor-mining.md)。
 
 ## `moneytrees-data-status`
 

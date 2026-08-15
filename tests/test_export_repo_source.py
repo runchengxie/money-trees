@@ -18,7 +18,7 @@ def test_export_repo_source_includes_configs_directory() -> None:
 
 def test_export_repo_source_includes_factor_catalog_csv() -> None:
     include, reason = get_archive_file_status(
-        PROJECT_ROOT / "docs" / "factor_catalog.csv",
+        PROJECT_ROOT / "docs" / "factor-catalog.csv",
         set(EXCLUDE_FILES),
     )
 
@@ -27,7 +27,7 @@ def test_export_repo_source_includes_factor_catalog_csv() -> None:
 
 
 def test_export_repo_source_includes_factor_catalog_csv_under_custom_root(tmp_path: Path) -> None:
-    catalog_path = tmp_path / "docs" / "factor_catalog.csv"
+    catalog_path = tmp_path / "docs" / "factor-catalog.csv"
     catalog_path.parent.mkdir(parents=True)
     catalog_path.write_text("family,column\n", encoding="utf-8")
 

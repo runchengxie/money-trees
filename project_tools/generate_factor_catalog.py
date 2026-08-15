@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = ROOT / "docs" / "factor_catalog.csv"
+OUTPUT_PATH = ROOT / "docs" / "factor-catalog.csv"
 
 FIELDNAMES = [
     "family",
@@ -20,54 +20,57 @@ FIELDNAMES = [
 ]
 
 
-def _external_alpha101_rows() -> list[dict[str, str]]:
+def _classic_alpha101_rows() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for idx in range(1, 102):
         rows.append(
             {
                 "family": "alpha101",
                 "column": f"alpha101_{idx:03d}",
-                "group": "external_formula",
+                "group": "classic_formula",
                 "count_scope": "101",
-                "input_fields": "open, high, low, close, volume, vwap, cap, indclass",
-                "formula_status": "external_dolphindb_module",
-                "formula_source": "DolphinDB WQ101 module path",
+                "input_fields": "open, high, low, close, volume, vwap, returns",
+                "formula_status": "implemented_local",
+                "formula_source": "src/moneytree/factors/classic.py",
                 "formula_or_rule": (
-                    f"Generate WQAlpha{idx} through the DolphinDB external-alpha module "
-                    "path and merge the value into this column."
+                    f"WQAlpha{idx} implemented in Python with cross-sectional "
+                    "rank/scale (grouped by trade date)."
                 ),
-                "generation": "external",
+                "generation": "moneytree.factors.classic.build_alpha101_features",
                 "notes": (
-                    "Python core does not maintain this formula as a local factor builder. "
-                    "Verify module source, authorization, version, and point-in-time industry "
-                    "and market-cap inputs before production use."
+                    "Ported from the wu-alpha191-alpha101 reference repository with "
+                    "cross-sectional rank/scale semantics. The DolphinDB external path "
+                    "remains an alternative generation route with different rank/scale and "
+                    "missing-value semantics; compare outputs before production use."
                 ),
             }
         )
     return rows
 
 
-def _external_alpha191_rows() -> list[dict[str, str]]:
+def _classic_alpha191_rows() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for idx in range(1, 192):
         rows.append(
             {
                 "family": "alpha191",
                 "column": f"alpha191_{idx:03d}",
-                "group": "external_formula",
+                "group": "classic_formula",
                 "count_scope": "191",
-                "input_fields": "open, high, low, close, volume, vwap, index_open, index_close",
-                "formula_status": "external_dolphindb_module",
-                "formula_source": "DolphinDB GTJA191 module path",
+                "input_fields": "open, high, low, close, volume, vwap, returns, amount, turnover_rate",
+                "formula_status": "implemented_local",
+                "formula_source": "src/moneytree/factors/classic.py",
                 "formula_or_rule": (
-                    f"Generate GTJA Alpha{idx} through the DolphinDB external-alpha module "
-                    "path and merge the value into this column."
+                    f"GTJA Alpha{idx} implemented in Python with cross-sectional "
+                    "rank/scale (grouped by trade date)."
                 ),
-                "generation": "external",
+                "generation": "moneytree.factors.classic.build_alpha191_features",
                 "notes": (
-                    "Python core does not maintain this formula as a local factor builder. "
-                    "Verify module source, authorization, version, SMA, DECAYLINEAR, suspension, "
-                    "limit-hit, and missing-value semantics before production use."
+                    "Ported from the wu-alpha191-alpha101 reference repository with "
+                    "cross-sectional rank/scale semantics. The DolphinDB external path "
+                    "remains an alternative generation route with different SMA, DECAYLINEAR, "
+                    "suspension, limit-hit, and missing-value semantics; compare outputs "
+                    "before production use."
                 ),
             }
         )
@@ -293,8 +296,8 @@ def _alpha360_rows() -> list[dict[str, str]]:
 
 def build_rows() -> list[dict[str, str]]:
     rows = [
-        *_external_alpha101_rows(),
-        *_external_alpha191_rows(),
+        *_classic_alpha101_rows(),
+        *_classic_alpha191_rows(),
         *_alpha158_rows(),
         *_alpha360_rows(),
     ]

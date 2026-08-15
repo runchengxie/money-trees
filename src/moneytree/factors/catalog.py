@@ -17,23 +17,31 @@ FACTOR_FAMILIES: dict[str, FactorFamily] = {
     "alpha101": FactorFamily(
         family_id="alpha101",
         display_name="WorldQuant 101 Formulaic Alphas",
-        source="Kakushadze, 101 Formulaic Alphas; DolphinDB wq101alpha; third-party Python ports.",
-        local_generation="external",
-        required_inputs=("open", "high", "low", "close", "volume", "vwap", "cap", "indclass"),
+        source=(
+            "Kakushadze, 101 Formulaic Alphas; DolphinDB wq101alpha; "
+            "src/moneytree/factors/classic.py local port."
+        ),
+        local_generation="moneytree.factors.classic.build_alpha101_features",
+        required_inputs=("open", "high", "low", "close", "volume", "vwap"),
         notes=(
             "Money Trees expects generated alpha columns to be merged into the daily panel. "
-            "Industry-aware factors need point-in-time industry and market-cap inputs."
+            "The local Python port uses cross-sectional rank/scale (grouped by trade date); "
+            "industry-aware factors need point-in-time industry and market-cap inputs."
         ),
     ),
     "alpha191": FactorFamily(
         family_id="alpha191",
         display_name="GTJA 191 Alpha",
-        source="GTJA 2017 short-horizon price-volume factor report; DolphinDB gtja191Alpha.",
-        local_generation="external",
-        required_inputs=("open", "high", "low", "close", "volume", "vwap", "index_open", "index_close"),
+        source=(
+            "GTJA 2017 short-horizon price-volume factor report; DolphinDB gtja191Alpha; "
+            "src/moneytree/factors/classic.py local port."
+        ),
+        local_generation="moneytree.factors.classic.build_alpha191_features",
+        required_inputs=("open", "high", "low", "close", "volume", "vwap"),
         notes=(
             "Money Trees expects generated alpha columns to be merged into the daily panel. "
-            "Some formulas use benchmark index open/close series."
+            "The local Python port uses cross-sectional rank/scale (grouped by trade date); "
+            "some formulas use benchmark index open/close series."
         ),
     ),
     "alpha158": FactorFamily(

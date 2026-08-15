@@ -1,4 +1,9 @@
 from moneytree.factors.catalog import FactorFamily, get_factor_family, list_factor_families
+from moneytree.factors.classic import (
+    build_alpha101_features,
+    build_alpha191_features,
+    build_classic_alpha_features,
+)
 from moneytree.factors.evaluate import compute_factor_ic, summarize_factor_ic
 from moneytree.factors.external import (
     ExternalAlphaError,
@@ -16,6 +21,15 @@ from moneytree.factors.external import (
     validate_external_alpha_columns,
     write_external_alpha_manifest,
 )
+from moneytree.factors.mining import (
+    build_terminals,
+    evaluate_expression,
+    fitness_function,
+    prepare_mining_data,
+    resolve_factor_names,
+    run_mining,
+    tree_to_formula,
+)
 from moneytree.factors.qlib import (
     add_factor_family_features,
     build_alpha158_features,
@@ -29,19 +43,29 @@ __all__ = [
     "ExternalAlphaValidationError",
     "UnsupportedExternalAlphaFamilyError",
     "add_factor_family_features",
-    "build_dolphindb_input",
+    "build_alpha101_features",
     "build_alpha158_features",
+    "build_alpha191_features",
     "build_alpha360_features",
+    "build_classic_alpha_features",
+    "build_dolphindb_input",
     "build_external_alpha_manifest",
+    "build_terminals",
     "compute_factor_ic",
+    "evaluate_expression",
     "external_alpha_columns",
+    "fitness_function",
     "get_factor_family",
     "list_factor_families",
     "merge_external_alpha_columns",
     "normalize_external_families",
     "normalize_external_family",
+    "prepare_mining_data",
     "requested_external_alpha_columns",
+    "resolve_factor_names",
+    "run_mining",
     "summarize_factor_ic",
+    "tree_to_formula",
     "validate_date_ticker_keys",
     "validate_external_alpha_columns",
     "write_external_alpha_manifest",

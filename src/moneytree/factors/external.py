@@ -378,9 +378,11 @@ def build_external_alpha_manifest(
     families: Iterable[str],
     field_mapping: dict[str, Any],
     validation: dict[str, Any],
-    dolphindb: dict[str, Any],
+    dolphindb: dict[str, Any] | None = None,
     module_versions: dict[str, Any] | None = None,
     generated_at_utc: str | None = None,
+    factor_source: str = "dolphindb",
+    source_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_families = normalize_external_families(families)
     generated_at = generated_at_utc or datetime.now(timezone.utc).isoformat()
@@ -388,7 +390,7 @@ def build_external_alpha_manifest(
 
     manifest = {
         "manifest_schema_version": EXTERNAL_ALPHA_MANIFEST_SCHEMA_VERSION,
-        "factor_source": "dolphindb",
+        "factor_source": factor_source,
         "generated_at_utc": generated_at,
         "families": normalized_families,
         "generated_columns": {
@@ -400,12 +402,14 @@ def build_external_alpha_manifest(
             "input": dataframe_metadata(normalize_date_ticker_frame(input_frame, "input panel")),
             "output": dataframe_metadata(output_frame),
         },
-        "dolphindb": sanitize_manifest_metadata(dolphindb),
+        "dolphindb": sanitize_manifest_metadata(dolphindb or {}),
         "module_versions": sanitize_manifest_metadata(module_versions),
         "field_mapping": sanitize_manifest_metadata(field_mapping),
         "validation": sanitize_manifest_metadata(validation),
         "runtime": runtime_metadata(),
     }
+    if source_metadata:
+        manifest["source_metadata"] = sanitize_manifest_metadata(source_metadata)
     return sanitize_manifest_metadata(manifest)
 
 

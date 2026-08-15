@@ -4,7 +4,7 @@
 
 `money-trees` / Money Trees is an A-share classic-alpha cross-sectional equity research and backtesting toolkit. The current built-in market profile is `cn`. The Python import package remains `moneytree`; prefer the `moneytrees` CLI in new docs while keeping `moneytree` aliases compatible.
 
-The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column standard. Alpha158/360 are 518 locally generated features. Alpha101/191 are 292 externally generated columns written to the factor store or merged into the canonical `date, ticker` panel. The repository includes DolphinDB module files under `docker/dolphindb/modules/` for the external-alpha path; the Python core package still does not calculate Alpha101/191 inside the backtest loop.
+The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column standard. Alpha158/360 are 518 locally generated features. Alpha101/191 are 292 columns with two generation paths: the pure-Python cross-sectional engine in `src/moneytree/factors/classic.py` (rank/scale grouped by trade date, ported from the archived `wu-alpha191-alpha101` repository) and the DolphinDB external-alpha path in `docker/dolphindb/modules/`. Both write to the factor store or merge into the canonical `date, ticker` panel; the Python core package does not calculate Alpha101/191 inside the backtest loop.
 
 ## Commands
 
@@ -15,6 +15,7 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Run CLI smoke: `uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py`
 - Run TuShare data-source tests: `uv run pytest -q tests/test_tushare_data_source.py`
 - Run DolphinDB external-alpha tests: `uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py`
+- Run classic Python Alpha101/191 and mining tests: `uv run pytest -q tests/test_classic_alphas.py tests/test_mining.py`
 - Run data status/snapshot tests: `uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py`
 - Run factor store tests: `uv run pytest -q tests/test_factor_store.py`
 - Run parquet rewrite tests: `uv run pytest -q tests/test_parquet_rewrite_cli.py`
@@ -27,6 +28,8 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Backtest CLI: `src/moneytree/cli/backtest.py`
 - TuShare CLI: `src/moneytree/cli/tushare.py`
 - DolphinDB external Alpha CLI: `src/moneytree/cli/dolphindb_alphas.py`
+- Classic Python Alpha101/191 CLI: `src/moneytree/cli/classic_alphas.py`
+- GP factor mining CLI: `src/moneytree/cli/mining.py`
 - Data status CLI: `src/moneytree/cli/data_status.py`
 - Data snapshot CLI: `src/moneytree/cli/data_snapshot.py`
 - Factor store CLI: `src/moneytree/cli/factor_store.py`
@@ -46,6 +49,7 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - Add or update tests when changing data contracts, output files, model adapters, portfolio logic, config parsing, or TuShare cache behavior.
 - Preserve optional dependency behavior: XGBoost, TuShare, DolphinDB, and Optuna should fail with clear messages when their extras are not installed.
 - Keep DolphinDB out of core dependencies. Alpha101/191 production must remain an external-alpha path with manifest validation.
+- Keep the classic Python Alpha101/191 engine (`factors/classic.py`) consistent with the archived `wu-alpha191-alpha101` reference but with cross-sectional rank/scale semantics; do not reintroduce per-ticker time-series rank.
 - Keep `docker/dolphindb/modules/*.dos` documented as repository-provided external-alpha modules/wrappers. Production docs should tell users to verify source, authorization, version, and module-version metadata before use.
 - Document memory behavior for full-market `moneytrees-dolphindb-alphas`: parquet `--no-wide-output` defaults to `--stream-input auto`, which reads/uploads each target plus warmup window separately. Legacy full-input upload remains available with `--stream-input off` or wide output and can OOM on constrained machines.
 - Treat `configs/preset/legacy_notebook_compat.yaml` as a legacy reproduction preset, not the default research path.

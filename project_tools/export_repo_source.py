@@ -112,7 +112,7 @@ EXCLUDE_FILES: set[str] = {
 
 
 TEXT_ASSET_ALLOWLIST: set[Path] = {
-    Path("docs/factor_catalog.csv"),
+    Path("docs/factor-catalog.csv"),
 }
 
 

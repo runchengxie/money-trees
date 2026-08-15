@@ -34,6 +34,12 @@ uv run pytest -q tests/test_tushare_data_source.py
 uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py
 ```
 
+只跑经典 Alpha101/191 本地生成和因子挖掘：
+
+```bash
+uv run pytest -q tests/test_classic_alphas.py tests/test_mining.py
+```
+
 只跑组合和回测核心：
 
 ```bash
@@ -61,6 +67,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_backtest.py` | 滚动窗口、绩效指标、基准净值口径、缺失特征策略、组合诊断、Notebook 报告数据和样本外结果序列。 |
 | `tests/test_backtest_cli.py` | CLI 配置栈、`--set` 覆盖、默认配置、留出验证、输出文件、run config 元数据和错误参数。 |
 | `tests/test_build_dolphindb_alphas_script.py` | DolphinDB Alpha101/191 CLI、兼容入口、元数据清单脱敏和可选依赖报错。 |
+| `tests/test_classic_alphas.py` | 纯 Python Alpha101/191 本地生成：列契约、横截面 rank 语义、CLI 宽面板和因子仓库输出。 |
 | `tests/test_container_runtime.py` | Dockerfile、`.dockerignore`、DolphinDB compose 和 runtime 输出隔离。 |
 | `tests/test_convert_pickle_to_parquet_script.py` | 可信 pickle 到 parquet 的 deprecated 兼容迁移脚本和迁移提示。 |
 | `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
@@ -76,6 +83,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_factor_store.py` | 本地因子仓库、外部因子仓库、元数据清单、分区、压缩、覆盖和选择加载。 |
 | `tests/test_factors.py` | Alpha158/360 列数、本地因子追加、因子 IC、因子目录元数据和 internal factor ops 状态。 |
 | `tests/test_model.py` | 随机森林调参、时间序列 CV、特征选择、Optuna 可选依赖和 legacy notebook 兼容路径。 |
+| `tests/test_mining.py` | GP 因子挖掘：终端解析、表达式工具、适应度、报告输出和 CLI 冒烟。 |
 | `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
 | `tests/test_package_script.py` | `project_tools/package.sh` 输出目录、运行数据包含策略、source-only 模式和压缩格式。 |
 | `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |

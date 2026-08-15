@@ -4,16 +4,16 @@
 
 ## 当前边界
 
-`docs/factor_catalog.csv` 覆盖 810 个因子列名：
+`docs/factor-catalog.csv` 覆盖 810 个因子列名：
 
 | 因子族 | 数量 | 项目内计算状态 |
 | --- | ---: | --- |
-| Alpha101 | 101 | 外部生成后写入因子仓库，或兼容并入宽面板 |
-| Alpha191 | 191 | 外部生成后写入因子仓库，或兼容并入宽面板 |
+| Alpha101 | 101 | 本地 `build_alpha101_features` 生成，或 DolphinDB 外部生成后并入 |
+| Alpha191 | 191 | 本地 `build_alpha191_features` 生成，或 DolphinDB 外部生成后并入 |
 | Alpha158 | 158 | 本地 `build_alpha158_features` 生成 |
 | Alpha360 | 360 | 本地 `build_alpha360_features` 生成 |
 
-也就是说，当前本地可计算特征是 Alpha158/360 共 518 个。Alpha101/191 共 292 个列属于外部生成契约；仓库提供 DolphinDB 模块路径和包装模块，Python 核心包不在回测过程中实时计算这些公式。
+也就是说，810 个因子都有项目内计算路径：Alpha158/360 由 `qlib.py` 本地生成，Alpha101/191 由 `classic.py` 纯 Python 本地生成（横截面语义，见 [classic-alphas-python.md](classic-alphas-python.md)），也可以继续走本文的 DolphinDB 外部生成契约。DolphinDB 路径的 rank/scale、缺失值、SMA/DECAYLINEAR 语义与本地路径可能不同，正式使用前建议小样本对拍。
 
 推荐数据流：
 

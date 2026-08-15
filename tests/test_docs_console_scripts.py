@@ -41,6 +41,16 @@ HIGH_RISK_FLAGS = {
         "--skip-memory-check",
         "--overwrite",
     ],
+    "moneytrees-alpha101-191-python": [
+        "--factor-store-output",
+        "--no-wide-output",
+        "--manifest-output",
+        "--overwrite",
+    ],
+    "moneytrees-factor-mining": [
+        "--output-dir",
+        "--neutralize",
+    ],
     "moneytrees-data-status": [
         "--raw-cache",
         "--factor-store",

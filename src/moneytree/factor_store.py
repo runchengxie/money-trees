@@ -1672,6 +1672,7 @@ def write_external_factor_store(
     row_group_size: int | None = None,
     overwrite: bool = False,
     show_progress: bool = False,
+    source: str = "dolphindb",
 ) -> dict[str, Any]:
     """Write precomputed external Alpha101/191 families into a factor store."""
     requested_families = _normalize_families(families)
@@ -1748,7 +1749,7 @@ def write_external_factor_store(
             compression_level=compression_level,
             row_group_size=row_group_size,
             show_progress=show_progress,
-            source="dolphindb",
+            source=source,
         )
         generated.append(family)
 
@@ -1776,9 +1777,9 @@ def write_external_factor_store(
                 {
                     "families_requested": list(requested_families),
                     "families_generated": generated,
-                    "families_skipped": skipped,
-                    "source": "dolphindb",
-                    "chunk_trade_dates": int(chunk_trade_dates),
+                "families_skipped": skipped,
+                "source": source,
+                "chunk_trade_dates": int(chunk_trade_dates),
                     "compression": compression,
                     "compression_level": compression_level,
                     "row_group_size": row_group_size,

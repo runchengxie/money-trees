@@ -81,12 +81,12 @@ def test_factor_ic_summary() -> None:
 
 
 def test_factor_catalog_describes_external_and_local_generation() -> None:
-    assert get_factor_family("alpha101").local_generation == "external"
+    assert "build_alpha101_features" in get_factor_family("alpha101").local_generation
     assert "build_alpha158_features" in get_factor_family("alpha158").local_generation
 
 
 def test_factor_catalog_csv_is_generated_and_formula_status_is_explicit() -> None:
-    catalog_path = Path(__file__).resolve().parents[1] / "docs" / "factor_catalog.csv"
+    catalog_path = Path(__file__).resolve().parents[1] / "docs" / "factor-catalog.csv"
     with catalog_path.open(newline="", encoding="utf-8") as handle:
         csv_rows = list(csv.DictReader(handle))
 
@@ -100,8 +100,9 @@ def test_factor_catalog_csv_is_generated_and_formula_status_is_explicit() -> Non
     alpha158 = next(row for row in csv_rows if row["column"] == "alpha158_kmid")
     alpha360 = next(row for row in csv_rows if row["column"] == "alpha360_volume_lag59")
 
-    assert alpha101["formula_status"] == "external_dolphindb_module"
-    assert "Generate WQAlpha1" in alpha101["formula_or_rule"]
+    assert alpha101["formula_status"] == "implemented_local"
+    assert "WQAlpha1" in alpha101["formula_or_rule"]
+    assert "src/moneytree/factors/classic.py" in alpha101["formula_source"]
     assert alpha158["formula_status"] == "implemented_local"
     assert alpha158["formula_or_rule"] == "(close - open) / open"
     assert alpha360["formula_status"] == "implemented_local"
