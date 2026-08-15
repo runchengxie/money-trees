@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SCRIPT = PROJECT_ROOT / "project_tools" / "package.sh"
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="package.sh is a POSIX shell script and is not exercised on Windows",
+)
 
 
 def _copy_package_script(repo: Path) -> Path:

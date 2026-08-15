@@ -310,8 +310,8 @@ def load_backtest_settings(
         holdout_end=str(holdout.get("end", "")),
         holdout_model_segment=str(holdout.get("model_segment", "segment_b")),
         export_parquet=str(output.get("export_parquet", "")),
-        config_path=str(resolved_paths[-1]),
-        config_paths=[str(path) for path in resolved_paths],
+        config_path=resolved_paths[-1].as_posix(),
+        config_paths=[path.as_posix() for path in resolved_paths],
         resolved_config=_deep_copy_dict(mapping),
     )
     return settings

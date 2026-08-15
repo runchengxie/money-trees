@@ -114,9 +114,9 @@ def _expected_external_family_columns(family: str) -> list[str]:
 
 def _relative_path(base_dir: Path, path: Path) -> str:
     try:
-        return str(path.relative_to(base_dir))
+        return path.relative_to(base_dir).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 def _resolve_store_path(root: Path, raw_path: str | Path) -> Path:

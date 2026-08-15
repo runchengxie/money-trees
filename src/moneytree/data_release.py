@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import platform
 import re
 import shutil
 import subprocess
@@ -113,11 +114,26 @@ class _ProgressFileReader:
         return chunk
 
 
+def _is_wsl() -> bool:
+    """Return True when running inside Windows Subsystem for Linux."""
+    try:
+        return "microsoft" in platform.uname().release.lower()
+    except Exception:
+        return False
+
+
 def resolve_release_output_dir(path: str | Path) -> Path:
-    """Resolve native WSL mount paths from Windows-style drive paths."""
+    """Resolve a release output directory for the current platform.
+
+    Inside WSL a Windows-style drive path is mapped to its native mount path,
+    for example ``C:\\releases`` becomes ``/mnt/c/releases``. On native Windows
+    the path is kept unchanged.
+    """
     raw = str(path)
     match = _WINDOWS_DRIVE_RE.match(raw)
     if not match:
+        return Path(path).expanduser()
+    if not _is_wsl():
         return Path(path).expanduser()
 
     drive = match.group(1).lower()

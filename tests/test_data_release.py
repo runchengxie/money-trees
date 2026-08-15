@@ -156,12 +156,22 @@ def test_data_release_cli_progress_outputs_stderr(tmp_path, capsys) -> None:
 
 
 def test_resolve_release_output_dir_supports_windows_drive_paths() -> None:
-    expected = resolve_release_output_dir("/mnt/d/money-tree/releases")
-    assert resolve_release_output_dir("D:/money-tree/releases") == expected
-    assert expected.as_posix() == "/mnt/d/money-tree/releases"
-    assert resolve_release_output_dir(r"E:\release assets\cn").as_posix() == (
-        "/mnt/e/release assets/cn"
-    )
+    from moneytree.data_release import _is_wsl
+
+    if _is_wsl():
+        assert resolve_release_output_dir("D:/money-tree/releases").as_posix() == (
+            "/mnt/d/money-tree/releases"
+        )
+        assert resolve_release_output_dir(r"E:\release assets\cn").as_posix() == (
+            "/mnt/e/release assets/cn"
+        )
+    else:
+        assert resolve_release_output_dir("D:/money-tree/releases").as_posix() == (
+            "D:/money-tree/releases"
+        )
+        assert resolve_release_output_dir(r"E:\release assets\cn").as_posix() == (
+            "E:/release assets/cn"
+        )
 
 
 def test_data_release_refuses_env_files(tmp_path, capsys) -> None:

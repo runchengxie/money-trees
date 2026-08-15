@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import sys
 
 import numpy as np
 import pandas as pd
@@ -148,7 +149,10 @@ def test_standardize_tushare_local_factors_can_keep_float64() -> None:
 
 
 def test_resolve_tushare_token_reads_env_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    from moneytree.data_sources.tushare import TOKEN_ENV_NAMES
+
+    for name in TOKEN_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
     env_path = tmp_path / ".env"
     env_path.write_text("TUSHARE_TOKEN=abc123\n", encoding="utf-8")
 
@@ -280,10 +284,18 @@ def test_call_api_defaults_to_direct_proxy_mode(monkeypatch: pytest.MonkeyPatch)
     ):
         assert pro.seen[name] is None
         assert os.environ[name] == proxy_url
-    assert pro.seen["NO_PROXY"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
-    assert pro.seen["no_proxy"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
-    assert os.environ["NO_PROXY"] == "localhost"
-    assert os.environ["no_proxy"] == "127.0.0.1"
+    if sys.platform == "win32":
+        # Windows environment variables are case-insensitive, so setting
+        # no_proxy overwrites NO_PROXY and both carry the same value.
+        assert pro.seen["NO_PROXY"] == "127.0.0.1,api.waditu.com,waditu.com"
+        assert pro.seen["no_proxy"] == "127.0.0.1,api.waditu.com,waditu.com"
+        assert os.environ["NO_PROXY"] == "127.0.0.1"
+        assert os.environ["no_proxy"] == "127.0.0.1"
+    else:
+        assert pro.seen["NO_PROXY"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
+        assert pro.seen["no_proxy"] == "localhost,127.0.0.1,api.waditu.com,waditu.com"
+        assert os.environ["NO_PROXY"] == "localhost"
+        assert os.environ["no_proxy"] == "127.0.0.1"
 
 
 def test_call_api_proxy_mode_uses_explicit_proxy(monkeypatch: pytest.MonkeyPatch) -> None:

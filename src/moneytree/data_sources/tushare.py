@@ -380,9 +380,9 @@ def _recent_trade_dates(trade_dates: list[str], refresh_recent_days: int) -> set
 
 def _relative_cache_path(cache_dir: Path, cache_path: Path) -> str:
     try:
-        return str(cache_path.relative_to(cache_dir))
+        return cache_path.relative_to(cache_dir).as_posix()
     except ValueError:
-        return str(cache_path)
+        return cache_path.as_posix()
 
 
 def _ensure_raw_cache_table(conn: sqlite3.Connection) -> None:
