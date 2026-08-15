@@ -7,7 +7,7 @@
 ```text
 TuShare / 外部日频数据
 -> 标准 date,ticker 面板
--> 外部 Alpha101/191 或本地 Alpha158/360 特征
+-> Alpha101/191（本地或外部）和本地 Alpha158/360 特征
 -> feature_lag_periods 控制特征可见时间
 -> 分类或回归模型生成 score
 -> cn 市场配置档做可交易过滤
@@ -45,7 +45,7 @@ rel_performance in {-1, 0, 1}
 
 ## 列名和清单
 
-机器可读清单见 [factor-catalog.csv](factor-catalog.csv)，说明文档见 [factor-catalog.md](factor-catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`；Alpha158/360 行给出本地公式，Alpha101/191 行给出 Python 本地公式和两条生成路径。
+机器可读清单见 [factor-catalog.csv](factor-catalog.csv)，说明文档见 [factor-catalog.md](factor-catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`。Alpha158/360 行给出本地公式，Alpha101/191 行给出 Python 本地公式和两条生成路径。
 
 | 因子/字段组 | 列名规则 | 数量 | 输入口径 | 生成方式 |
 | --- | --- | ---: | --- | --- |
@@ -165,7 +165,7 @@ print(summary)
 
 ## 研究边界
 
-- Alpha101/191 有纯 Python 本地生成和 DolphinDB 外部生成两条路径，接入前需要固定口径（rank/scale 语义、复权、缺失值和模块版本），并对拍确认。本地路径适合轻量研究和教学；大规模生产仍推荐 DolphinDB 外部路径。
+- Alpha101/191 有纯 Python 本地生成和 DolphinDB 外部生成两条路径，接入前需要固定口径（rank/scale 语义、复权、缺失值和模块版本），并对拍确认。本地路径适合轻量研究和教学。大规模生产仍推荐 DolphinDB 外部路径。
 - TuShare 拉取层提供研究数据骨架，历史 ST、历史行业归属、退市股票完整样本和幸存者偏差需要上游治理。
-- 本地 Alpha158/360 是日频 ML 特征基线；严格复现 Qlib 时应使用 Qlib 原生 handler 生成特征。
+- 本地 Alpha158/360 是日频 ML 特征基线。严格复现 Qlib 时应使用 Qlib 原生 handler 生成特征。
 - 默认 `feature_lag_periods=1`，表示 T 日收盘后可见的特征信号滞后一日使用。

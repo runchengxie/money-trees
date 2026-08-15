@@ -58,7 +58,7 @@ uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/tes
 uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
 ```
 
-文档 guard 测试覆盖测试文件登记、console script 名称、README 文档导航、内部 Markdown 链接、部分文风规则、核心术语反向检查、CLI 高风险参数覆盖和因子目录状态一致性。它们不会逐条执行 README 或 docs 中的完整命令示例；涉及 TuShare token、DolphinDB server、大型数据文件或长时间运行的命令仍需按运行手册单独验证。
+文档 guard 测试覆盖测试文件登记、console script 名称、README 文档导航、内部 Markdown 链接、部分文风规则、核心术语反向检查、CLI 高风险参数覆盖和因子目录状态一致性。它们不会逐条执行 README 或 docs 中的完整命令示例。涉及 TuShare token、DolphinDB server、大型数据文件或长时间运行的命令仍需按运行手册单独验证。
 
 ## 当前覆盖
 
@@ -101,7 +101,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 uv sync --dev
 ```
 
-XGBoost 相关测试会验证缺依赖时报错清晰；如果当前环境已经安装 `xgboost`，缺依赖断言会跳过。需要真实运行 XGBoost 模型时：
+XGBoost 相关测试会验证缺依赖时报错清晰。如果当前环境已经安装 `xgboost`，缺依赖断言会跳过。需要真实运行 XGBoost 模型时：
 
 ```bash
 uv sync --dev --extra xgboost

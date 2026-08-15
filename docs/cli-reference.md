@@ -1,6 +1,6 @@
 # CLI 参考
 
-本文汇总 Money Trees 当前 console scripts 和高风险参数。示例优先使用 `moneytrees*` 命令；`moneytree*` 同名别名仍保留，用于兼容旧脚本。
+本文汇总 Money Trees 当前 console scripts 和高风险参数。示例优先使用 `moneytrees*` 命令。`moneytree*` 同名别名仍保留，用于兼容旧脚本。
 
 ## 命令和别名
 
@@ -21,7 +21,7 @@
 
 | 参数 | 说明 |
 | --- | --- |
-| `--config` | 可重复传入配置文件；后传入的配置覆盖先传入的配置。 |
+| `--config` | 可重复传入配置文件。后传入的配置覆盖先传入的配置。 |
 | `--data` | 覆盖配置中的数据入口，可指向标准面板或因子仓库 `manifest.json`。 |
 | `--output-dir` | 覆盖回测产物输出目录。 |
 | `--set` | 可重复传入 `dotted.path=value` 覆盖项。 |
@@ -33,14 +33,14 @@
 | `--start-date`, `--end-date` | 拉取日期范围，支持 `YYYYMMDD` 或 `YYYY-MM-DD`。 |
 | `--output` | 输出标准面板 parquet。 |
 | `--benchmark` | 基准指数代码，默认 `000300.SH`。 |
-| `--tickers` | 逗号分隔的股票代码；为空时使用 TuShare 返回的全部日频股票。 |
+| `--tickers` | 逗号分隔的股票代码。为空时使用 TuShare 返回的全部日频股票。 |
 | `--factor-family` | 可重复传入 `alpha158` 或 `alpha360`，在输出面板中追加本地因子。 |
 | `--cache-dir` | 原始缓存目录，按接口和交易日分区保存。 |
 | `--cache-compression`, `--cache-compression-level`, `--cache-row-group-size` | 原始缓存 parquet 写入参数。 |
 | `--refresh-cache` | 忽略已有原始缓存并重写。 |
 | `--refresh-recent-days` | 缓存模式下强制刷新最近 N 个交易日。 |
-| `--proxy-mode`, `--proxy-url`, `--no-fallback-direct` | TuShare 代理控制；`direct` 忽略 shell proxy 环境变量，`env` 使用环境变量，`proxy` 使用 `--proxy-url`。 |
-| `--request-interval-seconds` | 真实 TuShare API 请求之间的最小间隔；缓存命中不等待。 |
+| `--proxy-mode`, `--proxy-url`, `--no-fallback-direct` | TuShare 代理控制。`direct` 忽略 shell proxy 环境变量，`env` 使用环境变量，`proxy` 使用 `--proxy-url`。 |
+| `--request-interval-seconds` | 真实 TuShare API 请求之间的最小间隔。缓存命中不等待。 |
 | `--rate-limit-retries`, `--rate-limit-wait-seconds` | TuShare 限流错误后的重试次数和等待秒数。 |
 | `--sanity-check` | 标准化后数据质量检查模式：`off`、`warn` 或 `error`。 |
 | `--complete-calendar` | 重建交易日 x 股票代码完整网格，并把缺价行标记为停牌。 |
@@ -69,21 +69,21 @@
 | --- | --- |
 | `--input` | Money Trees 标准面板 parquet 或可信 pickle。 |
 | `--output` | 兼容宽面板输出路径。 |
-| `--manifest-output` | 兼容宽面板路径的元数据清单输出；默认写到 `<output>.factor_manifest.json`。 |
+| `--manifest-output` | 兼容宽面板路径的元数据清单输出。默认写到 `<output>.factor_manifest.json`。 |
 | `--factor-store-output` | Alpha101/191 因子仓库输出目录。 |
 | `--no-wide-output` | 只写入因子仓库，不生成兼容宽面板。 |
-| `--host`, `--port`, `--user`, `--password` | DolphinDB 连接参数；密码默认读取 `DOLPHINDB_PASSWORD`，为空时使用本地默认值。 |
+| `--host`, `--port`, `--user`, `--password` | DolphinDB 连接参数。密码默认读取 `DOLPHINDB_PASSWORD`，为空时使用本地默认值。 |
 | `--family`, `--alpha101`, `--alpha191` | 选择要生成的外部因子族。 |
 | `--alpha101-function`, `--alpha191-function` | DolphinDB 包装函数名。 |
 | `--wq101-module-version`, `--gtja191-module-version`, `--moneytree-alpha-module-version` | 写入元数据清单的模块版本标签，不改变 DolphinDB `use` 模块名。 |
 | `--raw-price-fields` | 输入同时存在复权和未复权价格时，使用未复权价格字段。 |
 | `--factor-dtype` | 输出因子列 dtype：`float32` 或 `float64`。 |
 | `--compression`, `--compression-level`, `--row-group-size` | 输出 parquet 写入参数。 |
-| `--chunk-trade-dates` | 因子仓库分片交易日数量；在 `--no-wide-output` 路径中也控制 DolphinDB 计算窗口。 |
+| `--chunk-trade-dates` | 因子仓库分片交易日数量。在 `--no-wide-output` 路径中也控制 DolphinDB 计算窗口。 |
 | `--overwrite` | 已存在同名外部因子族时强制重算。 |
 | `--dolphindb-warmup-trade-dates` | 每个 streamed 计算窗口额外包含的历史交易日数量。 |
-| `--stream-input` | parquet + `--no-wide-output` 路径的输入模式；`auto` 分窗口读取上传，`off` 使用旧的完整输入上传。 |
-| `--skip-memory-check` | 跳过输入内存预检；只在明确接受 OOM 风险时使用。 |
+| `--stream-input` | parquet + `--no-wide-output` 路径的输入模式。`auto` 分窗口读取上传，`off` 使用旧的完整输入上传。 |
+| `--skip-memory-check` | 跳过输入内存预检。只在明确接受 OOM 风险时使用。 |
 | `--progress` | 输出分片写入进度。 |
 
 ## `moneytrees-alpha101-191-python`
@@ -92,11 +92,11 @@
 | --- | --- |
 | `--input` | Money Trees 标准面板 parquet 或可信 pickle。 |
 | `--output` | 兼容宽面板输出路径。 |
-| `--manifest-output` | 宽面板路径的元数据清单输出；默认写到 `<output>.factor_manifest.json`。 |
+| `--manifest-output` | 宽面板路径的元数据清单输出。默认写到 `<output>.factor_manifest.json`。 |
 | `--factor-store-output` | Alpha101/191 因子仓库输出目录。 |
 | `--no-wide-output` | 只写入因子仓库，不生成兼容宽面板。 |
 | `--family`, `--alpha101`, `--alpha191` | 选择要本地生成的 Alpha 因子族。 |
-| `--raw-price-fields` | 使用未复权价格字段；默认优先使用复权字段。 |
+| `--raw-price-fields` | 使用未复权价格字段。默认优先使用复权字段。 |
 | `--factor-dtype` | 输出因子列 dtype：`float32` 或 `float64`。 |
 | `--compression`, `--compression-level`, `--row-group-size` | 输出 parquet 写入参数。 |
 | `--chunk-trade-dates` | 因子仓库分片交易日数量。 |
@@ -178,7 +178,7 @@
 | `--clobber` | 上传时传给 GitHub CLI 的覆盖参数。 |
 | `--format` | 输出 `text` 或 `json`。 |
 
-目录型输入会生成不压缩的 tar 分片；单个超限文件会拆成 `.partNNNofMMM`。命令默认只生成本地资产，只有显式传入 `--upload` 才会联网调用 GitHub CLI。
+目录型输入会生成不压缩的 tar 分片。单个超限文件会拆成 `.partNNNofMMM`。命令默认只生成本地资产，只有显式传入 `--upload` 才会联网调用 GitHub CLI。
 
 ## `moneytrees-parquet-rewrite`
 
@@ -187,7 +187,7 @@
 | `--input` | 输入 parquet 或可信 pickle。 |
 | `--output` | 输出 parquet。 |
 | `--compression`, `--compression-level`, `--row-group-size` | 输出 parquet 写入参数。 |
-| `--overwrite` | 允许覆盖已有输出；原地重写仍会被拒绝。 |
+| `--overwrite` | 允许覆盖已有输出。原地重写仍会被拒绝。 |
 | `--no-verify` | 跳过写出后的行列和索引验证。 |
 
-pickle 输入只适合可信历史数据迁移；日常研究路径优先使用 parquet。
+pickle 输入只适合可信历史数据迁移。日常研究路径优先使用 parquet。

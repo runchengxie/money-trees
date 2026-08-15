@@ -1,12 +1,12 @@
 # 用纯 Python 生成 Alpha101/191
 
-本文说明如何使用 Money Trees 内置的纯 Python Alpha101/191 生成器。该实现移植自 `wu-alpha191-alpha101` 参考仓库，但把 `rank`、`scale` 改为**横截面**语义（按交易日分组），滚动算子仍按股票时间序列计算。
+本文说明如何使用 Money Trees 内置的纯 Python Alpha101/191 生成器。该实现移植自 `wu-alpha191-alpha101` 参考仓库，但把 `rank`、`scale` 改为横截面语义（按交易日分组），滚动算子仍按股票时间序列计算。
 
 ## 背景
 
 - 早期参考仓库 `wu-alpha191-alpha101` 提供逐股票的 Alpha191/Alpha101 Python 实现，但 `rank`/`scale` 用的是单只股票时间序列排名，与标准定义（横截面排名）不一致。
 - Money Trees 的 `src/moneytree/factors/classic.py` 把公式移植到标准 `date, ticker` 面板上，`rank`/`scale` 按交易日横截面计算，`ts_*` 滚动算子按股票分组。
-- 参考仓库已归档并指向本仓库；公式仍可在公开研报和论文中找到，迁移时保留了结构，只修正口径。
+- 参考仓库 `wu-alpha191-alpha101` 的 README 已标注本仓库为取代者。公式来自公开研报和论文，迁移时保留了结构，只修正了口径。
 
 ## 支持的字段
 
@@ -73,11 +73,11 @@ uv run moneytrees-alpha101-191-python \
 
 ## 与 DolphinDB 路径的差异
 
-- **横截面语义**：本地实现按交易日分组做 `rank`/`scale`；DolphinDB 模块也按截面处理，但两者的缺失值填充、`SMA`/`DECAYLINEAR` 边界和复权口径可能不同。
-- **输入**：本地实现直接读取标准面板；DolphinDB 路径上传 `tradetime/securityid` 表。
-- **资源**：本地实现会一次性在内存中计算全部请求因子；全市场多年面板内存紧张时，建议分因子族、分时间窗口运行，或继续使用 DolphinDB 流式路径（`--stream-input auto`）。
-- **建议**：正式全量生成前，先抽几个因子和 DolphinDB 输出做小样本对拍，确认口径后再推广。
+- 横截面语义：本地实现按交易日分组做 `rank`/`scale`。DolphinDB 模块也按截面处理，但两者的缺失值填充、`SMA`/`DECAYLINEAR` 边界和复权口径可能不同。
+- 输入：本地实现直接读取标准面板。DolphinDB 路径上传 `tradetime/securityid` 表。
+- 资源：本地实现会一次性在内存中计算全部请求因子。全市场多年面板内存紧张时，建议分因子族、分时间窗口运行，或继续使用 DolphinDB 流式路径（`--stream-input auto`）。
+- 建议：正式全量生成前，先抽几个因子和 DolphinDB 输出做小样本对拍，确认口径后再推广。
 
 ## 计算资源提示
 
-滚动 `ts_rank`、`decay_linear`、`ts_argmax` 等算子使用逐股票 `rolling.apply`，在非常大的面板上较慢。可以用 `--progress` 观察进度；需要极大规模生产时优先考虑 DolphinDB 路径或并行分窗。
+滚动 `ts_rank`、`decay_linear`、`ts_argmax` 等算子使用逐股票 `rolling.apply`，在非常大的面板上较慢。可以用 `--progress` 观察进度。需要极大规模生产时优先考虑 DolphinDB 路径或并行分窗。

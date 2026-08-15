@@ -34,8 +34,8 @@
 
 本地 Alpha158/360 默认 `adjusted=True`，价格类字段优先使用 `open_adj/high_adj/low_adj/close_adj/vwap_adj`，没有复权列时退回未复权字段。`volume` 始终使用原始成交量。
 
-Alpha101/191 行的 `formula_status` 是 `implemented_local`，`formula_source` 指向 `src/moneytree/factors/classic.py`。这些行的 `formula_or_rule` 说明该因子由 Python 本地生成；rank/scale 按交易日横截面计算，`ts_*` 滚动算子按股票时间序列计算。DolphinDB 外部生成路径仍然可用，两条路径的结果可能不同，正式生成前建议先做小样本对拍。
+Alpha101/191 行的 `formula_status` 是 `implemented_local`，`formula_source` 指向 `src/moneytree/factors/classic.py`。这些行的 `formula_or_rule` 说明该因子由 Python 本地生成。rank/scale 按交易日横截面计算，`ts_*` 滚动算子按股票时间序列计算。DolphinDB 外部生成路径仍然可用，两条路径的结果可能不同，正式生成前建议先做小样本对拍。
 
-Alpha158 的 `amount_ma_*` 依赖 `amount`；如果面板没有 `amount`，实现会用 `close * volume` 近似。Alpha360 的价格类 lag 使用 `shift(field, lag) / current_close - 1`，成交量 lag 使用 `shift(volume, lag) / current_volume - 1`。
+Alpha158 的 `amount_ma_*` 依赖 `amount`。如果面板没有 `amount`，实现会用 `close * volume` 近似。Alpha360 的价格类 lag 使用 `shift(field, lag) / current_close - 1`，成交量 lag 使用 `shift(volume, lag) / current_volume - 1`。
 
 所有进入模型的特征仍受训练配置里的 `feature_lag_periods` 约束。默认 `feature_lag_periods=1`，表示 T 日收盘后可见的因子信号滞后一日使用。

@@ -1,6 +1,6 @@
 # Maintenance Backlog
 
-本文记录当前暂不强行重构、但后续值得拆分和治理的模块边界。它不是主运行手册；实施前仍应创建或更新对应 OpenSpec change。
+本文记录当前暂不强行重构、但后续值得拆分和治理的模块边界。它不是主运行手册。实施前仍应创建或更新对应 OpenSpec change。
 
 ## 大文件和职责边界
 
@@ -32,14 +32,14 @@
 
 | 项 | 状态 | 证据 | 推荐路径 |
 | --- | --- | --- | --- |
-| `scripts/convert_pickle_to_parquet.py` | `deprecated` | 仅覆盖可信 pickle 到 parquet 迁移；主数据契约已推荐 `moneytrees-parquet-rewrite`。 | 使用 `uv run moneytrees-parquet-rewrite --input old.pkl --output old.parquet`。 |
-| `scripts/build_dolphindb_alphas.py` | `compatibility` | 测试确认它只代理 `moneytree.cli.dolphindb_alphas`；外部脚本可能仍引用旧路径。 | 新命令使用 `moneytrees-dolphindb-alphas`。 |
+| `scripts/convert_pickle_to_parquet.py` | `deprecated` | 仅覆盖可信 pickle 到 parquet 迁移。主数据契约已推荐 `moneytrees-parquet-rewrite`。 | 使用 `uv run moneytrees-parquet-rewrite --input old.pkl --output old.parquet`。 |
+| `scripts/build_dolphindb_alphas.py` | `compatibility` | 测试确认它只代理 `moneytree.cli.dolphindb_alphas`。外部脚本可能仍引用旧路径。 | 新命令使用 `moneytrees-dolphindb-alphas`。 |
 | `configs/preset/notebook_compat.yaml` | `deprecated` | 与 `legacy_notebook_compat.yaml` 内容一致，但语义是过渡兼容路径。 | 使用 `configs/preset/legacy_notebook_compat.yaml` 复现早期 notebook。 |
 | `configs/preset/legacy_notebook_compat.yaml` | `compatibility` | 明确用于复现早期 notebook，不是默认研究路径。 | 正式研究优先使用基础市场配置档和模型配置。 |
 | `moneytree*` 单数 CLI alias | `compatibility` | `pyproject.toml` 和测试保留 alias，避免破坏旧命令。 | 新文档优先使用 `moneytrees*`。 |
 | pickle 输入支持 | `compatibility` | 数据契约允许读取可信旧数据，但 parquet 是推荐格式。 | 迁移为 parquet 或因子仓库输入。 |
 | legacy notebook model path | `compatibility` | `notebook_compat` 特征选择和调参路径仍有测试覆盖。 | 新实验使用默认 feature lag、默认缺失策略和正式配置栈。 |
-| `moneytree.factors.ops` | `compatibility` | 作为 `moneytree.factors.ops` 子模块有测试覆盖，但未从 `moneytree.factors` 顶层导出。 | 继续作为 internal operator helper；顶层 API 使用 `moneytree.factors` 已导出的因子族和 IC 函数。 |
+| `moneytree.factors.ops` | `compatibility` | 作为 `moneytree.factors.ops` 子模块有测试覆盖，但未从 `moneytree.factors` 顶层导出。 | 继续作为 internal operator helper。顶层 API 使用 `moneytree.factors` 已导出的因子族和 IC 函数。 |
 
 ## 建议拆分顺序
 
@@ -71,4 +71,4 @@ Ruff 当前执行 `E/F/I/UP/B`，`line-length = 100` 但暂时忽略 `E501`。�
 | `SIM` | 待办 | 简化分支和表达式，适合在模块拆分后逐步启用。 |
 | `RET` | 待办 | 清理 return 风格，先不全仓库开启。 |
 | `ARG` | 待办 | 检查未使用参数，需谨慎处理 CLI callback、测试 fixture 和兼容 facade。 |
-| `E501` | scoped | 继续全局忽略；触及代码按 100 字符意图主动整理。 |
+| `E501` | scoped | 继续全局忽略。触及代码按 100 字符意图主动整理。 |

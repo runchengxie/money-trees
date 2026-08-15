@@ -23,9 +23,9 @@ uv run moneytrees \
 
 ## 三条研究路径
 
-1. **标准面板回测**：准备好 `date, ticker` 面板，直接跑模型和组合回测。
-2. **本地因子**：用 `moneytrees-tushare` 拉取基础面板，用 `moneytrees-factor-store` 本地生成 Alpha158/360。
-3. **完整 810 因子**：在路径 2 基础上补齐 Alpha101/191——纯 Python 本地生成（`moneytrees-alpha101-191-python`）或 DolphinDB 外部生成（`moneytrees-dolphindb-alphas`），统一写入因子仓库（factor store）后回测。
+1. 标准面板回测：准备好 `date, ticker` 面板，直接跑模型和组合回测。
+2. 本地因子：用 `moneytrees-tushare` 拉取基础面板，用 `moneytrees-factor-store` 本地生成 Alpha158/360。
+3. 完整 810 因子：在路径 2 基础上补齐 Alpha101/191，可以用纯 Python 本地生成（`moneytrees-alpha101-191-python`），也可以用 DolphinDB 外部生成（`moneytrees-dolphindb-alphas`），统一写入因子仓库（factor store）后回测。
 
 大规模研究推荐使用因子仓库，避免长期维护单个超宽 parquet。
 
@@ -88,5 +88,5 @@ tests/           单元测试、CLI 冒烟测试和数据源测试
 - 市场层只有 `cn` 市场配置档，默认基准是 `000300.SH`，可交易过滤和基准净值口径见 [docs/data-contract.md](docs/data-contract.md)。
 - 输入支持 parquet 和可信 pickle，推荐统一为 `date, ticker` parquet。
 - Alpha101/191 有纯 Python 本地和 DolphinDB 外部两条生成路径，口径可能不同，正式研究前请先对拍（见 [docs/classic-alphas-python.md](docs/classic-alphas-python.md)）。
-- DolphinDB、TuShare、XGBoost 和 Optuna 都是可选依赖；普通回测只需要已有标准面板。
+- DolphinDB、TuShare、XGBoost 和 Optuna 都是可选依赖。普通回测只需要已有标准面板。
 - TuShare 派生标记存在上游数据治理边界（历史 ST、历史行业、退市样本和幸存者偏差），详见 [docs/data-contract.md](docs/data-contract.md)。

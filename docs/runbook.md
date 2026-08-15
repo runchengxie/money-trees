@@ -62,9 +62,9 @@ uv run moneytrees-factor-store \
   --progress
 ```
 
-`moneytrees-factor-store` 对 parquet 输入会按日期窗口流式读取基础面板：每个 partition 只加载目标交易日和本地因子所需的历史 overlap，然后立即落盘，避免把大面板整表读进内存。`--chunk-trade-dates` 控制每个 partition 的目标交易日数；内存紧张时可降到 `20` 或 `10`。
+`moneytrees-factor-store` 对 parquet 输入会按日期窗口流式读取基础面板：每个 partition 只加载目标交易日和本地因子所需的历史 overlap，然后立即落盘，避免把大面板整表读进内存。`--chunk-trade-dates` 控制每个 partition 的目标交易日数。内存紧张时可降到 `20` 或 `10`。
 
-`moneytrees-factor-store` 会按分区复用已生成的本地因子文件。重复运行同一因子族时，已完成且输入一致的 partition 会跳过；基础面板扩展到新日期后，只补缺失或输入变化的 partition。需要强制全量重算时传 `--overwrite`。`--progress` 会输出 ASCII 进度条、每个 partition 的 `generated/skipped` 状态、单块耗时、累计耗时和 ETA。
+`moneytrees-factor-store` 会按分区复用已生成的本地因子文件。重复运行同一因子族时，已完成且输入一致的 partition 会跳过。基础面板扩展到新日期后，只补缺失或输入变化的 partition。需要强制全量重算时传 `--overwrite`。`--progress` 会输出 ASCII 进度条、每个 partition 的 `generated/skipped` 状态、单块耗时、累计耗时和 ETA。
 
 回测入口可以直接读取因子仓库 `manifest.json`，并按配置只加载需要的因子族：
 
@@ -92,7 +92,7 @@ Parquet 面板状态检查使用 streaming / narrow-column 路径，适合多年
 
 Alpha101/191 有两条生成路径：纯 Python 本地生成（`moneytrees-alpha101-191-python`，横截面语义，见 [classic-alphas-python.md](classic-alphas-python.md)）和 DolphinDB 外部生成（见 [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md)）。生产推荐 DolphinDB 外部路径，正式运行前先小样本对拍两条路径的口径。
 
-注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径；多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按因子族分开运行。
+注意：parquet 输入配合 `--no-wide-output` 时，`moneytrees-dolphindb-alphas` 默认使用 `--stream-input auto`，按目标交易日和 warmup 窗口分片读取、上传、计算和落盘。宽表输出或显式 `--stream-input off` 会回到完整输入上传路径。多年全市场输入在 8GB 级机器上可能 OOM。正式运行前先用小样本验证，并优先按因子族分开运行。
 
 ```bash
 uv sync --dev --extra external-alphas
@@ -172,11 +172,11 @@ Parquet 压缩通常能降低落盘体积，但真实占用还会叠加原始缓
 
 当前默认策略：
 
-- TuShare 本地 Alpha158/360 和 DolphinDB 外部 Alpha101/191 生成路径默认把 `alpha101_`、`alpha191_`、`alpha158_`、`alpha360_` 因子列保存为 `float32`。
-- 新写入的 Money Trees parquet 输出默认使用 `zstd` 压缩，默认压缩级别为 3；需要兼容旧行为时显式传 `--compression snappy`。
+- TuShare 本地 Alpha158/360、纯 Python Alpha101/191 和 DolphinDB 外部 Alpha101/191 生成路径默认把 `alpha101_`、`alpha191_`、`alpha158_`、`alpha360_` 因子列保存为 `float32`。
+- 新写入的 Money Trees parquet 输出默认使用 `zstd` 压缩，默认压缩级别为 3。需要兼容旧行为时显式传 `--compression snappy`。
 - 推荐先用 `moneytrees-tushare` 生成基础面板，再用 `moneytrees-factor-store` 按需生成 `alpha158` 或 `alpha360` 分族因子文件。
 - 需要精度敏感复核时，生成命令显式传 `--factor-dtype float64`。
-- 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族；parquet 输入会尽量做列裁剪。默认 `backtest.load_mode: auto` 会按回测窗口日期裁剪读取，并在读取因子仓库前做内存预检；估算超预算时先降因子族或缩短日期范围，不要直接改成 `full` 硬跑。
+- 回测可用 `features.include_factor_prefixes` 或 `features.include_factor_families` 只读取需要的因子族。parquet 输入会尽量做列裁剪。默认 `backtest.load_mode: auto` 会按回测窗口日期裁剪读取，并在读取因子仓库前做内存预检。估算超预算时先降因子族或缩短日期范围，不要直接改成 `full` 硬跑。
 - `output.export_parquet` 会额外保存预处理后的面板，只建议用于调试和复现实验。
 
 建议把数据分成四层理解：
@@ -188,7 +188,7 @@ data/factor_store/      Alpha101/191/158/360 分族因子文件
 artifacts/              回测指标、信号、持仓、配置和元数据清单
 ```
 
-原始缓存、基础面板、因子仓库和回测产物的保留周期不同。不要自动删除这些目录；清理前先只预览检查体积和文件列表。
+原始缓存、基础面板、因子仓库和回测产物的保留周期不同。不要自动删除这些目录。清理前先只预览检查体积和文件列表。
 
 ### 存储检查只预览
 
@@ -283,14 +283,14 @@ uv run moneytrees-tushare \
 
 ## TuShare 长任务性能与排障
 
-长区间全市场拉取会按交易日调用多个 TuShare 接口。`daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 都可能循环覆盖全部交易日；5 年全 A 股日频面板通常会产生数百万行，首次运行较慢是正常情况。本地 Alpha158/360 还会在标准面板上追加滚动、滞后和截面特征，写 parquet 前也需要额外时间。
+长区间全市场拉取会按交易日调用多个 TuShare 接口。`daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 都可能循环覆盖全部交易日。5 年全 A 股日频面板通常会产生数百万行，首次运行较慢是正常情况。本地 Alpha158/360 还会在标准面板上追加滚动、滞后和截面特征，写 parquet 前也需要额外时间。
 
 建议：
 
 - 正式拉取始终设置 `--cache-dir data/raw/tushare`。
 - 重复运行时搭配 `--refresh-recent-days 20` 刷新近期交易日。
-- 长任务加 `--progress`；需要更频繁输出时使用 `--progress-every 10`。
-- CLI 默认以 `--request-interval-seconds 0.13` 控制真实 TuShare 请求间隔，并在频率超限时按 `--rate-limit-wait-seconds` 等待后重试；cache 命中不会等待。
+- 长任务加 `--progress`。需要更频繁输出时使用 `--progress-every 10`。
+- CLI 默认以 `--request-interval-seconds 0.13` 控制真实 TuShare 请求间隔，并在频率超限时按 `--rate-limit-wait-seconds` 等待后重试。cache 命中不会等待。
 - 调试时先限制日期范围和股票池，例如 `--tickers 000001.SZ,600000.SH`。
 - 只定位 TuShare/API 连通性时，先不加 `--factor-family`。
 - 只定位基础接口时，可临时使用 `--skip-daily-basic`、`--skip-adj-factor`、`--skip-limits`、`--skip-suspend` 和 `--skip-stock-basic`，但正式回测通常需要这些列支撑可交易过滤。
@@ -432,7 +432,7 @@ Missing optional DolphinDB Python client
 uv sync --dev --extra external-alphas
 ```
 
-普通 `moneytrees` 回测不需要该依赖；只有运行 `moneytrees-dolphindb-alphas` 时才需要。
+普通 `moneytrees` 回测不需要该依赖。只有运行 `moneytrees-dolphindb-alphas` 时才需要。
 
 ### DolphinDB Alpha101/191 生成被 SIGKILL 或内存预检失败
 
@@ -456,7 +456,7 @@ Input memory preflight failed for DolphinDB external-alpha generation
 - 按因子族分开运行 `--alpha101` 和 `--alpha191`。
 - 确认输入是 parquet，并使用 `--no-wide-output --stream-input auto`。
 - 如果必须用宽表输出或 `--stream-input off`，使用更大内存机器或增加 WSL/Docker 可用内存。
-- 不要为了继续跑而默认加 `--skip-memory-check`；它只会跳过保护，不能降低实际内存使用。
+- 不要为了继续跑而默认加 `--skip-memory-check`。它只会跳过保护，不能降低实际内存使用。
 - 保留 `--dolphindb-warmup-trade-dates` 历史上下文，避免滚动公式边界污染。
 
 ### DolphinDB Alpha101/191 模块或 wrapper 预检失败

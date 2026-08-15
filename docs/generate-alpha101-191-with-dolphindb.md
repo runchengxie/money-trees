@@ -1,6 +1,6 @@
 # 使用 DolphinDB 生成 Alpha101/191
 
-本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入因子仓库；旧的宽 parquet 面板输出继续保留用于兼容。
+本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入因子仓库。旧的宽 parquet 面板输出继续保留用于兼容。
 
 ## 当前边界
 
@@ -78,7 +78,7 @@ docker compose -f docker-compose.alpha.yml run --rm moneytrees \
   -lc 'moneytrees-dolphindb-alphas --help'
 ```
 
-该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。Python runner 挂载 `data/`、`artifacts/` 和 `docker/dolphindb/modules/`；DolphinDB server 只挂载自己的 server data 子目录，避免覆盖镜像内置的 `/data/ddb/server/dolphindb` 启动程序。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
+该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。Python runner 挂载 `data/`、`artifacts/` 和 `docker/dolphindb/modules/`。DolphinDB server 只挂载自己的 server data 子目录，避免覆盖镜像内置的 `/data/ddb/server/dolphindb` 启动程序。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
 
 在项目根目录创建本地挂载目录：
 
@@ -161,7 +161,7 @@ uv run python -c 'import dolphindb as ddb; s=ddb.Session(); s.connect("127.0.0.1
 
 返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录元数据清单，不会改变 DolphinDB 的 `use` 模块名。
 
-CLI 默认从 `DOLPHINDB_PASSWORD` 读取密码；环境变量未设置或为空时，回退到本地开发默认密码 `123456`。如果显式传 `--password`，该值必须非空。
+CLI 默认从 `DOLPHINDB_PASSWORD` 读取密码。环境变量未设置或为空时，回退到本地开发默认密码 `123456`。如果显式传 `--password`，该值必须非空。
 
 ## 字段映射
 
@@ -182,7 +182,7 @@ CLI 会把 Money Trees 面板映射成 DolphinDB 输入：
 | `index_open` | `benchmark_open` |
 | `index_close` | `benchmark_close` |
 
-Alpha191 请求会要求 `benchmark_open` 和 `benchmark_close` 存在。Alpha101 中行业和市值相关因子依赖 `indclass` 和 `cap`；如果行业字段不是 point-in-time 行业分类，历史回测会有未来信息污染风险。
+Alpha191 请求会要求 `benchmark_open` 和 `benchmark_close` 存在。Alpha101 中行业和市值相关因子依赖 `indclass` 和 `cap`。如果行业字段不是 point-in-time 行业分类，历史回测会有未来信息污染风险。
 
 ## 运行生成
 
@@ -208,11 +208,11 @@ uv run moneytrees-tushare \
 
 推荐直接写入因子仓库：
 
-首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录；两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式因子仓库。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
+首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录。两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式因子仓库。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
 
 使用 `--no-wide-output` 写入因子仓库且输入是 parquet 时，CLI 默认使用 `--stream-input auto`：按 `--chunk-trade-dates` 划分目标交易日，每个计算窗口额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日，随后只读取并上传该窗口、调用 DolphinDB、只下载目标交易日结果并立即写入分片。这个路径避免在 Python 或 DolphinDB client 中构造多年全市场的完整输入/输出宽表。重新生成已写入元数据清单的外部因子族时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
 
-内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的因子仓库路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径；多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
+内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的因子仓库路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径。多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
 
 Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
 
@@ -256,7 +256,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-最终写入正式因子仓库时仍建议按因子族分开运行；同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单因子族验证的环境：
+最终写入正式因子仓库时仍建议按因子族分开运行。同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单因子族验证的环境：
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -359,4 +359,4 @@ uv run moneytrees \
 - `vwap`、复权价格、市值和行业分类会显著影响因子值。
 - Alpha101 行业相关因子需要 point-in-time 行业分类。
 - Alpha191 依赖的基准开收盘字段需要与回测基准一致。
-- 不建议混用多个 Alpha101/191 实现来源后直接比较结果；应先固定 DolphinDB 和模块版本。
+- 不建议混用多个 Alpha101/191 实现来源后直接比较结果。应先固定 DolphinDB 和模块版本。
