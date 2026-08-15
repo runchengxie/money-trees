@@ -108,7 +108,7 @@ def test_dolphindb_module_docs_match_repository_files() -> None:
     )
 
     assert "这些 `.dos` 文件不提交到仓库" not in doc
-    assert "当前项目快照包含这些 `.dos` 文件" in doc
+    assert "本地准备、不随仓库提交" in doc
 
 
 def test_factor_catalog_external_status_matches_docs() -> None:

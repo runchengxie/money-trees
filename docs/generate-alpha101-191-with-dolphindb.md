@@ -137,7 +137,7 @@ gtja191Prepare.dos
 moneytreeAlpha.dos
 ```
 
-当前项目快照包含这些 `.dos` 文件。`wq101alpha.dos` / `gtja191Alpha.dos` 是 DolphinDB 公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是准备模块，`moneytreeAlpha.dos` 是 Money Trees 适配包装模块。生产使用前应确认模块来源、授权和版本，并在生成命令中记录 module version。`moneytreeAlpha.dos` 建议提供两个函数：
+这些 `.dos` 文件按本地准备、不随仓库提交的方式维护，需要先按上面模块说明准备好再使用。`wq101alpha.dos` / `gtja191Alpha.dos` 是 DolphinDB 公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是准备模块，`moneytreeAlpha.dos` 是 Money Trees 适配包装模块。生产使用前应确认模块来源、授权和版本，并在生成命令中记录 module version。`moneytreeAlpha.dos` 建议提供两个函数：
 
 ```text
 calcMoneyTreeAlpha101(rawData, startTime, endTime)

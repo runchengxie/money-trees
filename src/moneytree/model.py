@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    GradientBoostingClassifier,
+    RandomForestClassifier,
+)
 
 DEFAULT_RF_PARAMS: dict[str, Any] = {
     "n_estimators": 100,
@@ -332,6 +337,166 @@ def fit_random_forest(
     model = build_random_forest(params=params, random_state=random_state)
     model.fit(train_x, train_y)
     return model
+
+
+def _tune_tree_classifier(
+    *,
+    build_model: Callable[[dict[str, Any], int], Any],
+    suggest_params: Callable[[Any], dict[str, Any]],
+    train_x: pd.DataFrame,
+    train_y: np.ndarray,
+    train_returns: np.ndarray,
+    valid_x: pd.DataFrame,
+    valid_returns: np.ndarray,
+    n_trials: int = 50,
+    random_state: int = 123,
+    cost_bps: float = 0.0,
+    tuning_cv_folds: int = 1,
+) -> tuple[dict[str, Any], float]:
+    """Tune a sklearn tree classifier with trading profit as objective."""
+    optuna = _load_optuna()
+    sampler = optuna.samplers.TPESampler(seed=random_state)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+    cv_splits = _build_time_series_cv_splits(train_x.index, tuning_cv_folds)
+
+    def objective(trial: Any) -> float:
+        params = suggest_params(trial)
+        if tuning_cv_folds > 1:
+            fold_scores: list[float] = []
+            for fold_id, (train_idx, valid_idx) in enumerate(cv_splits):
+                model = build_model(params, random_state + fold_id)
+                model.fit(train_x.iloc[train_idx], train_y[train_idx])
+                fold_score = score_predictions_over_time(
+                    predictions=model.predict(train_x.iloc[valid_idx]),
+                    realized_returns=train_returns[valid_idx],
+                    sample_index=train_x.iloc[valid_idx].index,
+                    cost_bps=cost_bps,
+                )
+                fold_scores.append(float(fold_score))
+            return float(np.mean(fold_scores)) if fold_scores else 0.0
+
+        model = build_model(params, random_state)
+        model.fit(train_x, train_y)
+        return score_predictions_over_time(
+            predictions=model.predict(valid_x),
+            realized_returns=valid_returns,
+            sample_index=valid_x.index,
+            cost_bps=cost_bps,
+        )
+
+    study.optimize(objective, n_trials=n_trials, n_jobs=1)
+    return study.best_params, float(study.best_value)
+
+
+DEFAULT_EXTRA_TREES_PARAMS: dict[str, Any] = {
+    "n_estimators": 300,
+    "max_depth": 12,
+    "min_samples_leaf": 4,
+    "max_features": "sqrt",
+}
+
+DEFAULT_GRADIENT_BOOSTING_PARAMS: dict[str, Any] = {
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "max_depth": 3,
+    "min_samples_leaf": 50,
+    "subsample": 0.8,
+}
+
+
+def build_extra_trees(
+    params: dict[str, Any] | None = None,
+    random_state: int = 123,
+    n_jobs: int = -1,
+) -> ExtraTreesClassifier:
+    model_params = dict(DEFAULT_EXTRA_TREES_PARAMS)
+    if params is not None:
+        model_params.update(params)
+    model_params["random_state"] = random_state
+    model_params["n_jobs"] = n_jobs
+    return ExtraTreesClassifier(**model_params)
+
+
+def build_gradient_boosting(
+    params: dict[str, Any] | None = None,
+    random_state: int = 123,
+) -> GradientBoostingClassifier:
+    model_params = dict(DEFAULT_GRADIENT_BOOSTING_PARAMS)
+    if params is not None:
+        model_params.update(params)
+    model_params["random_state"] = random_state
+    return GradientBoostingClassifier(**model_params)
+
+
+def _suggest_extra_trees_params(trial: Any) -> dict[str, Any]:
+    return {
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 4, 200, step=4),
+        "max_depth": trial.suggest_int("max_depth", 3, 30),
+        "n_estimators": trial.suggest_int("n_estimators", 50, 500, step=50),
+        "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2"]),
+    }
+
+
+def _suggest_gradient_boosting_params(trial: Any) -> dict[str, Any]:
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+        "max_depth": trial.suggest_int("max_depth", 2, 8),
+        "n_estimators": trial.suggest_int("n_estimators", 50, 500, step=50),
+        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 10, 200, step=10),
+        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+    }
+
+
+def tune_extra_trees(
+    train_x: pd.DataFrame,
+    train_y: np.ndarray,
+    train_returns: np.ndarray,
+    valid_x: pd.DataFrame,
+    valid_returns: np.ndarray,
+    n_trials: int = 50,
+    random_state: int = 123,
+    cost_bps: float = 0.0,
+    tuning_cv_folds: int = 1,
+) -> tuple[dict[str, Any], float]:
+    return _tune_tree_classifier(
+        build_model=lambda params, rs: build_extra_trees(params, rs, n_jobs=1),
+        suggest_params=_suggest_extra_trees_params,
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=train_returns,
+        valid_x=valid_x,
+        valid_returns=valid_returns,
+        n_trials=n_trials,
+        random_state=random_state,
+        cost_bps=cost_bps,
+        tuning_cv_folds=tuning_cv_folds,
+    )
+
+
+def tune_gradient_boosting(
+    train_x: pd.DataFrame,
+    train_y: np.ndarray,
+    train_returns: np.ndarray,
+    valid_x: pd.DataFrame,
+    valid_returns: np.ndarray,
+    n_trials: int = 50,
+    random_state: int = 123,
+    cost_bps: float = 0.0,
+    tuning_cv_folds: int = 1,
+) -> tuple[dict[str, Any], float]:
+    return _tune_tree_classifier(
+        build_model=lambda params, rs: build_gradient_boosting(params, rs),
+        suggest_params=_suggest_gradient_boosting_params,
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=train_returns,
+        valid_x=valid_x,
+        valid_returns=valid_returns,
+        n_trials=n_trials,
+        random_state=random_state,
+        cost_bps=cost_bps,
+        tuning_cv_folds=tuning_cv_folds,
+    )
 
 
 def feature_importance_frame(

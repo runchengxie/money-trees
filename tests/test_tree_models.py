@@ -72,11 +72,33 @@ def test_sklearn_tree_adapter_importance_selection(model_id: str) -> None:
     assert importance.selected_features == ["f1"]
 
 
-@pytest.mark.parametrize("model_id", SKLEARN_TREE_IDS)
-def test_sklearn_tree_adapter_rejects_unsupported_tuning(model_id: str) -> None:
-    adapter = get_model_adapter(model_id)
+def test_hist_gradient_boosting_rejects_unsupported_tuning() -> None:
+    adapter = get_model_adapter("hist_gradient_boosting")
     with pytest.raises(ValueError, match="does not support hyperparameter tuning"):
         adapter.validate_configuration(feature_selection="none", n_trials=1)
+
+
+@pytest.mark.parametrize("model_id", ("extra_trees", "gradient_boosting"))
+def test_sklearn_tree_adapter_accepts_tuning_and_returns_defaults_when_off(model_id: str) -> None:
+    adapter = get_model_adapter(model_id)
+    adapter.validate_configuration(feature_selection="none", n_trials=1)
+    frame = _panel()
+    train_x = frame.drop(columns=["f2"])
+    train_y = _train_y(frame)
+
+    params, best = adapter.tune(
+        train_x=train_x,
+        train_y=train_y,
+        train_returns=np.zeros(len(train_x)),
+        valid_x=train_x,
+        valid_returns=np.zeros(len(train_x)),
+        n_trials=0,
+        random_state=7,
+        cost_bps=0.0,
+        tuning_cv_folds=1,
+    )
+    assert best != best  # NaN
+    assert params == adapter.default_params()
 
 
 def test_xgb_ranker_reports_missing_optional_dependency() -> None:

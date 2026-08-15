@@ -13,6 +13,8 @@ from sklearn.ensemble import (
 from moneytree.model import (
     FeatureSelectionResult,
     select_positive_importance_features,
+    tune_extra_trees,
+    tune_gradient_boosting,
 )
 from moneytree.portfolio import build_signal_scores
 
@@ -28,6 +30,7 @@ class _SklearnTreeClassifierAdapter(BaseModelAdapter):
     )
     estimator_cls: type | None = None
     _default_params: dict[str, Any] = {}
+    _tune_fn: Any = None
 
     def default_params(self) -> dict[str, Any]:
         return dict(self._default_params)
@@ -49,6 +52,44 @@ class _SklearnTreeClassifierAdapter(BaseModelAdapter):
         model = self.estimator_cls(**model_params)
         model.fit(train_x, np.asarray(train_y))
         return model
+
+    def tune(
+        self,
+        *,
+        train_x: pd.DataFrame,
+        train_y: np.ndarray,
+        train_returns: np.ndarray,
+        valid_x: pd.DataFrame,
+        valid_returns: np.ndarray,
+        n_trials: int,
+        random_state: int,
+        cost_bps: float,
+        tuning_cv_folds: int,
+        base_params: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], float]:
+        if n_trials <= 0:
+            params = self.default_params()
+            if base_params is not None:
+                params.update(base_params)
+            return params, float("nan")
+        if self._tune_fn is None:
+            raise ValueError(f"Model '{self.model_id}' does not implement tuning.")
+        tuned_params, best_value = self._tune_fn(
+            train_x=train_x,
+            train_y=train_y,
+            train_returns=train_returns,
+            valid_x=valid_x,
+            valid_returns=valid_returns,
+            n_trials=n_trials,
+            random_state=random_state,
+            cost_bps=cost_bps,
+            tuning_cv_folds=tuning_cv_folds,
+        )
+        if base_params:
+            merged = dict(base_params)
+            merged.update(tuned_params)
+            tuned_params = merged
+        return tuned_params, best_value
 
     def predict_outputs(self, *, model, features: pd.DataFrame) -> ModelOutputs:
         predictions = np.asarray(model.predict(features))
@@ -112,6 +153,12 @@ class _SklearnTreeClassifierAdapter(BaseModelAdapter):
 class ExtraTreesAdapter(_SklearnTreeClassifierAdapter):
     model_id = "extra_trees"
     estimator_cls = ExtraTreesClassifier
+    _tune_fn = tune_extra_trees
+    capabilities = ModelCapabilities(
+        supports_tuning=True,
+        supported_feature_selection=("none", "importance"),
+        supports_probability_scores=True,
+    )
     _default_params: dict[str, Any] = {
         "n_estimators": 300,
         "max_depth": 12,
@@ -123,6 +170,12 @@ class ExtraTreesAdapter(_SklearnTreeClassifierAdapter):
 class GradientBoostingAdapter(_SklearnTreeClassifierAdapter):
     model_id = "gradient_boosting"
     estimator_cls = GradientBoostingClassifier
+    _tune_fn = tune_gradient_boosting
+    capabilities = ModelCapabilities(
+        supports_tuning=True,
+        supported_feature_selection=("none", "importance"),
+        supports_probability_scores=True,
+    )
     _default_params: dict[str, Any] = {
         "n_estimators": 300,
         "learning_rate": 0.05,
