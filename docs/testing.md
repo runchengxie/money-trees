@@ -92,6 +92,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_resources.py` | 内存预检、parquet 加载估算和字节格式化。 |
 | `tests/test_smoke.py` | 冒烟测试配置栈端到端运行。 |
 | `tests/test_tushare_data_source.py` | TuShare 标准化、token、原始缓存、`manifest.sqlite` 元数据、旧元数据清单迁移、近期刷新和最新名称 ST 标记。 |
+| `tests/test_tree_models.py` | Extra Trees、梯度提升、直方图梯度提升和 XGBRanker 适配器的拟合、预测和可选依赖行为。 |
 
 ## 可选依赖
 

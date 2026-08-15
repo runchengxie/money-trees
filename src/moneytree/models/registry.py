@@ -3,15 +3,28 @@ from __future__ import annotations
 from moneytree.models.base import BaseModelAdapter
 from moneytree.models.linear import ElasticNetAdapter, LassoAdapter, RidgeAdapter
 from moneytree.models.random_forest import RandomForestAdapter
-from moneytree.models.xgboost import XGBoostAdapter, XGBoostRegressorAdapter
+from moneytree.models.sklearn_trees import (
+    ExtraTreesAdapter,
+    GradientBoostingAdapter,
+    HistGradientBoostingAdapter,
+)
+from moneytree.models.xgboost import (
+    XGBoostAdapter,
+    XGBoostRegressorAdapter,
+    XGBRankerAdapter,
+)
 
 _MODEL_REGISTRY: dict[str, BaseModelAdapter] = {
     "random_forest": RandomForestAdapter(),
+    "extra_trees": ExtraTreesAdapter(),
+    "gradient_boosting": GradientBoostingAdapter(),
+    "hist_gradient_boosting": HistGradientBoostingAdapter(),
     "ridge": RidgeAdapter(),
     "lasso": LassoAdapter(),
     "elasticnet": ElasticNetAdapter(),
     "xgboost": XGBoostAdapter(),
     "xgboost_regressor": XGBoostRegressorAdapter(),
+    "xgb_ranker": XGBRankerAdapter(),
 }
 
 

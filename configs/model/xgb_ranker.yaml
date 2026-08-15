@@ -1,0 +1,16 @@
+model:
+  id: xgb_ranker
+  params:
+    n_estimators: 200
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    objective: rank:pairwise
+    eval_metric: ndcg@10
+  feature_selection: none
+  min_features: 2
+  max_selection_steps: 0
+  n_trials: 0
+  tuning_cv_folds: 1
+  random_seed: 123

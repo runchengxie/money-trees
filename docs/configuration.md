@@ -182,7 +182,7 @@ model:
   random_seed: 123
 ```
 
-模型适配器会校验自己支持的调参和特征选择能力。线性模型和 XGBoost 当前只支持 `feature_selection: none`，随机森林支持 `none`、`importance`、`sequential` 和 `notebook_compat`。默认配置关闭调参。需要 Optuna 时叠加 `configs/preset/tuning.yaml` 并安装 `tuning` 或 `research` extra。
+模型适配器会校验自己支持的调参和特征选择能力。线性模型、XGBoost、XGBoost 回归和 XGBRanker 当前只支持 `feature_selection: none`，随机森林支持 `none`、`importance`、`sequential` 和 `notebook_compat`，Extra Trees 和梯度提升支持 `none` 和 `importance`，直方图梯度提升只支持 `none`。默认配置关闭调参。需要 Optuna 时叠加 `configs/preset/tuning.yaml` 并安装 `tuning` 或 `research` extra。
 
 ## 组合配置
 

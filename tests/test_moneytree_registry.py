@@ -12,11 +12,15 @@ from moneytree.models import get_model_adapter
 
 def test_model_registry_resolves_expected_builtin_ids() -> None:
     assert get_model_adapter("random_forest").model_id == "random_forest"
+    assert get_model_adapter("extra_trees").model_id == "extra_trees"
+    assert get_model_adapter("gradient_boosting").model_id == "gradient_boosting"
+    assert get_model_adapter("hist_gradient_boosting").model_id == "hist_gradient_boosting"
     assert get_model_adapter("ridge").model_id == "ridge"
     assert get_model_adapter("lasso").model_id == "lasso"
     assert get_model_adapter("elasticnet").model_id == "elasticnet"
     assert get_model_adapter("xgboost").model_id == "xgboost"
     assert get_model_adapter("xgboost_regressor").model_id == "xgboost_regressor"
+    assert get_model_adapter("xgb_ranker").model_id == "xgb_ranker"
 
 
 def test_linear_model_rejects_unsupported_feature_selection_and_tuning() -> None:

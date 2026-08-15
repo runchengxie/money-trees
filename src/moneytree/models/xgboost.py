@@ -137,3 +137,69 @@ class XGBoostRegressorAdapter(BaseModelAdapter):
         scores = np.asarray(model.predict(features), dtype=float)
         predictions = np.sign(scores).astype(int)
         return ModelOutputs(scores=scores, predictions=predictions)
+
+
+class XGBRankerAdapter(BaseModelAdapter):
+    model_id = "xgb_ranker"
+    training_target_column = "rel_performance"
+    capabilities = ModelCapabilities(
+        supports_tuning=False,
+        supported_feature_selection=("none",),
+        supports_probability_scores=False,
+    )
+
+    def _load_estimator(self):
+        try:
+            from xgboost import XGBRanker
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Model 'xgb_ranker' requires the optional xgboost dependency. "
+                "Install it with the project's xgboost extra."
+            ) from exc
+        return XGBRanker
+
+    def default_params(self) -> dict[str, Any]:
+        return {
+            "n_estimators": 200,
+            "max_depth": 6,
+            "learning_rate": 0.05,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "objective": "rank:pairwise",
+            "eval_metric": "ndcg@10",
+        }
+
+    def fit(
+        self,
+        *,
+        train_x: pd.DataFrame,
+        train_y: np.ndarray,
+        params: dict[str, Any] | None = None,
+        random_state: int = 123,
+    ):
+        estimator_cls = self._load_estimator()
+        model_params = self.default_params()
+        if params is not None:
+            model_params.update(params)
+        model_params.setdefault("random_state", random_state)
+
+        relevance = np.asarray(train_y, dtype=int)
+        if relevance.min() < 0:
+            relevance = relevance - relevance.min()
+
+        group = self._derive_group_sizes(train_x)
+        model = estimator_cls(**model_params)
+        model.fit(train_x, relevance, group=group)
+        return model
+
+    def _derive_group_sizes(self, train_x: pd.DataFrame) -> list[int]:
+        if isinstance(train_x.index, pd.MultiIndex) and "date" in train_x.index.names:
+            dates = train_x.index.get_level_values("date")
+            unique_dates = pd.unique(dates)
+            return [int((dates == date).sum()) for date in unique_dates]
+        return [int(len(train_x))]
+
+    def predict_outputs(self, *, model, features: pd.DataFrame) -> ModelOutputs:
+        scores = np.asarray(model.predict(features), dtype=float)
+        predictions = np.sign(scores).astype(int)
+        return ModelOutputs(scores=scores, predictions=predictions)
