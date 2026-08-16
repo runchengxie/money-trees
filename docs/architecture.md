@@ -93,6 +93,7 @@ Alpha101 和 Alpha191 共 292 列。纯 Python 路径由 `classic.py` 本地生�
 
 - `src/moneytree/models/base.py`
 - `src/moneytree/models/random_forest.py`
+- `src/moneytree/models/sklearn_trees.py`
 - `src/moneytree/models/linear.py`
 - `src/moneytree/models/xgboost.py`
 - `src/moneytree/models/registry.py`
@@ -101,8 +102,12 @@ Alpha101 和 Alpha191 共 292 列。纯 Python 路径由 `classic.py` 本地生�
 内置模型：
 
 - `random_forest`: 分类目标 `rel_performance`，支持调参和特征选择。
+- `extra_trees`: 分类目标 `rel_performance`，Extra Trees 实现。
+- `gradient_boosting`: 分类目标 `rel_performance`。
+- `hist_gradient_boosting`: 分类目标 `rel_performance`。
 - `xgboost`: 分类目标 `rel_performance`，依赖 `xgboost` extra。
 - `xgboost_regressor`: 回归目标 `rel_return`，依赖 `xgboost` extra。
+- `xgb_ranker`: pairwise ranking，依赖 `xgboost` extra。
 - `ridge`、`lasso`、`elasticnet`: 回归目标 `rel_return`，线性基准模型。
 
 模型适配器统一提供：

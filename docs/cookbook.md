@@ -1,6 +1,6 @@
 # Cookbook
 
-Cookbook 记录常见任务的可复制做法，重点是“怎么用”。Runbook 记录日常运行、失败恢复和归档检查，重点是“怎么稳地执行”。排障流程见 [runbook.md](runbook.md)。
+Cookbook 记录常见任务的可复制做法，重点在怎么用。Runbook 记录日常运行、失败恢复和归档检查，重点在怎么稳定地执行。排障流程见 [runbook.md](runbook.md)。
 
 ## 1. 跑最小本地回测
 

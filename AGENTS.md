@@ -6,6 +6,10 @@
 
 The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column standard. Alpha158/360 are 518 locally generated features. Alpha101/191 are 292 columns with two generation paths: the pure-Python cross-sectional engine in `src/moneytree/factors/classic.py` (rank/scale grouped by trade date, ported from the archived `wu-alpha191-alpha101` repository) and the DolphinDB external-alpha path in `docker/dolphindb/modules/`. Both write to the factor store or merge into the canonical `date, ticker` panel; the Python core package does not calculate Alpha101/191 inside the backtest loop.
 
+## Models
+
+The model layer registers 10 adapters in `src/moneytree/models/registry.py`: seven tree models (random_forest, extra_trees, gradient_boosting, hist_gradient_boosting, xgboost, xgboost_regressor, xgb_ranker) and three linear baselines (ridge, lasso, elasticnet). The classification models train on the three-class `rel_performance` label, the linear and xgboost_regressor models train on the continuous `rel_return` label, and xgb_ranker uses pairwise ranking. XGBoost variants are optional dependencies and should fail with a clear message when the extra is missing.
+
 ## Commands
 
 - Install dev dependencies: `uv sync --dev`
@@ -32,6 +36,7 @@ The project centers on the Alpha101, Alpha191, Alpha158, and Alpha360 column sta
 - GP factor mining CLI: `src/moneytree/cli/mining.py`
 - Data status CLI: `src/moneytree/cli/data_status.py`
 - Data snapshot CLI: `src/moneytree/cli/data_snapshot.py`
+- Data release CLI: `src/moneytree/cli/data_release.py`
 - Factor store CLI: `src/moneytree/cli/factor_store.py`
 - Parquet rewrite CLI: `src/moneytree/cli/parquet_rewrite.py`
 - Data quality helpers: `src/moneytree/data_quality.py`
