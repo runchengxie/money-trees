@@ -127,14 +127,19 @@ def resolve_release_output_dir(path: str | Path) -> Path:
 
     Inside WSL a Windows-style drive path is mapped to its native mount path,
     for example ``C:\\releases`` becomes ``/mnt/c/releases``. On native Windows
-    the path is kept unchanged.
+    the path is kept unchanged. On other POSIX systems a Windows-style drive
+    path keeps its drive letter while backslashes are normalized to forward
+    slashes so the returned path is a well-formed POSIX path.
     """
     raw = str(path)
     match = _WINDOWS_DRIVE_RE.match(raw)
     if not match:
         return Path(path).expanduser()
     if not _is_wsl():
-        return Path(path).expanduser()
+        drive = match.group(1)
+        rest = match.group(2).replace("\\", "/").lstrip("/")
+        normalized = f"{drive}:/{rest}"
+        return Path(normalized).expanduser()
 
     drive = match.group(1).lower()
     rest = match.group(2).replace("\\", "/")
@@ -470,11 +475,15 @@ def _write_split_parts(
                 f"{base_name}.part{index + 1:0{width}d}of{part_count:0{width}d}"
             )
             resume_status = "written"
-            if not overwrite and resume and _file_matches_source_segment(
-                output_path,
-                source,
-                byte_start=byte_start,
-                size_bytes=part_size,
+            if (
+                not overwrite
+                and resume
+                and _file_matches_source_segment(
+                    output_path,
+                    source,
+                    byte_start=byte_start,
+                    size_bytes=part_size,
+                )
             ):
                 input_handle.seek(byte_start + part_size)
                 progress.advance(part_size, message=f"reused {output_path.name}")
@@ -726,7 +735,9 @@ def _write_tar_assets(
                 compute_hash=not dry_run,
                 extra={
                     "compression": "none",
-                    "contents": [_source_payload(source, compute_hash=not dry_run) for source in group],
+                    "contents": [
+                        _source_payload(source, compute_hash=not dry_run) for source in group
+                    ],
                     "resume_status": resume_status,
                 },
             )
@@ -750,9 +761,7 @@ def _write_tar_assets(
 def _write_checksums(path: Path, entries: list[dict[str, Any]], *, overwrite: bool) -> None:
     _ensure_can_write(path, overwrite=overwrite)
     lines = [
-        f"{entry['sha256']}  {entry['relative_path']}"
-        for entry in entries
-        if entry.get("sha256")
+        f"{entry['sha256']}  {entry['relative_path']}" for entry in entries if entry.get("sha256")
     ]
     path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 

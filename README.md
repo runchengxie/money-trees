@@ -2,6 +2,16 @@
 
 Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具，覆盖 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子。Python import 包名是 `moneytree`，新文档优先使用 `moneytrees*` CLI（旧的 `moneytree*` 别名保留兼容）。
 
+## 为什么叫 money-trees
+
+名字是一个双关：
+
+- **树模型，而且不止一棵**。项目训练的主力是决策树家族：随机森林、Extra Trees、梯度提升（GradientBoosting）、HistGradientBoosting、XGBoost 分类、XGBoost 回归和 XGBoost ranking 共 7 个树模型，另配 Ridge、Lasso、ElasticNet 三个线性模型作为基准对照。复数 `trees` 直接对应"一群树"。
+- **810 棵摇钱树**。内置 Alpha101、Alpha191、Alpha158、Alpha360 四个经典因子家族共 810 个因子，每个因子都是一棵独立的"树"，覆盖价格、量、成交额、换手和市值等维度。
+- **摇钱树（Money Tree）**。在中文语境里，摇钱树象征可持续带来收益的策略。A 股量化的目标正是种下一片能长期摇出收益的因子和模型树林，而不是单一模型或单一因子。
+
+`money-trees` 是发行名和文档名，Python import 包名保留单数 `moneytree`，CLI 同时提供 `moneytrees*` 与旧 `moneytree*` 两套别名。
+
 ## 快速开始
 
 环境要求：Python `>=3.10` 和 [uv](https://docs.astral.sh/uv/)。
