@@ -108,4 +108,3 @@
 ## Cross-repository handoff
 
 After this plan is merged, `quant-factor-observatory` should add an independent consumer plan for `alpha810-snapshot.json`. The provider PR must merge first; the consumer must pin or document the accepted `schema_version` and use synthetic checked-in data for frontend tests. No frontend PR should depend on a development worktree or local hard-drive path.
-

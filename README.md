@@ -51,6 +51,7 @@ uv run moneytrees \
 | `moneytrees-factor-mining` | 用遗传算法在已有因子上挖掘新因子。 |
 | `moneytrees-data-status` | 只读检查数据、因子仓库和回测产物状态。 |
 | `moneytrees-parquet-rewrite` | 重写 parquet 或迁移可信 pickle。 |
+| `moneytree-factor-evidence` / `moneytrees-factor-evidence` | 生成聚合的公开 Alpha 因子证据快照。 |
 
 运行测试和 lint：
 
@@ -74,6 +75,7 @@ uv run ruff check .
 
 项目说明文档可通过 [MkDocs](https://runchengxie.github.io/money-trees/) 发布。公开因子证据的契约见 [docs/public-factor-evidence.md](docs/public-factor-evidence.md)，发布安全边界见 [docs/publication-audit.md](docs/publication-audit.md)。
 
+- [docs/index.md](docs/index.md): MkDocs 首页和项目边界入口。
 - [docs/smoke-test.md](docs/smoke-test.md): 冒烟测试、最小跑通路径和最小数据列。
 - [docs/architecture.md](docs/architecture.md): 数据层、市场层、因子层、模型层、组合层、回测层和输出层设计。
 - [docs/data-contract.md](docs/data-contract.md): 标准面板索引、必需列、可选列、标签和特征口径。
