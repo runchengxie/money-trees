@@ -11,9 +11,9 @@ from moneytree.cli.factor_evidence import main as factor_evidence_main
 def main(argv: Sequence[str] | None = None) -> int:
     parser: argparse.ArgumentParser = build_parser()
     args = parser.parse_args(argv)
-    panel = Path(args.panel).resolve()
     output = Path(args.output).resolve()
-    if panel == output:
+    source = Path(args.panel or args.factor_store).resolve()
+    if source == output:
         parser.error("--output must not overwrite --panel")
     return factor_evidence_main(argv)
 
