@@ -1,0 +1,28 @@
+site_name: Money Trees · Alpha 810 Research
+site_description: A-share classic-alpha factor computation and research evidence toolkit.
+site_url: https://runchengxie.github.io/money-trees/
+repo_url: https://github.com/runchengxie/money-trees
+docs_dir: docs
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+nav:
+  - 首页: index.md
+  - 项目边界: public-factor-evidence.md
+  - 公开发布审计: publication-audit.md
+  - 因子目录: factor-catalog.md
+  - 因子族: factor-families.md
+  - 数据契约: data-contract.md
+  - 架构: architecture.md
+  - CLI 参考: cli-reference.md
+  - 运行手册: runbook.md
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true

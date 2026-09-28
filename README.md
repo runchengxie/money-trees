@@ -1,6 +1,6 @@
 # money-trees
 
-Money Trees 是面向 A 股截面选股研究的经典 Alpha 因子、训练、回测和结果归档工具，覆盖 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子。Python import 包名是 `moneytree`，新文档优先使用 `moneytrees*` CLI（旧的 `moneytree*` 别名保留兼容）。
+Money Trees 是面向 A 股经典 Alpha 因子计算、验证和研究证据生产的工具，覆盖 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个经典因子。完整组合、风险、执行模拟和正式回测任务分别由 `quant-platform` 与 `quant-backtest-runtime` 承担。Python import 包名是 `moneytree`，新文档优先使用 `moneytrees*` CLI（旧的 `moneytree*` 别名保留兼容）。
 
 ## 为什么叫 money-trees
 
@@ -71,6 +71,8 @@ uv run ruff check .
 分类模型训练三分类方向标签 `rel_performance`，线性模型和 XGBoost 回归训练连续目标 `rel_return`，XGBoost ranking 使用 pairwise ranking。XGBoost 相关适配器是可选依赖，缺省安装时会在调用处给出明确报错。
 
 ## 文档导航
+
+项目说明文档可通过 [MkDocs](https://runchengxie.github.io/money-trees/) 发布。公开因子证据的契约见 [docs/public-factor-evidence.md](docs/public-factor-evidence.md)，发布安全边界见 [docs/publication-audit.md](docs/publication-audit.md)。
 
 - [docs/smoke-test.md](docs/smoke-test.md): 冒烟测试、最小跑通路径和最小数据列。
 - [docs/architecture.md](docs/architecture.md): 数据层、市场层、因子层、模型层、组合层、回测层和输出层设计。
