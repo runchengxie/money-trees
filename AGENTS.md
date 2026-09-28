@@ -18,6 +18,9 @@ The model layer registers 10 adapters in `src/moneytree/models/registry.py`: sev
 - Run lint: `uv run ruff check .`
 - Run CLI smoke: `uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py`
 - Run TuShare data-source tests: `uv run pytest -q tests/test_tushare_data_source.py`
+
+`moneytrees-tushare` is a deprecated compatibility path. New data production belongs to
+`quant-market-data-platform`; Money Trees should consume its published `date,ticker` assets.
 - Run DolphinDB external-alpha tests: `uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py`
 - Run classic Python Alpha101/191 and mining tests: `uv run pytest -q tests/test_classic_alphas.py tests/test_mining.py`
 - Run data status/snapshot tests: `uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py`

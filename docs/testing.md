@@ -74,6 +74,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_data_release.py` | 数据发布资产、本地分片、不压缩 tar、GitHub CLI 命令预览和敏感文件保护。 |
 | `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
 | `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
+| `tests/test_data_platform_migration.py` | 数据下载兼容入口与 `quant-market-data-platform` 主路径的迁移文档契约。 |
 | `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts、兼容别名和 CLI 高风险参数在 README 或 docs 中的覆盖。 |
 | `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
 | `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |

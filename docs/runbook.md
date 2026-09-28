@@ -531,3 +531,6 @@ data/derived/
 ```
 
 `dataset_meta.json` 应记录原始缓存元数据清单版本、生成参数、因子族、复权口径、基准、代码 commit 和依赖版本。
+# 数据入口提示
+
+正式研究优先读取 `quant-market-data-platform` 发布的数据资产。本文中的 `moneytrees-tushare` 命令属于 deprecated 兼容路径，仅用于旧流程迁移或历史复现；不要为新任务新增 TuShare token、原始缓存或本地 `manifest.sqlite` 依赖。
