@@ -11,13 +11,25 @@ from moneytree.factors.publication import (
     audit_public_snapshot,
     build_factor_evidence_snapshot,
 )
+from moneytree.factors.store_publication import build_factor_evidence_snapshot_from_store
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build an aggregate-only public Alpha factor evidence snapshot."
     )
-    parser.add_argument("--panel", required=True, help="Panel parquet or trusted pickle path.")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--panel", help="Panel parquet or trusted pickle path.")
+    source.add_argument(
+        "--factor-store",
+        help="Partitioned factor-store manifest.json; reads factor partitions incrementally.",
+    )
+    parser.add_argument(
+        "--families",
+        help="Comma-separated factor families when using --factor-store; defaults to all.",
+    )
+    parser.add_argument("--date-start", help="Optional inclusive date filter for --factor-store.")
+    parser.add_argument("--date-end", help="Optional inclusive date filter for --factor-store.")
     parser.add_argument(
         "--factors",
         required=True,
@@ -45,14 +57,28 @@ def _factor_names(value: str) -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        panel = load_market_data(Path(args.panel))
-        payload = build_factor_evidence_snapshot(
-            panel,
-            _factor_names(args.factors),
-            return_column=args.return_column,
-            data_version=args.data_version,
-            config={"group_count": args.group_count},
-        )
+        if args.factor_store:
+            if args.factors not in {"all", "*"}:
+                raise ValueError("--factors must be 'all' or '*' when using --factor-store")
+            families = args.families.split(",") if args.families else None
+            payload = build_factor_evidence_snapshot_from_store(
+                Path(args.factor_store),
+                families=families,
+                date_start=args.date_start,
+                date_end=args.date_end,
+                return_column=args.return_column,
+                data_version=args.data_version,
+                group_count=args.group_count,
+            )
+        else:
+            panel = load_market_data(Path(args.panel))
+            payload = build_factor_evidence_snapshot(
+                panel,
+                _factor_names(args.factors),
+                return_column=args.return_column,
+                data_version=args.data_version,
+                config={"group_count": args.group_count},
+            )
         audit_public_snapshot(payload)
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

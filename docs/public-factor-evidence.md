@@ -26,6 +26,21 @@ uv run moneytrees-factor-evidence \
 
 数据可以来自受控硬盘盒或私有研究环境。生成步骤只读取输入，输出目录应位于仓库外；提交前必须运行公开发布审计。
 
+对于 Money Trees 因子仓库，推荐直接读取 `manifest.json`。命令会按分区读取，不会把完整的 810 因子宽表一次性加载到内存：
+
+```bash
+uv run moneytrees-factor-evidence \
+  --factor-store /data/moneytree-factor-store/manifest.json \
+  --families alpha101,alpha191,alpha158,alpha360 \
+  --factors all \
+  --date-start 2016-01-01 \
+  --date-end 2025-12-31 \
+  --data-version cn-factor-store-2016-2025 \
+  --output /tmp/alpha810-snapshot.json
+```
+
+`--factor-store` 只消费因子仓库中的已发布基础面板和因子分区；硬盘盒路径、原始数据和中间文件不会写入公开快照。生产发布前应确认因子仓库的 `manifest.json`、基础面板和各因子分区来自同一版本。
+
 ## 下游边界
 
 - `quant-platform` 消费研究层输出，负责策略无关的组合、风险、回测和执行模拟。
