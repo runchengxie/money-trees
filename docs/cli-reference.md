@@ -1,6 +1,6 @@
 # CLI 参考
 
-本文汇总 Money Trees 当前 console scripts 和高风险参数。示例优先使用 `moneytrees*` 命令。`moneytree*` 同名别名仍保留，用于兼容旧脚本。
+本文汇总 Money Trees 当前 console scripts 和高风险参数。示例优先使用 `moneytrees*` 命令。`moneytree*` 同名别名仍保留，用于兼容旧脚本。数据下载不再是长期主路径；`moneytrees-tushare` 仅用于兼容，正式数据生产请使用 `quant-market-data-platform`。
 
 ## 命令和别名
 
@@ -26,7 +26,9 @@
 | `--output-dir` | 覆盖回测产物输出目录。 |
 | `--set` | 可重复传入 `dotted.path=value` 覆盖项。 |
 
-## `moneytrees-tushare`
+## `moneytrees-tushare`（deprecated 兼容入口）
+
+新研究应从 `quant-market-data-platform` 读取已发布面板；本命令只用于旧 notebook 迁移和历史复现。
 
 | 参数 | 说明 |
 | --- | --- |

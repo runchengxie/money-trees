@@ -34,7 +34,7 @@ uv run moneytrees \
 ## 三条研究路径
 
 1. 标准面板回测：准备好 `date, ticker` 面板，直接跑模型和组合回测。
-2. 本地因子：用 `moneytrees-tushare` 拉取基础面板，用 `moneytrees-factor-store` 本地生成 Alpha158/360。
+2. 本地因子：从 `quant-market-data-platform` 读取已发布基础面板，用 `moneytrees-factor-store` 本地生成 Alpha158/360。旧的 `moneytrees-tushare` 仅作为兼容入口保留。
 3. 完整 810 因子：在路径 2 基础上补齐 Alpha101/191，可以用纯 Python 本地生成（`moneytrees-alpha101-191-python`），也可以用 DolphinDB 外部生成（`moneytrees-dolphindb-alphas`），统一写入因子仓库（factor store）后回测。
 
 大规模研究推荐使用因子仓库，避免长期维护单个超宽 parquet。
@@ -44,7 +44,7 @@ uv run moneytrees \
 | 命令 | 用途 |
 | --- | --- |
 | `moneytrees` | 按配置运行回测。 |
-| `moneytrees-tushare` | 拉取 TuShare 日频数据，生成标准面板。 |
+| `moneytrees-tushare` | **deprecated 兼容入口**：拉取 TuShare 日频数据；新研究应读取 `quant-market-data-platform` 发布资产。 |
 | `moneytrees-factor-store` | 本地生成 Alpha158/360 因子仓库。 |
 | `moneytrees-alpha101-191-python` | 纯 Python 本地生成 Alpha101/191（横截面语义）。 |
 | `moneytrees-dolphindb-alphas` | 用 DolphinDB 外部生成 Alpha101/191。 |
@@ -72,6 +72,8 @@ uv run ruff check .
 分类模型训练三分类方向标签 `rel_performance`，线性模型和 XGBoost 回归训练连续目标 `rel_return`，XGBoost ranking 使用 pairwise ranking。XGBoost 相关适配器是可选依赖，缺省安装时会在调用处给出明确报错。
 
 ## 文档导航
+
+数据接入、缓存、质量治理、版本和发布由 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 负责；Money Trees 的迁移边界见 [docs/data-platform-migration.md](docs/data-platform-migration.md)。
 
 项目说明文档可通过 [MkDocs](https://runchengxie.github.io/money-trees/) 发布。公开因子证据的契约见 [docs/public-factor-evidence.md](docs/public-factor-evidence.md)，发布安全边界见 [docs/publication-audit.md](docs/publication-audit.md)。
 
