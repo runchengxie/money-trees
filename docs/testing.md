@@ -79,6 +79,8 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
 | `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |
 | `tests/test_docs_style.py` | 中文文档中高风险间接句式、核心术语漂移、DolphinDB 模块事实和因子目录状态一致性。 |
+| `tests/test_factor_evidence_cli.py` | 公开 Alpha 因子证据 CLI、文件参数、错误路径和发布字段审计。 |
+| `tests/test_factor_publication.py` | 聚合 Alpha 证据快照 schema、覆盖率、IC/RankIC 和非有限值规范化。 |
 | `tests/test_export_repo_source.py` | 源码导出工具是否包含配置和因子清单，同时继续排除运行数据目录。 |
 | `tests/test_external_alphas.py` | 外部 Alpha101/191 列名、字段映射、输入依赖、并入和元数据清单校验。 |
 | `tests/test_factor_store.py` | 本地因子仓库、外部因子仓库、元数据清单、分区、压缩、覆盖和选择加载。 |
@@ -87,6 +89,8 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_mining.py` | GP 因子挖掘：终端解析、表达式工具、适应度、报告输出和 CLI 冒烟。 |
 | `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
 | `tests/test_package_script.py` | `project_tools/package.sh` 输出目录、运行数据包含策略、source-only 模式和压缩格式。 |
+| `tests/test_public_docs.py` | MkDocs 导航、公开证据文档链接和 GitHub Pages workflow 契约。 |
+| `tests/test_public_factor_release.py` | 合成数据端到端生成脱敏公开 Alpha 快照。 |
 | `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |
 | `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重、换手惩罚和 fallback 诊断。 |
 | `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |
