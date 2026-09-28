@@ -12,6 +12,15 @@ from moneytree.factors.evaluate import compute_factor_ic, summarize_factor_ic
 
 PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.0"
 PUBLIC_SNAPSHOT_KIND = "moneytree_factor_evidence_snapshot"
+_FORBIDDEN_PUBLIC_KEYS = {
+    "ticker",
+    "tickers",
+    "positions",
+    "weights",
+    "portfolio_weights",
+    "raw_path",
+    "input_path",
+}
 
 
 def _json_safe(value: Any) -> Any:
@@ -182,3 +191,25 @@ def build_factor_evidence_snapshot(
     }
     return _json_safe(payload)
 
+
+def audit_public_snapshot(payload: dict[str, Any]) -> None:
+    """Reject public payloads containing forbidden private or non-JSON values."""
+
+    def visit(value: Any, path: str = "snapshot") -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if str(key).lower() in _FORBIDDEN_PUBLIC_KEYS:
+                    raise ValueError(f"Forbidden public field: {path}.{key}")
+                visit(item, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{path}[{index}]")
+        elif isinstance(value, float):
+            if not np.isfinite(value):
+                raise ValueError(f"Non-finite public value: {path}")
+        elif isinstance(value, str) and (
+            value.startswith("/") or (len(value) > 2 and value[1:3] == ":\\")
+        ):
+            raise ValueError(f"Absolute path in public payload: {path}")
+
+    visit(payload)
