@@ -51,18 +51,19 @@ def _part_in_range(
 
 
 def _corr_columns(values: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """Return Pearson correlations for columns with NaN values."""
-    valid = np.isfinite(values) & np.isfinite(target)[:, None]
+    """Return Pearson correlations using the valid value/target pairs in each column."""
+    target_columns = np.broadcast_to(target[:, None], values.shape) if target.ndim == 1 else target
+    valid = np.isfinite(values) & np.isfinite(target_columns)
     count = valid.sum(axis=0).astype(float)
     value_sum = np.where(valid, values, 0.0).sum(axis=0)
     value_mean = np.divide(value_sum, count, out=np.zeros_like(value_sum), where=count > 0)
-    target_count = float(np.isfinite(target).sum())
-    target_mean = float(np.where(np.isfinite(target), target, 0.0).sum() / target_count)
+    target_sum = np.where(valid, target_columns, 0.0).sum(axis=0)
+    target_mean = np.divide(target_sum, count, out=np.zeros_like(target_sum), where=count > 0)
     centered_values = np.where(valid, values - value_mean, 0.0)
-    centered_target = np.where(np.isfinite(target), target - target_mean, 0.0)
-    numerator = (centered_values * centered_target[:, None]).sum(axis=0)
+    centered_target = np.where(valid, target_columns - target_mean, 0.0)
+    numerator = (centered_values * centered_target).sum(axis=0)
     value_scale = np.sqrt((centered_values**2).sum(axis=0))
-    target_scale = np.sqrt((centered_target**2).sum())
+    target_scale = np.sqrt((centered_target**2).sum(axis=0))
     denominator = value_scale * target_scale
     result = np.full(values.shape[1], np.nan, dtype=float)
     usable = (count >= 2) & (denominator > 0)
@@ -103,8 +104,9 @@ def _update_chunk(
             continue
         dates_seen.add(pd.Timestamp(date))
         ic = _corr_columns(date_values, date_target)
-        ranked_values = _rank_columns(date_values)
-        ranked_target = pd.Series(date_target).rank(method="average", na_option="keep").to_numpy()
+        valid_pairs = np.isfinite(date_values) & valid_target[:, None]
+        ranked_values = _rank_columns(np.where(valid_pairs, date_values, np.nan))
+        ranked_target = _rank_columns(np.where(valid_pairs, date_target[:, None], np.nan))
         rank_ic = _corr_columns(ranked_values, ranked_target)
         for position, factor in enumerate(factor_names):
             valid = np.isfinite(date_values[:, position]) & valid_target
