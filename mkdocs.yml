@@ -5,22 +5,22 @@ repo_url: https://github.com/runchengxie/money-trees
 docs_dir: docs
 theme:
   name: material
-  language: zh
+  language: en
   features:
     - navigation.instant
     - navigation.sections
     - content.code.copy
 nav:
-  - 首页: index.md
-  - 项目边界: public-factor-evidence.md
-  - 公开发布审计: publication-audit.md
-  - 研究方法: research-methodology.md
-  - 因子目录: factor-catalog.md
-  - 因子族: factor-families.md
-  - 数据契约: data-contract.md
-  - 架构: architecture.md
-  - CLI 参考: cli-reference.md
-  - 运行手册: runbook.md
+  - Home: index.md
+  - Public factor evidence: public-factor-evidence.md
+  - Publication audit: publication-audit.md
+  - Research methodology: research-methodology.md
+  - Factor catalog: factor-catalog.md
+  - Factor families: factor-families.md
+  - Data contract: data-contract.md
+  - Architecture: architecture.md
+  - CLI reference: cli-reference.md
+  - Runbook: runbook.md
 markdown_extensions:
   - admonition
   - attr_list
