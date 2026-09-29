@@ -18,6 +18,8 @@ from moneytree.factors.publication import (
     audit_public_snapshot,
 )
 
+SIGNAL_QUALITY_SCHEMA_VERSION = "1.0"
+
 
 def _selected_families(manifest: dict[str, Any], families: Iterable[str] | None) -> list[str]:
     available = list(manifest.get("factor_families", {}))
@@ -282,6 +284,78 @@ def build_factor_evidence_snapshot_from_store(
             "Evidence is descriptive research output and is not a return guarantee.",
         ],
     }
+    payload["quality"] = build_signal_quality_report(payload)
     result = _json_safe(payload)
     audit_public_snapshot(result)
     return result
+
+
+def build_signal_quality_report(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Build an aggregate-only quality gate from a public evidence snapshot."""
+    factors = list(snapshot.get("factors", []))
+    coverage = [
+        item["coverage"]["ratio"]
+        for item in factors
+        if item.get("coverage", {}).get("ratio") is not None
+    ]
+    rank_ic = [
+        item["rank_ic"]["mean"]
+        for item in factors
+        if item.get("rank_ic", {}).get("mean") is not None
+    ]
+    positive_rate = [
+        item["rank_ic"]["positive_rate"]
+        for item in factors
+        if item.get("rank_ic", {}).get("positive_rate") is not None
+    ]
+    low_coverage = sum(value < 0.80 for value in coverage)
+    missing_rank_ic = len(factors) - len(rank_ic)
+    checks = [
+        {
+            "name": "factor_count",
+            "status": "pass" if factors else "fail",
+            "value": len(factors),
+            "threshold": ">= 1",
+        },
+        {
+            "name": "coverage",
+            "status": "pass" if not low_coverage else "warn",
+            "value": low_coverage,
+            "threshold": "factors below 80% coverage = 0",
+        },
+        {
+            "name": "rank_ic_availability",
+            "status": "pass" if not missing_rank_ic else "warn",
+            "value": missing_rank_ic,
+            "threshold": "missing RankIC means = 0",
+        },
+    ]
+    status = (
+        "fail"
+        if any(item["status"] == "fail" for item in checks)
+        else ("warn" if any(item["status"] == "warn" for item in checks) else "pass")
+    )
+    return {
+        "schema_version": SIGNAL_QUALITY_SCHEMA_VERSION,
+        "status": status,
+        "checks": checks,
+        "summary": {
+            "factor_count": len(factors),
+            "coverage_mean": float(np.mean(coverage)) if coverage else None,
+            "coverage_min": float(np.min(coverage)) if coverage else None,
+            "rank_ic_mean": float(np.mean(rank_ic)) if rank_ic else None,
+            "rank_ic_positive_rate_mean": float(np.mean(positive_rate)) if positive_rate else None,
+            "low_coverage_factor_count": low_coverage,
+            "missing_rank_ic_factor_count": missing_rank_ic,
+        },
+        "source": {
+            "data_version": snapshot.get("data_version"),
+            "date_start": snapshot.get("dataset", {}).get("date_start"),
+            "date_end": snapshot.get("dataset", {}).get("date_end"),
+            "generated_at": snapshot.get("generated_at"),
+        },
+        "public_limits": [
+            "Aggregate diagnostics only; no ticker-level values or portfolio weights.",
+            "Quality status is a research-data gate, not a performance or trading guarantee.",
+        ],
+    }

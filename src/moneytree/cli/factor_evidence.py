@@ -11,7 +11,10 @@ from moneytree.factors.publication import (
     audit_public_snapshot,
     build_factor_evidence_snapshot,
 )
-from moneytree.factors.store_publication import build_factor_evidence_snapshot_from_store
+from moneytree.factors.store_publication import (
+    build_factor_evidence_snapshot_from_store,
+    build_signal_quality_report,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,17 +43,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--data-version", default="unknown", help="Input data version label.")
     parser.add_argument("--output", required=True, help="Output JSON path.")
-    parser.add_argument("--group-count", type=int, default=5, help="Number of return groups.")
     parser.add_argument(
-        "--format", choices=["text", "json"], default="text", help="Output format."
+        "--quality-output", help="Optional aggregate-only signal quality report JSON path."
     )
+    parser.add_argument("--group-count", type=int, default=5, help="Number of return groups.")
+    parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     return parser
 
 
 def _factor_names(value: str) -> list[str]:
     path = Path(value)
     if path.is_file():
-        return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        return [
+            line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+        ]
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
@@ -86,6 +92,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        if args.quality_output:
+            quality_output = Path(args.quality_output)
+            quality_output.parent.mkdir(parents=True, exist_ok=True)
+            quality_output.write_text(
+                json.dumps(
+                    build_signal_quality_report(payload),
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

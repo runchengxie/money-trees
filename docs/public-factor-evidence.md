@@ -14,6 +14,20 @@
 
 快照不包含逐股票因子值、股票代码、组合权重、原始数据路径、凭证或私有模型参数。
 
+## 信号质量检查
+
+可在生成快照时同时生成聚合质量报告：
+
+```bash
+uv run moneytrees-factor-evidence \
+  --factor-store /data/moneytree-factor-store/manifest.json \
+  --factors all \
+  --output /tmp/alpha810-snapshot.json \
+  --quality-output /tmp/alpha810-signal-quality.json
+```
+
+报告检查因子数量、覆盖率和 RankIC 可用性。`pass` 表示没有发现门禁问题，`warn` 表示需要人工复核，`fail` 表示没有可用因子。它是数据与研究质量门禁，不是收益承诺。
+
 ## 本地生成
 
 ```bash

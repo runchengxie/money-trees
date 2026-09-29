@@ -4,7 +4,10 @@ import json
 
 import pandas as pd
 
-from moneytree.factors.store_publication import build_factor_evidence_snapshot_from_store
+from moneytree.factors.store_publication import (
+    build_factor_evidence_snapshot_from_store,
+    build_signal_quality_report,
+)
 
 
 def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path) -> None:
@@ -55,3 +58,30 @@ def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert '"ticker"' not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_signal_quality_report_is_aggregate_only() -> None:
+    snapshot = {
+        "data_version": "test",
+        "generated_at": "2026-01-01T00:00:00+00:00",
+        "dataset": {"date_start": "2024-01-01", "date_end": "2024-01-02"},
+        "factors": [
+            {
+                "name": "alpha101_001",
+                "coverage": {"ratio": 1.0},
+                "rank_ic": {"mean": 0.02, "positive_rate": 0.6},
+            },
+            {
+                "name": "alpha101_002",
+                "coverage": {"ratio": 0.5},
+                "rank_ic": {"mean": None, "positive_rate": None},
+            },
+        ],
+    }
+    report = build_signal_quality_report(snapshot)
+    assert report["status"] == "warn"
+    assert report["summary"]["factor_count"] == 2
+    assert report["summary"]["low_coverage_factor_count"] == 1
+    encoded = json.dumps(report, ensure_ascii=False)
+    assert "alpha101_001" not in encoded
+    assert "ticker-level values" in encoded
