@@ -1,13 +1,52 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 
 import pandas as pd
+import pytest
 
 from moneytree.factors.store_publication import (
+    _update_chunk,
     build_factor_evidence_snapshot_from_store,
     build_signal_quality_report,
 )
+
+
+def test_store_ic_uses_pairwise_valid_rows_for_sparse_factor() -> None:
+    index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2024-01-02"]), ["A", "B", "C", "D"]],
+        names=["date", "ticker"],
+    )
+    factors = pd.DataFrame({"alpha101_001": [1.0, 2.0, 3.0, float("nan")]}, index=index)
+    returns = pd.Series([1.0, 2.0, 3.0, 10.0], index=index)
+    sums, counts, ic_values, rank_ic_values = (defaultdict(lambda: defaultdict(float)), defaultdict(lambda: defaultdict(int)), defaultdict(list), defaultdict(list))
+    _update_chunk(
+        factors, returns, group_count=2, sums=sums, counts=counts,
+        ic_values=ic_values, rank_ic_values=rank_ic_values,
+        valid_counts=defaultdict(int), total_observations=defaultdict(int),
+        dates_seen=set(), tickers_seen=set(),
+    )
+    assert ic_values["alpha101_001"] == pytest.approx([1.0])
+    assert rank_ic_values["alpha101_001"] == pytest.approx([1.0])
+
+
+def test_store_rank_ic_reranks_returns_on_pairwise_valid_rows() -> None:
+    index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2024-01-02"]), ["A", "B", "C", "D"]],
+        names=["date", "ticker"],
+    )
+    factors = pd.DataFrame({"alpha101_001": [1.0, 2.0, 3.0, float("nan")]}, index=index)
+    returns = pd.Series([1.0, 3.0, 4.0, 2.0], index=index)
+    rank_ic_values = defaultdict(list)
+    _update_chunk(
+        factors, returns, group_count=2,
+        sums=defaultdict(lambda: defaultdict(float)), counts=defaultdict(lambda: defaultdict(int)),
+        ic_values=defaultdict(list), rank_ic_values=rank_ic_values,
+        valid_counts=defaultdict(int), total_observations=defaultdict(int),
+        dates_seen=set(), tickers_seen=set(),
+    )
+    assert rank_ic_values["alpha101_001"] == pytest.approx([1.0])
 
 
 def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path) -> None:
