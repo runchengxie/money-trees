@@ -26,6 +26,15 @@ uv run moneytrees-factor-evidence \
   --quality-output /tmp/alpha810-signal-quality.json
 ```
 
+如需交给正式回测或 Observatory 的统一证据契约，可额外指定：
+
+```bash
+  --evidence-v1-output /tmp/factor-evidence.v1.json
+```
+
+`factor_evidence.v1` 将预测性结果、不确定性、风险、残差、时间验证和来源
+信息放在同一个聚合 artifact 中；未提供的诊断会明确标记为 `not_provided`。
+
 报告检查因子数量、覆盖率和 RankIC 可用性。`pass` 表示没有发现门禁问题，`warn` 表示需要人工复核，`fail` 表示没有可用因子。它是数据与研究质量门禁，不是收益承诺。
 
 ## 本地生成

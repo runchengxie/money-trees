@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from moneytree.data import load_market_data
+from moneytree.factors.evidence_v1 import build_factor_evidence_v1
 from moneytree.factors.publication import (
     audit_public_snapshot,
     build_factor_evidence_snapshot,
@@ -45,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, help="Output JSON path.")
     parser.add_argument(
         "--quality-output", help="Optional aggregate-only signal quality report JSON path."
+    )
+    parser.add_argument(
+        "--evidence-v1-output",
+        help="Optional unified factor_evidence.v1 JSON output path.",
     )
     parser.add_argument("--group-count", type=int, default=5, help="Number of return groups.")
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
@@ -102,6 +107,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     indent=2,
                     sort_keys=True,
                 )
+                + "\n",
+                encoding="utf-8",
+            )
+        if args.evidence_v1_output:
+            evidence_output = Path(args.evidence_v1_output)
+            evidence_output.parent.mkdir(parents=True, exist_ok=True)
+            evidence_output.write_text(
+                json.dumps(build_factor_evidence_v1(payload), ensure_ascii=False, indent=2, sort_keys=True)
                 + "\n",
                 encoding="utf-8",
             )
