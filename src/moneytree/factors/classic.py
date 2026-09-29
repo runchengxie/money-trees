@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from moneytree.data import ensure_date_ticker_index, normalize_factor_dtype
+from moneytree.factors.rolling import rolling_rank_last
 
 ALPHA191_COUNT = 191
 ALPHA101_COUNT = 101
@@ -124,12 +125,7 @@ class ClassicAlphaContext:
         return self._pair_rolling(x, y, window, "cov")
 
     def _ts_rank(self, df: pd.Series, window: int = 10) -> pd.Series:
-        def rank_last(values: np.ndarray) -> float:
-            return float(pd.Series(values).rank(pct=True).iloc[-1])
-
-        return _groupby_ticker(df).transform(
-            lambda group: group.rolling(window).apply(rank_last, raw=True)
-        )
+        return rolling_rank_last(df, window, min_periods=window)
 
     def _ts_min(self, df: pd.Series, window: int = 10) -> pd.Series:
         return _groupby_ticker(df).transform(lambda group: group.rolling(window).min())

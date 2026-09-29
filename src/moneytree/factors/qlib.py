@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from moneytree.data import ensure_date_ticker_index, normalize_factor_dtype
+from moneytree.factors.rolling import rolling_rank_last
 
 PRICE_FIELDS = ("open", "high", "low", "close", "vwap")
 ALPHA360_FIELDS = ("open", "high", "low", "close", "vwap", "volume")
@@ -78,12 +79,7 @@ def _rolling_quantile(series: pd.Series, window: int, q: float) -> pd.Series:
 
 
 def _rolling_rank_latest(series: pd.Series, window: int) -> pd.Series:
-    def _rank_last(values: pd.Series) -> float:
-        return float(values.rank(pct=True).iloc[-1])
-
-    return _by_ticker(series).transform(
-        lambda s: s.rolling(window, min_periods=1).apply(_rank_last, raw=False)
-    )
+    return rolling_rank_last(series, window, min_periods=1)
 
 
 def _rolling_sum(series: pd.Series, window: int) -> pd.Series:
