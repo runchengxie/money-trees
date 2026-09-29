@@ -80,6 +80,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |
 | `tests/test_docs_style.py` | 中文文档中高风险间接句式、核心术语漂移、DolphinDB 模块事实和因子目录状态一致性。 |
 | `tests/test_factor_evidence_cli.py` | 公开 Alpha 因子证据 CLI、文件参数、错误路径和发布字段审计。 |
+| `tests/test_factor_evidence_v1.py` | 统一 `factor_evidence.v1` 契约和公开字段边界。 |
 | `tests/test_factor_publication.py` | 聚合 Alpha 证据快照 schema、覆盖率、IC/RankIC 和非有限值规范化。 |
 | `tests/test_factor_store_publication.py` | 从分区因子仓库增量读取并生成脱敏 Alpha 证据快照。 |
 | `tests/test_export_repo_source.py` | 源码导出工具是否包含配置和因子清单，同时继续排除运行数据目录。 |

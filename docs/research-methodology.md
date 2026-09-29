@@ -8,10 +8,10 @@ information set，不能把未来可见的数据用于特征、标签或决策�
 
 每次研究运行应记录：
 
-- 数据版本、源 manifest 的 SHA-256 和代码 revision；
+- 数据版本、源元数据清单的 SHA-256 和代码 revision；
 - feature cutoff、publication cutoff、decision time 和 execution time；
 - 训练区间、标签区间、预测 horizon、purge window 和 embargo；
-- 因子候选数量、调参次数、holdout 是否被查看，以及停止原因。
+- 因子候选数量、调参次数、留出验证是否被查看，以及停止原因。
 
 ## 时间序列验证
 
