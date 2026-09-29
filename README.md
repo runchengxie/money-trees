@@ -75,7 +75,7 @@ uv run ruff check .
 
 数据接入、缓存、质量治理、版本和发布由 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 负责；Money Trees 的迁移边界见 [docs/data-platform-migration.md](docs/data-platform-migration.md)。
 
-项目说明文档可通过 [MkDocs](https://runchengxie.github.io/money-trees/) 发布。公开因子证据的契约见 [docs/public-factor-evidence.md](docs/public-factor-evidence.md)，发布安全边界见 [docs/publication-audit.md](docs/publication-audit.md)。
+本 README 是仓库入口；[GitHub Pages 文档首页](https://runchengxie.github.io/money-trees/) 对应 [docs/index.md](docs/index.md)，由 MkDocs 构建。公开因子证据的契约见 [docs/public-factor-evidence.md](docs/public-factor-evidence.md)，发布安全边界见 [docs/publication-audit.md](docs/publication-audit.md)。
 
 - [docs/index.md](docs/index.md): MkDocs 首页和项目边界入口。
 - [docs/smoke-test.md](docs/smoke-test.md): 冒烟测试、最小跑通路径和最小数据列。
