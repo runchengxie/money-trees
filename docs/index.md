@@ -1,7 +1,9 @@
 # Money Trees · Alpha 810 Research
 
-Money Trees 是面向 A 股经典 Alpha 因子计算、验证和研究证据生产的工具。项目维护 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个因子的生成入口、列级目录、因子仓库和基础评估。
+[中文页面](index.zh-CN.md)
 
-完整组合、风险、执行模拟和回测任务运行分别属于 `quant-platform` 和 `quant-backtest-runtime`；模型训练和策略晋升属于研究层。
+Money Trees is an A-share classic-alpha toolkit for factor computation, validation, and research-evidence production. It maintains generation entry points, column-level catalogs, a factor store, and baseline evaluation for Alpha101, Alpha191, Alpha158, and Alpha360, covering 810 factors in total.
 
-从[项目边界](public-factor-evidence.md)开始，或查看[公开发布审计](publication-audit.md)。
+Full portfolio construction, risk analysis, execution simulation, and backtest jobs belong to `quant-platform` and `quant-backtest-runtime`. Model training and strategy promotion belong to the research layer.
+
+Start with [Project boundary and public evidence](public-factor-evidence.md), or review the [publication audit](publication-audit.md).

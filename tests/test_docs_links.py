@@ -37,6 +37,7 @@ def test_readme_docs_navigation_mentions_all_user_docs() -> None:
     missing = [
         path.name
         for path in sorted((root / "docs").glob("*.md"))
+        if not path.name.endswith(".zh-CN.md")
         if f"docs/{path.name}" not in readme
     ]
 

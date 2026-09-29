@@ -1,25 +1,27 @@
-# 公开发布审计
+# Publication audit
 
-公开快照在进入 `quant-factor-observatory` 或 GitHub Pages 前必须满足以下条件：
+[中文页面](publication-audit.zh-CN.md)
 
-1. `kind` 为 `moneytree_factor_evidence_snapshot`，`schema_version` 为受支持版本。
-2. 所有数值都能以标准 JSON 编码；非有限值必须为 `null`。
-3. 不存在 ticker、持仓、权重、原始路径或凭证字段。
-4. 快照带有数据版本、样本区间、代码修订号（不可用时可以为 `null`）和计算配置。
-5. 输入面板、原始缓存、因子仓库和回测产物不进入公开仓库。
+Before a public snapshot enters `quant-factor-observatory` or GitHub Pages, verify that:
 
-推荐流程：
+1. `kind` is `moneytree_factor_evidence_snapshot` and `schema_version` is supported.
+2. Every number is standard JSON; non-finite values are represented as `null`.
+3. The snapshot contains no ticker, holding, weight, raw path, or credential fields.
+4. The snapshot records the data version, sample interval, code revision when available, and computation configuration.
+5. The input panel, raw cache, factor store, and backtest artifacts stay out of the public repository.
+
+Recommended flow:
 
 ```text
-硬盘盒/私有研究环境
+Private disk / research environment
         ↓
-因子生成与证据计算
+Factor generation and evidence computation
         ↓
-公开字段审计
+Public-field audit
         ↓
-静态 JSON 快照
+Static JSON snapshot
         ↓
 quant-factor-observatory / GitHub Pages
 ```
 
-GitHub-hosted Actions 只负责构建已审核的文档和静态前端，不访问本地硬盘盒，也不运行需要真实数据或凭证的研究计算。
+GitHub-hosted Actions only build reviewed documentation and the static frontend. They do not access the private disk and do not run research computations that require real data or credentials.
