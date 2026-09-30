@@ -66,6 +66,22 @@ uv run moneytrees-factor-evidence \
 
 `--factor-store` 只消费因子仓库中的已发布基础面板和因子分区；硬盘盒路径、原始数据和中间文件不会写入公开快照。生产发布前应确认因子仓库的 `manifest.json`、基础面板和各因子分区来自同一版本。
 
+如果因子仓库仍在未解压的硬盘归档中，可以直接指定未压缩的 tar 文件：
+
+```bash
+uv run moneytrees-factor-evidence \
+  --factor-store-archive /data/money-tree_20260502_103017.tar \
+  --families alpha101,alpha191,alpha158,alpha360 \
+  --factors all \
+  --date-start 2016-01-01 \
+  --date-end 2025-12-31 \
+  --data-version cn-factor-store-2016-2025-archive \
+  --output /tmp/alpha810-2016-2025.json \
+  --quality-output /tmp/alpha810-2016-2025-quality.json
+```
+
+该模式只把当前读取的 Parquet 成员复制到临时文件供引擎读取，不会解压整个归档，也不会把归档路径写进公开快照。归档必须是未压缩 tar，并且其中的 `manifest.json`、基础面板和四个因子族必须属于同一版本。
+
 ## 下游边界
 
 - `quant-platform` 消费研究层输出，负责策略无关的组合、风险、回测和执行模拟。

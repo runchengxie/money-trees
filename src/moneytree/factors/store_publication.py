@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import io
+import json
+import shutil
+import tarfile
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -19,6 +24,92 @@ from moneytree.factors.publication import (
 )
 
 SIGNAL_QUALITY_SCHEMA_VERSION = "1.0"
+
+
+class _TarMemberFile(io.RawIOBase):
+    """Seekable read-only view over one member of an uncompressed tar archive."""
+
+    def __init__(self, archive_path: Path, offset: int, size: int) -> None:
+        self._file = archive_path.open("rb")
+        self._offset = offset
+        self._size = size
+        self._position = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def seekable(self) -> bool:
+        return True
+
+    def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0:
+            size = self._size - self._position
+        size = min(size, self._size - self._position)
+        if size <= 0:
+            return b""
+        self._file.seek(self._offset + self._position)
+        data = self._file.read(size)
+        self._position += len(data)
+        return data
+
+    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
+        if whence == io.SEEK_SET:
+            position = offset
+        elif whence == io.SEEK_CUR:
+            position = self._position + offset
+        elif whence == io.SEEK_END:
+            position = self._size + offset
+        else:
+            raise ValueError(f"Unsupported seek mode: {whence}")
+        if position < 0:
+            raise ValueError("Cannot seek before the tar member")
+        self._position = min(position, self._size)
+        return self._position
+
+    def tell(self) -> int:
+        return self._position
+
+    def close(self) -> None:
+        if not self.closed:
+            self._file.close()
+        super().close()
+
+
+def _read_tar_parquet(archive_path: Path, member: tarfile.TarInfo, **kwargs: Any) -> pd.DataFrame:
+    if member.offset_data is None:
+        raise ValueError(f"Tar member has no data offset: {member.name}")
+    with _TarMemberFile(archive_path, member.offset_data, member.size) as raw:
+        # PyArrow's dataset reader requires a native seekable file. Copy only
+        # the requested member to a temporary file; the multi-gigabyte archive
+        # itself is never unpacked.
+        with tempfile.NamedTemporaryFile(suffix=".parquet") as temporary:
+            shutil.copyfileobj(raw, temporary, length=1024 * 1024)
+            temporary.flush()
+            return pd.read_parquet(temporary.name, **kwargs)
+
+
+def _archive_manifest(
+    archive_path: Path,
+) -> tuple[dict[str, Any], dict[str, tarfile.TarInfo], str]:
+    try:
+        archive = tarfile.open(archive_path, mode="r:")
+    except tarfile.ReadError as exc:
+        raise ValueError("Archive factor-store input must be an uncompressed tar file") from exc
+    with archive:
+        members = {
+            member.name.lstrip("./"): member
+            for member in archive.getmembers()
+            if member.isfile()
+        }
+        manifest_paths = [name for name in members if name.endswith("/manifest.json")]
+        if not manifest_paths:
+            raise ValueError("Archive does not contain a factor-store manifest.json")
+        manifest_name = manifest_paths[0]
+        manifest = json.loads(archive.extractfile(members[manifest_name]).read())
+        if manifest.get("kind") != "moneytree_factor_store":
+            raise ValueError("Archive manifest is not a moneytree factor store")
+        prefix = manifest_name[: -len("manifest.json")]
+        return manifest, members, prefix
 
 
 def _selected_families(manifest: dict[str, Any], families: Iterable[str] | None) -> list[str]:
@@ -280,6 +371,169 @@ def build_factor_evidence_snapshot_from_store(
             "return_column": return_column,
         },
         "config": {"group_count": group_count, "source": "partitioned_factor_store"},
+        "factors": factor_payload,
+        "public_limits": [
+            "Aggregate evidence only; no ticker-level values or portfolio weights.",
+            "Evidence is descriptive research output and is not a return guarantee.",
+        ],
+    }
+    payload["quality"] = build_signal_quality_report(payload)
+    result = _json_safe(payload)
+    audit_public_snapshot(result)
+    return result
+
+
+def build_factor_evidence_snapshot_from_archive(
+    archive_path: str | Path,
+    *,
+    families: Iterable[str] | None = None,
+    date_start: object | None = None,
+    date_end: object | None = None,
+    return_column: str = "next_period_return",
+    data_version: str = "unknown",
+    group_count: int = 5,
+    code_revision: str | None = None,
+) -> dict[str, Any]:
+    """Build public evidence from an uncompressed tar factor-store archive.
+
+    The archive is accessed through seekable member views. Parquet members are
+    read one at a time and the tar file is never extracted or modified.
+    """
+    if group_count < 2:
+        raise ValueError("group_count must be at least 2")
+    archive_file = Path(archive_path)
+    manifest, members, prefix = _archive_manifest(archive_file)
+    selected = _selected_families(manifest, families)
+    start = pd.Timestamp(date_start) if date_start else None
+    end = pd.Timestamp(date_end) if date_end else None
+
+    base_relative = str(manifest["base_panel"]["path"]).lstrip("./")
+    base_member = members.get(f"{prefix}{base_relative}")
+    if base_member is None:
+        raise ValueError(f"Archive is missing base panel: {base_relative}")
+    base_frame = ensure_date_ticker_index(
+        _read_tar_parquet(archive_file, base_member, columns=[return_column])
+    )
+
+    sums: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    ic_values: dict[str, list[float]] = defaultdict(list)
+    rank_ic_values: dict[str, list[float]] = defaultdict(list)
+    valid_counts: dict[str, int] = defaultdict(int)
+    total_observations: dict[str, int] = defaultdict(int)
+    dates_seen: set[pd.Timestamp] = set()
+    tickers_seen: set[str] = set()
+    factor_names: list[str] = []
+    observation_count = 0
+    registered_families: set[str] = set()
+
+    for family in selected:
+        entry = manifest["factor_families"][family]
+        parts = _part_metadata_by_path(entry)
+        for relative_path in entry.get("paths", []):
+            part = parts.get(str(relative_path), {})
+            if not _part_in_range(part, start, end):
+                continue
+            relative = str(relative_path).lstrip("./")
+            factor_member = members.get(f"{prefix}{relative}")
+            if factor_member is None:
+                raise ValueError(f"Archive is missing factor partition: {relative}")
+            factor_frame = ensure_date_ticker_index(_read_tar_parquet(archive_file, factor_member))
+            if start is not None or end is not None:
+                dates = pd.to_datetime(factor_frame.index.get_level_values("date"))
+                keep = np.ones(len(factor_frame), dtype=bool)
+                if start is not None:
+                    keep &= dates >= start
+                if end is not None:
+                    keep &= dates <= end
+                factor_frame = factor_frame.loc[keep]
+            if factor_frame.empty:
+                continue
+            current_factor_names = [str(column) for column in factor_frame.columns]
+            if family not in registered_families:
+                if any(name in factor_names for name in current_factor_names):
+                    raise ValueError("Selected factor families contain duplicate factor columns")
+                factor_names.extend(current_factor_names)
+                registered_families.add(family)
+            if family == selected[0]:
+                observation_count += len(factor_frame)
+            first_date = factor_frame.index.get_level_values("date").min()
+            last_date = factor_frame.index.get_level_values("date").max()
+            base_chunk = base_frame.loc[
+                (base_frame.index.get_level_values("date") >= first_date)
+                & (base_frame.index.get_level_values("date") <= last_date)
+            ]
+            _update_chunk(
+                factor_frame,
+                base_chunk[return_column],
+                group_count=group_count,
+                sums=sums,
+                counts=counts,
+                ic_values=ic_values,
+                rank_ic_values=rank_ic_values,
+                valid_counts=valid_counts,
+                total_observations=total_observations,
+                dates_seen=dates_seen,
+                tickers_seen=tickers_seen,
+            )
+
+    if not factor_names:
+        raise ValueError("No factor partitions match the requested range")
+
+    def metric(values: np.ndarray) -> dict[str, float | None]:
+        mean = float(values.mean()) if len(values) else None
+        std = float(values.std(ddof=0)) if len(values) else None
+        return {
+            "mean": mean,
+            "ir": float(mean / std) if mean is not None and std else None,
+            "positive_rate": float((values > 0).mean()) if len(values) else None,
+        }
+
+    factor_payload: list[dict[str, Any]] = []
+    for factor in factor_names:
+        factor_payload.append(
+            {
+                "name": factor,
+                "family": _factor_family(factor),
+                "coverage": {
+                    "valid_observations": valid_counts[factor],
+                    "total_observations": total_observations[factor],
+                    "ratio": (
+                        valid_counts[factor] / total_observations[factor]
+                        if total_observations[factor]
+                        else None
+                    ),
+                },
+                "ic": metric(np.asarray(ic_values[factor], dtype=float)),
+                "rank_ic": metric(np.asarray(rank_ic_values[factor], dtype=float)),
+                "group_returns": [
+                    {
+                        "group": int(group),
+                        "mean_return": sums[factor][str(group)] / counts[factor][str(group)]
+                        if counts[factor][str(group)]
+                        else None,
+                        "periods": counts[factor][str(group)],
+                    }
+                    for group in range(1, group_count + 1)
+                ],
+            }
+        )
+
+    payload = {
+        "kind": PUBLIC_SNAPSHOT_KIND,
+        "schema_version": PUBLIC_SNAPSHOT_SCHEMA_VERSION,
+        "generated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+        "data_version": data_version,
+        "code_revision": code_revision,
+        "dataset": {
+            "date_start": min(dates_seen).date().isoformat() if dates_seen else None,
+            "date_end": max(dates_seen).date().isoformat() if dates_seen else None,
+            "trading_days": len(dates_seen),
+            "ticker_count": len(tickers_seen),
+            "observation_count": observation_count,
+            "return_column": return_column,
+        },
+        "config": {"group_count": group_count, "source": "tar_factor_store_archive"},
         "factors": factor_payload,
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
