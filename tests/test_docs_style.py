@@ -27,7 +27,12 @@ TERM_DRIFT_PATTERNS = {
 
 
 def _docs_paths(root: Path) -> list[Path]:
-    return [root / "README.md", root / "AGENTS.md", *sorted((root / "docs").glob("*.md"))]
+    return [
+        root / "README.md",
+        root / "README.zh-CN.md",
+        root / "AGENTS.md",
+        *sorted((root / "docs").glob("*.md")),
+    ]
 
 
 def _prose_lines(path: Path) -> list[tuple[int, str]]:
@@ -61,7 +66,11 @@ def test_chinese_docs_use_project_terms_for_factor_store() -> None:
     root = Path(__file__).resolve().parents[1]
     docs_text = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in [root / "README.md", *sorted((root / "docs").glob("*.md"))]
+        for path in [
+            root / "README.md",
+            root / "README.zh-CN.md",
+            *sorted((root / "docs").glob("*.md")),
+        ]
     )
 
     assert "因子仓库" in docs_text

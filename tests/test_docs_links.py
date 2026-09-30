@@ -7,7 +7,11 @@ LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
 
 def _local_markdown_files(root: Path) -> list[Path]:
-    return [root / "README.md", *sorted((root / "docs").glob("*.md"))]
+    return [
+        root / "README.md",
+        root / "README.zh-CN.md",
+        *sorted((root / "docs").glob("*.md")),
+    ]
 
 
 def test_markdown_internal_links_exist() -> None:
@@ -42,3 +46,13 @@ def test_readme_docs_navigation_mentions_all_user_docs() -> None:
     ]
 
     assert not missing
+
+
+def test_root_readme_is_english_canonical_with_chinese_companion() -> None:
+    root = Path(__file__).resolve().parents[1]
+    english = (root / "README.md").read_text(encoding="utf-8")
+    chinese = (root / "README.zh-CN.md").read_text(encoding="utf-8")
+
+    assert english.startswith("# Money Trees")
+    assert "[中文页面](README.zh-CN.md)" in english
+    assert "[English page](README.md)" in chinese
