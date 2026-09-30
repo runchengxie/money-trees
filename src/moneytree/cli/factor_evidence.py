@@ -13,6 +13,7 @@ from moneytree.factors.publication import (
     build_factor_evidence_snapshot,
 )
 from moneytree.factors.store_publication import (
+    build_factor_evidence_snapshot_from_archive,
     build_factor_evidence_snapshot_from_store,
     build_signal_quality_report,
 )
@@ -27,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--factor-store",
         help="Partitioned factor-store manifest.json; reads factor partitions incrementally.",
+    )
+    source.add_argument(
+        "--factor-store-archive",
+        help="Uncompressed tar archive containing a factor store; reads members without unpacking the archive.",
     )
     parser.add_argument(
         "--families",
@@ -68,19 +73,32 @@ def _factor_names(value: str) -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        if args.factor_store:
+        if args.factor_store or args.factor_store_archive:
             if args.factors not in {"all", "*"}:
-                raise ValueError("--factors must be 'all' or '*' when using --factor-store")
+                raise ValueError(
+                    "--factors must be 'all' or '*' when using --factor-store or --factor-store-archive"
+                )
             families = args.families.split(",") if args.families else None
-            payload = build_factor_evidence_snapshot_from_store(
-                Path(args.factor_store),
-                families=families,
-                date_start=args.date_start,
-                date_end=args.date_end,
-                return_column=args.return_column,
-                data_version=args.data_version,
-                group_count=args.group_count,
-            )
+            if args.factor_store:
+                payload = build_factor_evidence_snapshot_from_store(
+                    Path(args.factor_store),
+                    families=families,
+                    date_start=args.date_start,
+                    date_end=args.date_end,
+                    return_column=args.return_column,
+                    data_version=args.data_version,
+                    group_count=args.group_count,
+                )
+            else:
+                payload = build_factor_evidence_snapshot_from_archive(
+                    Path(args.factor_store_archive),
+                    families=families,
+                    date_start=args.date_start,
+                    date_end=args.date_end,
+                    return_column=args.return_column,
+                    data_version=args.data_version,
+                    group_count=args.group_count,
+                )
         else:
             panel = load_market_data(Path(args.panel))
             payload = build_factor_evidence_snapshot(

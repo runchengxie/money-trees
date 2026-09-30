@@ -47,3 +47,19 @@ uv run moneytrees-factor-evidence \
 ```
 
 Use a factor-store manifest when the factors have already been materialized. Keep the resulting JSON aggregated and review its disclosure fields before publication.
+
+If the factor store is still inside an unextracted hard-drive archive, use the archive source:
+
+```bash
+uv run moneytrees-factor-evidence \
+  --factor-store-archive /data/money-tree_20260502_103017.tar \
+  --families alpha101,alpha191,alpha158,alpha360 \
+  --factors all \
+  --date-start 2016-01-01 \
+  --date-end 2025-12-31 \
+  --data-version cn-factor-store-2016-2025-archive \
+  --output /tmp/alpha810-2016-2025.json \
+  --quality-output /tmp/alpha810-2016-2025-quality.json
+```
+
+This copies only the Parquet member currently being read to a temporary file for the reader; it does not unpack the full archive or publish the archive path. The archive must be an uncompressed tar whose manifest, base panel, and four factor families belong to the same release.
