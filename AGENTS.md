@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## User-authorized review exception
+
+When the user explicitly authorizes merging a PR authored by the user or created from work explicitly assigned to the agent, a separate human review may be skipped. Required checks must still pass and merge conflicts must be resolved. Never bypass approvals enforced by GitHub branch protection or repository rulesets.
+
 ## Project
 
 `money-trees` / Money Trees is an A-share classic-alpha cross-sectional equity research and backtesting toolkit. The current built-in market profile is `cn`. The Python import package remains `moneytree`; prefer the `moneytrees` CLI in new docs while keeping `moneytree` aliases compatible.
