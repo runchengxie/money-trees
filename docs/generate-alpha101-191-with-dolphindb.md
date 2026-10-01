@@ -1,92 +1,94 @@
-# 使用 DolphinDB 生成 Alpha101/191
+# Generate Alpha101/191 with DolphinDB
 
-本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入因子仓库。旧的宽 parquet 面板输出继续保留用于兼容。
+[简体中文](generate-alpha101-191-with-dolphindb.zh-CN.md)
 
-## 当前边界
+This guide uses DolphinDB as an external producer for Alpha101/191. Money Trees consumes the offline-generated results; it does not call DolphinDB during backtests. The recommended output is a factor store. The older wide-parquet output remains available for compatibility.
 
-`docs/factor-catalog.csv` 覆盖 810 个因子列名：
+## Current boundary
 
-| 因子族 | 数量 | 项目内计算状态 |
+`docs/factor-catalog.csv` lists 810 factor columns:
+
+| Family | Count | Project calculation path |
 | --- | ---: | --- |
-| Alpha101 | 101 | 本地 `build_alpha101_features` 生成，或 DolphinDB 外部生成后并入 |
-| Alpha191 | 191 | 本地 `build_alpha191_features` 生成，或 DolphinDB 外部生成后并入 |
-| Alpha158 | 158 | 本地 `build_alpha158_features` 生成 |
-| Alpha360 | 360 | 本地 `build_alpha360_features` 生成 |
+| Alpha101 | 101 | Generated locally by `build_alpha101_features` or externally by DolphinDB and then merged. |
+| Alpha191 | 191 | Generated locally by `build_alpha191_features` or externally by DolphinDB and then merged. |
+| Alpha158 | 158 | Generated locally by `build_alpha158_features`. |
+| Alpha360 | 360 | Generated locally by `build_alpha360_features`. |
 
-也就是说，810 个因子都有项目内计算路径：Alpha158/360 由 `qlib.py` 本地生成，Alpha101/191 由 `classic.py` 纯 Python 本地生成（横截面语义，见 [classic-alphas-python.md](classic-alphas-python.md)），也可以继续走本文的 DolphinDB 外部生成契约。DolphinDB 路径的 rank/scale、缺失值、SMA/DECAYLINEAR 语义与本地路径可能不同，正式使用前建议小样本对拍。
+All 810 factors have a project calculation path. Alpha158/360 are generated locally in `qlib.py`. Alpha101/191 can be generated locally in pure Python by `classic.py` using cross-sectional semantics (see [classic-alphas-python.md](classic-alphas-python.md)), or through the external DolphinDB contract in this guide. DolphinDB and local implementations may differ in `rank`/`scale`, missing-value handling, and `SMA`/`DECAYLINEAR` semantics. Compare a small sample before formal use.
 
-推荐数据流：
-
-```text
-TuShare / 标准日频面板
--> DolphinDB 离线计算 Alpha101/191
--> 写入 data/factor_store/cn 的 alpha101 / alpha191 分族分片
--> moneytrees 使用因子仓库元数据清单正常回测
-```
-
-兼容数据流仍可用：
+Recommended data flow:
 
 ```text
-TuShare / 标准日频面板
--> DolphinDB 离线计算 Alpha101/191
--> 输出带 alpha101_* / alpha191_* 的宽 parquet
--> moneytrees 使用该 parquet 正常回测
+Versioned daily panel published by quant-market-data-platform
+-> compute Alpha101/191 offline with DolphinDB
+-> write alpha101 / alpha191 family partitions to data/factor_store/cn
+-> backtest with moneytrees using the factor-store manifest
 ```
 
-所有进入模型的特征仍受市场配置档中的 `feature_lag_periods` 约束。默认 `feature_lag_periods=1`。
+The compatibility wide-panel path remains available:
 
-## WSL 推荐环境
+```text
+Standard daily panel
+-> compute Alpha101/191 offline with DolphinDB
+-> write a wide parquet with alpha101_* / alpha191_* columns
+-> backtest with moneytrees using that parquet
+```
 
-如果开发环境在 WSL，推荐：
+Features entering the model remain subject to `feature_lag_periods` in the market configuration. The default is `1`.
+
+## Recommended WSL environment
+
+For WSL development, the documented setup is:
 
 ```text
 Windows Docker Desktop
 -> WSL 2 backend
--> WSL 发行版内运行 docker CLI
--> DolphinDB 单节点容器
+-> docker CLI inside the WSL distribution
+-> single-node DolphinDB container
 ```
 
-项目代码建议放在 WSL 文件系统内，例如 `~/code/money-trees`，不要放在 `/mnt/c/...` 下。
+Keep project code in the WSL filesystem, for example `~/code/money-trees`, rather than under `/mnt/c/...`.
 
-安装和检查顺序：
+Check WSL from PowerShell:
 
 ```powershell
 wsl --version
 wsl -l -v
 ```
 
-确保开发发行版是 WSL 2。然后在 Docker Desktop 中启用：
+Ensure the development distribution uses WSL 2. In Docker Desktop, enable:
 
 ```text
 Settings -> General -> Use WSL 2 based engine
 Settings -> Resources -> WSL Integration -> Enable integration with your distro
 ```
 
-在 WSL 中检查：
+Then check Docker from WSL:
 
 ```bash
 docker version
 docker ps
 ```
 
-## DolphinDB 容器
+## DolphinDB container
 
-仓库提供了 compose scaffold：
+The repository includes a Compose scaffold:
 
 ```bash
 docker compose -f docker-compose.alpha.yml run --rm moneytrees \
   -lc 'moneytrees-dolphindb-alphas --help'
 ```
 
-该 compose 文件把 `moneytrees` Python runner 和 `dolphindb` server 分成两个 service。Python runner 挂载 `data/`、`artifacts/` 和 `docker/dolphindb/modules/`。DolphinDB server 只挂载自己的 server data 子目录，避免覆盖镜像内置的 `/data/ddb/server/dolphindb` 启动程序。DolphinDB 镜像 tag、license 和模块来源仍需按你的实际环境固定。
+The Compose file defines separate `moneytrees` Python-runner and `dolphindb` server services. The runner mounts `data/`, `artifacts/`, and `docker/dolphindb/modules/`. The server mounts its own data directory so that the image's `/data/ddb/server/dolphindb` startup program is not overwritten. Pin the DolphinDB image tag, license, and module sources to versions verified in your environment.
 
-在项目根目录创建本地挂载目录：
+Create local mount directories in the project root:
 
 ```bash
 mkdir -p docker/dolphindb/modules docker/dolphindb/bootstrap
 ```
 
-启动单节点容器，镜像版本请在本地固定成你实际验证过的版本：
+Start a single-node container. Replace the image tag with the version verified in your environment:
 
 ```bash
 docker run -itd \
@@ -99,35 +101,37 @@ docker run -itd \
   sh
 ```
 
-本地浏览器可访问：
+Open the local web interface at:
 
 ```text
 http://localhost:8848
 ```
 
-默认登录通常是：
+The local development configuration commonly uses:
 
 ```text
 admin / 123456
 ```
 
-## DolphinDB 模块
+Treat this as a local-only development credential. Set a private password for any shared or exposed instance, and never expose the default credential to an untrusted network.
 
-把外部获取或本地维护的模块放到：
+## DolphinDB modules
+
+Place externally obtained or locally maintained modules in:
 
 ```text
 docker/dolphindb/modules/
 ```
 
-使用本仓库 `docker-compose.alpha.yml` 时，该目录会只读挂载到 DolphinDB server 的：
+With this repository's `docker-compose.alpha.yml`, the directory is mounted read-only inside the DolphinDB server at:
 
 ```text
 /data/ddb/server/data/modules
 ```
 
-如果你用下方手工 `docker run` 示例，请确保挂载目标是你所用 DolphinDB 镜像实际读取模块的 server modules 目录。
+For the manual `docker run` example above, verify that the mount target matches the server modules directory used by your DolphinDB image.
 
-预期文件：
+Expected files:
 
 ```text
 wq101alpha.dos
@@ -137,62 +141,64 @@ gtja191Prepare.dos
 moneytreeAlpha.dos
 ```
 
-这些 `.dos` 文件按本地准备、不随仓库提交的方式维护，需要先按上面模块说明准备好再使用。`wq101alpha.dos` / `gtja191Alpha.dos` 是 DolphinDB 公式模块，`prepare101.dos` / `gtja191Prepare.dos` 是准备模块，`moneytreeAlpha.dos` 是 Money Trees 适配包装模块。生产使用前应确认模块来源、授权和版本，并在生成命令中记录 module version。`moneytreeAlpha.dos` 建议提供两个函数：
+These `.dos` files are prepared locally and are not committed with the repository. Obtain and configure them before running the guide. `wq101alpha.dos` and `gtja191Alpha.dos` provide formula modules; `prepare101.dos` and `gtja191Prepare.dos` provide preparation modules; `moneytreeAlpha.dos` is the Money Trees adapter wrapper. Before production use, verify module source, authorization, and versions, and record the module-version labels in the generation command.
+
+`moneytreeAlpha.dos` should provide these functions:
 
 ```text
 calcMoneyTreeAlpha101(rawData, startTime, endTime)
 calcMoneyTreeAlpha191(rawData, startTime, endTime)
 ```
 
-返回宽表：
+They return wide tables:
 
 ```text
 tradetime, securityid, alpha101_001, ..., alpha101_101
 tradetime, securityid, alpha191_001, ..., alpha191_191
 ```
 
-Python 脚本只负责上传标准化输入、调用包装函数、下载结果、校验列，并写入因子仓库或兼容合并回宽面板。
+The Python CLI uploads normalized input, invokes the wrapper, downloads and validates the result columns, and writes to the factor store or merges the factors into a compatibility wide panel.
 
-补齐模块并重启 DolphinDB 后，可以先只验证模块加载：
+After installing the modules and restarting DolphinDB, check module loading first:
 
 ```bash
 uv run python -c 'import dolphindb as ddb; s=ddb.Session(); s.connect("127.0.0.1",8848,"admin","123456"); print(s.run("use wq101alpha; use prepare101; use gtja191Alpha; use gtja191Prepare; use moneytreeAlpha; 1"))'
 ```
 
-返回 `1` 后再运行 `moneytrees-dolphindb-alphas`。CLI 也会在正式上传面板前做 preflight：如果缺少模块或 `moneytreeAlpha.dos` 中缺少 wrapper 函数，错误会直接指出缺少的模块或函数。`--wq101-module-version`、`--gtja191-module-version` 和 `--moneytree-alpha-module-version` 只记录元数据清单，不会改变 DolphinDB 的 `use` 模块名。
+Continue when this prints `1`. Before uploading the panel, the CLI also checks that required modules and wrapper functions exist and reports missing names directly. `--wq101-module-version`, `--gtja191-module-version`, and `--moneytree-alpha-module-version` record manifest metadata only; they do not change the DolphinDB `use` module names.
 
-CLI 默认从 `DOLPHINDB_PASSWORD` 读取密码。环境变量未设置或为空时，回退到本地开发默认密码 `123456`。如果显式传 `--password`，该值必须非空。
+By default, the CLI reads its password from `DOLPHINDB_PASSWORD`. If that variable is unset or empty, the local development default is `123456`. An explicitly supplied `--password` must be non-empty. Do not use the development default on an exposed server.
 
-## 字段映射
+## Field mapping
 
-CLI 会把 Money Trees 面板映射成 DolphinDB 输入：
+The CLI maps a Money Trees panel to DolphinDB input fields:
 
-| DolphinDB 字段 | Money Trees 字段 |
+| DolphinDB field | Money Trees source |
 | --- | --- |
 | `tradetime` | `date` |
 | `securityid` | `ticker` |
-| `open` | 优先 `open_adj`，回退 `open` |
-| `high` | 优先 `high_adj`，回退 `high` |
-| `low` | 优先 `low_adj`，回退 `low` |
-| `close` | 优先 `close_adj`，回退 `close` |
-| `vwap` | 优先 `vwap_adj`，回退 `vwap` |
-| `vol` | 优先 `volume`，回退 `vol * 100` |
-| `cap` | 优先 `circ_mv`，回退 `total_mv`，仍缺失则记为空 |
-| `indclass` | `industry`，缺失时填 `UNKNOWN` |
+| `open` | Prefer `open_adj`, fall back to `open`. |
+| `high` | Prefer `high_adj`, fall back to `high`. |
+| `low` | Prefer `low_adj`, fall back to `low`. |
+| `close` | Prefer `close_adj`, fall back to `close`. |
+| `vwap` | Prefer `vwap_adj`, fall back to `vwap`. |
+| `vol` | Prefer `volume`, fall back to `vol * 100`. |
+| `cap` | Prefer `circ_mv`, fall back to `total_mv`; otherwise null. |
+| `indclass` | `industry`; fill missing values with `UNKNOWN`. |
 | `index_open` | `benchmark_open` |
 | `index_close` | `benchmark_close` |
 
-Alpha191 请求会要求 `benchmark_open` 和 `benchmark_close` 存在。Alpha101 中行业和市值相关因子依赖 `indclass` 和 `cap`。如果行业字段不是 point-in-time 行业分类，历史回测会有未来信息污染风险。
+Alpha191 requires `benchmark_open` and `benchmark_close` in the input panel. Industry- and capitalization-related Alpha101 factors depend on `indclass` and `cap`. If the industry field is not point-in-time, historical backtests may contain look-ahead bias.
 
-## 运行生成
+## Generate factors
 
-DolphinDB Python client 不在核心依赖中。需要生成外部因子时，在当前环境安装 external-alpha 依赖：
+The DolphinDB Python client is optional and is not a core dependency. Install the external-Alpha extra in the active environment:
 
 ```bash
 uv sync --dev --extra external-alphas
 ```
 
-先生成基础或本地 Alpha158/360 面板：
+For new research, start with a versioned panel published by `quant-market-data-platform`. The retained `moneytrees-tushare` command below is a deprecated compatibility path for reproducing older notebooks and workflows; see [data input migration](data-platform-migration.md).
 
 ```bash
 uv run moneytrees-tushare \
@@ -206,15 +212,15 @@ uv run moneytrees-tushare \
   --factor-family alpha360
 ```
 
-推荐直接写入因子仓库：
+### Recommended factor-store output
 
-首次打通环境时，建议分阶段执行，先只保留 `--alpha101` 跑到临时输出目录，再只保留 `--alpha191` 跑到临时输出目录。两边都通过后，再同时带上 `--alpha101 --alpha191` 写入正式因子仓库。Alpha191 需要输入面板包含 `benchmark_open` 和 `benchmark_close`。
+When first connecting an environment, validate each family separately: run `--alpha101` to a temporary output, then `--alpha191` to a temporary output. After both checks pass, run both families into the target factor store. Alpha191 requires `benchmark_open` and `benchmark_close` in the input panel.
 
-使用 `--no-wide-output` 写入因子仓库且输入是 parquet 时，CLI 默认使用 `--stream-input auto`：按 `--chunk-trade-dates` 划分目标交易日，每个计算窗口额外包含 `--dolphindb-warmup-trade-dates` 指定的历史交易日，随后只读取并上传该窗口、调用 DolphinDB、只下载目标交易日结果并立即写入分片。这个路径避免在 Python 或 DolphinDB client 中构造多年全市场的完整输入/输出宽表。重新生成已写入元数据清单的外部因子族时传 `--overwrite`。兼容宽 parquet 输出路径仍然需要一次性返回完整宽表。
+With parquet input and `--no-wide-output`, the CLI defaults to `--stream-input auto`. It divides target trading dates into `--chunk-trade-dates` windows, adds the historical context specified by `--dolphindb-warmup-trade-dates`, reads and uploads only that window, calls DolphinDB, downloads results for target dates only, and writes each partition immediately. This avoids constructing a multi-year, full-market input/output wide table in Python or the DolphinDB client. Pass `--overwrite` to regenerate an external factor family already recorded in the manifest. Compatibility wide-panel output still returns the complete wide table at once.
 
-内存边界：`--stream-input auto` 只支持 parquet + `--no-wide-output` 的因子仓库路径。宽表输出、pickle 输入或显式 `--stream-input off` 会走旧的完整输入上传路径。多年全市场输入可能 OOM，CLI 会在读取前做内存预检并给出错误。除非明确接受 OOM 风险，不要用 `--skip-memory-check` 绕过该保护。
+Streaming boundary: `--stream-input auto` applies only to parquet input with `--no-wide-output` and factor-store output. Wide-panel output, pickle input, or explicit `--stream-input off` uses the older full-input upload path. A multi-year, full-market panel can exhaust memory. The CLI runs a memory preflight before loading; bypass it with `--skip-memory-check` only when you intentionally accept the risk of an OOM kill.
 
-Alpha101 单独验证时保留同一组连接和版本参数，只改输出目录并只传 `--alpha101`：
+Validate Alpha101 alone by retaining the connection and version options and changing the output directory:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -235,7 +241,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-Alpha191 单独验证时只传 `--alpha191`：
+Validate Alpha191 separately with `--alpha191`:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -256,7 +262,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-最终写入正式因子仓库时仍建议按因子族分开运行。同时生成 `--alpha101 --alpha191` 只适合内存充足并且已经完成单因子族验证的环境：
+For the final factor store, separate runs by family are still recommended. Generate both with `--alpha101 --alpha191` only after each family has passed an individual check and the environment has sufficient memory:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -278,7 +284,7 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-然后直接从因子仓库回测：
+Backtest directly from the factor store:
 
 ```bash
 uv run moneytrees \
@@ -289,7 +295,9 @@ uv run moneytrees \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-旧路径仍可生成并合并 Alpha101/191 到宽面板：
+### Compatibility wide-panel output
+
+The older path can still generate and merge Alpha101/191 into a wide panel:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -305,16 +313,16 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-`scripts/build_dolphindb_alphas.py` 仍保留为兼容 wrapper，新的正式入口是 `moneytrees-dolphindb-alphas`。
+`scripts/build_dolphindb_alphas.py` remains as a compatibility wrapper. The current entry point is `moneytrees-dolphindb-alphas`.
 
-旧路径输出：
+Legacy output files:
 
 ```text
 data/cn_daily_alpha_all.parquet
 data/cn_daily_alpha_all.parquet.factor_manifest.json
 ```
 
-然后正常回测：
+Then run a backtest as usual:
 
 ```bash
 uv run moneytrees \
@@ -325,38 +333,36 @@ uv run moneytrees \
   --output-dir artifacts/xgb-alpha-all
 ```
 
-## 元数据清单
+## Metadata manifest
 
-每次成功生成都会写元数据清单，记录：
+Each successful generation writes a manifest containing:
 
-- 因子来源和家族。
-- 输入/输出文件 hash。
-- 输入/输出 schema 摘要。
-- DolphinDB host、port、user、server version 和 Python client version。
-- WQ101、GTJA191、`moneytreeAlpha` 模块版本标签。
-- 价格、成交量、市值、行业和基准字段选择。
-- fallback 字段和缺失可选字段。
-- 列完整性和键匹配校验结果。
+- Factor source and family.
+- Input/output file hashes and schema summaries.
+- DolphinDB host, port, user, server version, and Python-client version.
+- WQ101, GTJA191, and `moneytreeAlpha` module-version labels.
+- Selected price, volume, market-cap, industry, and benchmark fields.
+- Fallback fields and missing optional fields.
+- Column-completeness and key-matching validation results.
 
-元数据清单不记录密码、token、`.env` 内容或 TuShare token。
+The manifest does not record passwords, tokens, `.env` contents, or TuShare tokens.
 
-## 校验规则
+## Validation rules
 
-生成脚本会拒绝以下情况：
+The generator rejects:
 
-- 输入面板存在重复 `date, ticker`。
-- 请求 Alpha101 但输出缺少 `alpha101_001...alpha101_101` 中任意列。
-- 请求 Alpha191 但输出缺少 `alpha191_001...alpha191_191` 中任意列。
-- 输出包含请求范围外的 `alpha101_` 或 `alpha191_` 列。
-- DolphinDB 返回了不在输入面板内的 `date, ticker`。
-- 输出与输入没有任何匹配键，或匹配键上所有请求因子值都是空。
+- Duplicate `date, ticker` keys in the input panel.
+- Missing any requested column in `alpha101_001`…`alpha101_101` or `alpha191_001`…`alpha191_191`.
+- Output containing `alpha101_` or `alpha191_` columns outside the requested families.
+- DolphinDB output containing `date, ticker` keys absent from the input panel.
+- No matching input/output keys, or all-null requested factor values for the matching keys.
 
-这些校验用于保证外部因子生产遵守正式数据契约。
+These checks enforce the external factor-production data contract.
 
-## 研究风险
+## Research risks
 
-- `rank`、`ts_rank`、`decay_linear`、`SMA` 等算子在不同实现中可能有口径差异。
-- `vwap`、复权价格、市值和行业分类会显著影响因子值。
-- Alpha101 行业相关因子需要 point-in-time 行业分类。
-- Alpha191 依赖的基准开收盘字段需要与回测基准一致。
-- 不建议混用多个 Alpha101/191 实现来源后直接比较结果。应先固定 DolphinDB 和模块版本。
+- Operators such as `rank`, `ts_rank`, `decay_linear`, and `SMA` may differ across implementations.
+- `vwap`, adjusted prices, market capitalization, and industry classification can materially change factor values.
+- Industry-related Alpha101 factors require point-in-time industry classifications.
+- Alpha191 benchmark open/close fields must match the backtest benchmark.
+- Do not compare mixed Alpha101/191 implementations without first pinning DolphinDB and module versions.

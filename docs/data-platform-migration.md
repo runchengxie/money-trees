@@ -1,34 +1,34 @@
-# 数据入口迁移
+# Data input migration
 
-## 当前主路径
+[简体中文](data-platform-migration.zh-CN.md)
 
-`money-trees` 不再把数据下载作为长期职责。正式研究应使用 `marketdata` 命令和 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 发布的、已经标准化、经过质量检查并带版本信息的数据资产，再交给 Money Trees 做因子计算和研究证据生产。
+## Current primary path
 
-推荐链路：
+`money-trees` no longer treats data downloads as a long-term responsibility. For formal research, use the `marketdata` command and versioned assets published by [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform). The platform standardizes and quality-checks those assets; Money Trees consumes them for factor computation and research evidence.
 
 ```text
 quant-market-data-platform
-  接入 TuShare / 其他来源
-  → 原始缓存、标准化、质量治理、版本和发布
+  ingest TuShare / other sources
+  → cache, standardize, govern quality, version, and publish
         ↓ published parquet / data asset
 money-trees
-  读取 date,ticker 面板
-  → 生成 Alpha 因子
-  → 计算 IC / RankIC / 分组收益
-  → 导出公开证据快照
+  read the date,ticker panel
+  → compute Alpha factors
+  → calculate IC / RankIC / grouped returns
+  → export public evidence snapshots
 ```
 
-## 兼容入口
+## Compatibility entry points
 
-`moneytrees-tushare` 以及 `moneytree-tushare` 仍暂时保留，用于复现旧 notebook 和迁移历史工作流，但它们是 deprecated 兼容路径，不是新的生产数据入口。它们会继续要求 TuShare 凭证、维护本地原始缓存，并承担与数据平台重复的标准化职责。
+`moneytrees-tushare` and `moneytree-tushare` remain temporarily available to reproduce older notebooks and migrate historical workflows. They are deprecated compatibility paths, not the new production data entry point. They still require TuShare credentials, maintain a local raw cache, and duplicate standardization responsibilities owned by the data platform.
 
-新研究不要再把 token、TuShare 原始缓存或 `manifest.sqlite` 放进 Money Trees 运行目录。优先使用数据平台发布的 parquet 或其他带版本的数据资产，然后通过 `--data`/面板输入交给回测或因子 CLI。
+New research should not place tokens, raw TuShare cache files, or `manifest.sqlite` in Money Trees runtime directories. Prefer versioned parquet or other published data assets from the data platform, then pass them to a backtest or factor CLI as `--data` or panel input.
 
-## 后续删除条件
+## Removal conditions
 
-只有在以下条件满足后，才删除兼容入口和相关测试：
+Remove the compatibility entry points and their tests only after all of the following are true:
 
-1. 依赖 `moneytrees-tushare` 的旧 notebook 已完成迁移；
-2. 数据平台已经提供当前 A 股面板所需的全部字段和版本契约；
-3. Money Trees 的 CI 不再需要 TuShare extra；
-4. 发布说明提供至少一个完整的迁移示例。
+1. Legacy notebooks that depend on `moneytrees-tushare` have been migrated.
+2. The data platform provides all fields and version contracts required by the current A-share panel.
+3. Money Trees CI no longer needs the TuShare extra.
+4. Release notes provide at least one complete migration example.

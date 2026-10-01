@@ -1,12 +1,14 @@
-# 配置说明
+# Configuration
 
-`moneytrees` 使用多个 YAML、JSON 或 TOML 配置文件叠加生成一次运行配置。推荐把市场、模型、回测和本地预设拆开维护。旧的 `moneytree` CLI 仍然可用。
+[简体中文](configuration.zh-CN.md)
 
-兼容单数入口包括 `moneytree`、`moneytree-tushare`、`moneytree-data-status`、`moneytree-data-snapshot`、`moneytree-data-release`、`moneytree-dolphindb-alphas`、`moneytree-factor-store` 和 `moneytree-parquet-rewrite`。新文档优先使用对应的 `moneytrees*` 入口。
+`moneytrees` combines YAML, JSON, or TOML files into a run configuration. Keep market, model, backtest, and local preset configuration separate. The older `moneytree` CLI aliases remain available.
 
-## 默认配置栈
+Singular compatibility entry points include `moneytree`, `moneytree-tushare`, `moneytree-data-status`, `moneytree-data-snapshot`, `moneytree-data-release`, `moneytree-dolphindb-alphas`, `moneytree-factor-store`, and `moneytree-parquet-rewrite`. Use the corresponding `moneytrees*` entry points in new documentation.
 
-不传 `--config` 时，CLI 默认读取：
+## Default configuration stack
+
+Without `--config`, the CLI reads:
 
 ```text
 configs/market/cn.yaml
@@ -14,7 +16,7 @@ configs/model/rf.yaml
 configs/backtest/default.yaml
 ```
 
-等价命令：
+Equivalent command:
 
 ```bash
 uv run moneytrees \
@@ -25,18 +27,18 @@ uv run moneytrees \
   --output-dir artifacts/backtest
 ```
 
-## 合并规则
+## Merge rules
 
-配置文件按传入顺序深合并：
+Configuration files are deep-merged in the order supplied:
 
-- 后传入的文件覆盖前面文件的同名字段。
-- 字典字段递归合并。
-- 非字典字段直接替换。
-- `--data` 覆盖配置里的数据路径。
-- `--output-dir` 覆盖配置里的输出目录。
-- `--set dotted.path=value` 覆盖最终配置。
+- Later files override earlier values for the same field.
+- Mapping fields are merged recursively.
+- Non-mapping values are replaced.
+- `--data` overrides the configured data path.
+- `--output-dir` overrides the configured output directory.
+- `--set dotted.path=value` overrides the final configuration.
 
-示例：
+For example:
 
 ```bash
 uv run moneytrees \
@@ -48,11 +50,11 @@ uv run moneytrees \
   --set backtest.segment2_windows=1
 ```
 
-`--set` 会自动解析布尔值、整数、浮点数和 JSON 字面量。
+`--set` parses booleans, integers, floats, and JSON literals automatically.
 
-## 特征读取配置
+## Feature loading
 
-特征读取字段位于 `features`，用于在回测读取 parquet 时裁剪不需要的 Alpha 因子列：
+Feature-loading options live under `features`. They select Alpha factor columns when a backtest reads parquet:
 
 ```yaml
 features:
@@ -64,17 +66,15 @@ features:
   missing_feature_policy: error
 ```
 
-说明：
+- Factor families can be `alpha101`, `alpha191`, `alpha158`, or `alpha360`; each maps to its column prefix.
+- Prefixes match column names directly, for example `alpha158_`.
+- `exclude_factor_columns` excludes individual columns, such as an unavailable `alpha191_030`.
+- When an `include_*` list is non-empty, only matching Alpha factor columns are selected. Non-factor columns remain available for labels, benchmarks, tradability filters, and reports.
+- `exclude_*` removes matching prefixes from the selected Alpha factor columns.
+- Parquet input is column-pruned from its schema. Pickle input is read in full before filtering in memory.
+- `missing_feature_policy` accepts `error`, `warn_fill_zero`, or `fill_zero`. The default `error` fails if a selected feature is missing. Use `warn_fill_zero` only to reproduce older notebooks.
 
-- 因子族可取 `alpha101`、`alpha191`、`alpha158`、`alpha360`，会自动映射到对应列名前缀。
-- prefix 直接匹配列名前缀，例如 `alpha158_`。
-- `exclude_factor_columns` 用于排除单个因子列，例如暂时不可用的 `alpha191_030`。
-- `include_*` 非空时，只保留匹配的 Alpha 因子列。非因子列会保留，用于标签、基准、可交易过滤和报告。
-- `exclude_*` 会从已选 Alpha 因子列中排除对应前缀。
-- parquet 输入会根据 schema 做列裁剪。pickle 输入会先完整读取，再在内存中过滤。
-- `missing_feature_policy` 可取 `error`、`warn_fill_zero` 或 `fill_zero`。默认 `error` 会在选中特征缺列时失败。旧 notebook 复现可用 `warn_fill_zero`。
-
-示例：
+Example:
 
 ```bash
 uv run moneytrees \
@@ -83,9 +83,9 @@ uv run moneytrees \
   --set 'features.include_factor_families=["alpha158"]'
 ```
 
-## 回测加载与内存配置
+## Backtest loading and memory
 
-回测加载控制字段位于 `backtest`。默认配置会按回测窗口日期裁剪输入，并在读取因子仓库（factor store）前做内存预检：
+Backtest loading controls live under `backtest`. The default configuration restricts input to the backtest date range and checks memory before reading a factor store:
 
 ```yaml
 backtest:
@@ -95,16 +95,14 @@ backtest:
   memory_budget_fraction: 0.85
 ```
 
-说明：
+- `load_mode` accepts `auto`, `date_range`, or `full`. `auto` currently reads the backtest date range; `full` retains the older full-input path.
+- `load_warmup_days` extends the earliest training date backward for feature lags and ticker-level forward filling.
+- `memory_budget_gb: 0.0` estimates from system-available memory. A positive value runs preflight against that explicit budget.
+- `memory_budget_fraction` sets the share of available memory allowed for this load.
+- Preflight does not drop factors, sample stocks, or shorten the training window. If the estimate exceeds the budget, the run fails and suggests reducing load with `features.include_factor_families`, `features.include_factor_prefixes`, or a shorter date range.
+- `run_config.json` records `input_load`, including loaded dates, preflight estimates, and selected factor families.
 
-- `load_mode` 可取 `auto`、`date_range` 或 `full`。`auto` 当前等同于按回测窗口日期读取。`full` 保留旧的完整读取路径。
-- `load_warmup_days` 会把最早训练日期向前扩展一段时间，用于特征滞后和 ticker 级前向填充。
-- `memory_budget_gb: 0.0` 表示使用系统可用内存估算。设为正数时按显式预算做预检。
-- `memory_budget_fraction` 控制可用内存里允许用于本次加载的比例。
-- 内存预检不会自动删因子、抽样股票或缩短训练期。如果估算超预算，会失败并提示用 `features.include_factor_families`、`features.include_factor_prefixes` 或更短日期范围降载。
-- `run_config.json` 会记录 `input_load`，包括实际加载日期、预检估算和选中的因子族。
-
-完整 810 因子树模型建议先显式限制因子族或设置内存预算：
+For tree models using the full 810-factor set, explicitly limit factor families or set a memory budget first:
 
 ```bash
 uv run moneytrees \
@@ -114,11 +112,9 @@ uv run moneytrees \
   --set backtest.memory_budget_gb=16
 ```
 
-## 市场配置
+## Market configuration
 
-文件：`configs/market/cn.yaml`
-
-核心字段：
+File: `configs/market/cn.yaml`.
 
 ```yaml
 market:
@@ -143,31 +139,27 @@ market:
     down_limit: true
 ```
 
-说明：
+- `profile` currently supports only `cn`.
+- `benchmark_return_column` and `benchmark_cum_column` map upstream column names.
+- `benchmark_cum_mode` accepts `nav` or `cumulative_return`; the standard TuShare panel uses `nav`.
+- `label_source: actual` creates labels from realized relative returns.
+- `label_source: pred_rel_return` uses the `pred_rel_return` column from the input.
+- `feature_lag_periods` sets the ticker-level feature lag.
 
-- `profile` 当前只支持 `cn`。
-- `benchmark_return_column` 和 `benchmark_cum_column` 可以映射上游不同列名。
-- `benchmark_cum_mode` 可取 `nav` 或 `cumulative_return`。TuShare 标准面板使用 `nav`。
-- `label_source: actual` 使用真实相对收益生成标签。
-- `label_source: pred_rel_return` 使用输入数据中的 `pred_rel_return`。
-- `feature_lag_periods` 控制模型特征按 ticker 滞后多少期。
+## Model configuration
 
-## 模型配置
+Model files are under `configs/model/`:
 
-文件目录：`configs/model/`
-
-内置配置：
-
-| 文件 | 模型 ID | 训练目标 | 说明 |
+| File | Model ID | Target | Notes |
 | --- | --- | --- | --- |
-| `rf.yaml` | `random_forest` | `rel_performance` | 分类主路径，支持调参和特征选择。 |
-| `xgb.yaml` | `xgboost` | `rel_performance` | XGBoost 分类，依赖 `xgboost` extra。 |
-| `xgb_regressor.yaml` | `xgboost_regressor` | `rel_return` | XGBoost 回归，依赖 `xgboost` extra。 |
-| `ridge.yaml` | `ridge` | `rel_return` | 线性回归基准。 |
-| `lasso.yaml` | `lasso` | `rel_return` | L1 线性回归基准。 |
-| `elasticnet.yaml` | `elasticnet` | `rel_return` | ElasticNet 线性回归基准。 |
+| `rf.yaml` | `random_forest` | `rel_performance` | Main classification path; supports tuning and feature selection. |
+| `xgb.yaml` | `xgboost` | `rel_performance` | XGBoost classifier; requires the `xgboost` extra. |
+| `xgb_regressor.yaml` | `xgboost_regressor` | `rel_return` | XGBoost regressor; requires the `xgboost` extra. |
+| `ridge.yaml` | `ridge` | `rel_return` | Linear regression baseline. |
+| `lasso.yaml` | `lasso` | `rel_return` | L1 linear regression baseline. |
+| `elasticnet.yaml` | `elasticnet` | `rel_return` | ElasticNet linear regression baseline. |
 
-通用字段：
+Common fields:
 
 ```yaml
 model:
@@ -182,13 +174,11 @@ model:
   random_seed: 123
 ```
 
-模型适配器会校验自己支持的调参和特征选择能力。线性模型、XGBoost、XGBoost 回归和 XGBRanker 当前只支持 `feature_selection: none`，随机森林支持 `none`、`importance`、`sequential` 和 `notebook_compat`，Extra Trees 和梯度提升支持 `none`、`importance` 和 Optuna 调参，直方图梯度提升只支持 `none`。默认配置关闭调参。需要 Optuna 时叠加 `configs/preset/tuning.yaml` 并安装 `tuning` 或 `research` extra。
+Each model adapter validates which tuning and feature-selection modes it supports. Linear models, XGBoost, XGBoost regression, and XGBRanker currently support only `feature_selection: none`. Random forest supports `none`, `importance`, `sequential`, and `notebook_compat`; Extra Trees and gradient boosting support `none`, `importance`, and Optuna tuning; histogram gradient boosting supports only `none`. Tuning is disabled by default. To use Optuna, layer `configs/preset/tuning.yaml` last and install the `tuning` or `research` extra.
 
-## 组合配置
+## Portfolio configuration
 
-文件：`configs/backtest/default.yaml`
-
-组合字段位于 `portfolio`：
+File: `configs/backtest/default.yaml`. Portfolio fields live under `portfolio`:
 
 ```yaml
 portfolio:
@@ -203,16 +193,16 @@ portfolio:
   sector_neutral: false
 ```
 
-`weighting_method` 支持：
+`weighting_method` accepts:
 
-- `heuristic`: 默认启发式权重。
-- `signal_risk_qp`: 使用信号、协方差和换手惩罚求解二次规划。
+- `heuristic`: default heuristic weights.
+- `signal_risk_qp`: quadratic-program optimization using signals, covariance, and a turnover penalty.
 
-`signal_risk_qp` 的相关字段以 `qp_` 开头，包括风险厌恶、换手惩罚、协方差窗口、收缩估计、候选股票数和求解器参数。
+Related `signal_risk_qp` fields use the `qp_` prefix and include risk aversion, turnover penalty, covariance window, shrinkage estimator, candidate count, and solver parameters.
 
-## 回测配置
+## Backtest configuration
 
-回测字段位于 `backtest`：
+Backtest fields live under `backtest`:
 
 ```yaml
 backtest:
@@ -240,17 +230,15 @@ backtest:
     model_segment: segment_b
 ```
 
-说明：
+- `train_months`, `gap_months`, and `test_months` control rolling-window shape.
+- `train_*` and `valid_*` under `segment_a` and `segment_b` define two fixed model-selection and validation periods. Defaults retain the early 2004–2014 setup; data after 2016 requires explicit overrides.
+- `segment1_windows` and `segment2_windows` set the number of rolling windows for each segment.
+- Holdout validation requires both `start` and `end`.
+- `model_segment` accepts `segment_a` or `segment_b`.
 
-- `train_months`、`gap_months`、`test_months` 控制滚动窗口形状。
-- `segment_a` 和 `segment_b` 下的 `train_*`、`valid_*` 控制两套固定模型选择/验证区间。默认值保持早期 2004-2014 配置，2016 以后数据需要显式覆盖。
-- `segment1_windows` 和 `segment2_windows` 控制两个 segment 的滚动窗口数量。
-- 留出验证需要同时设置 `start` 和 `end`。
-- `model_segment` 可以设为 `segment_a` 或 `segment_b`。
+## Output configuration
 
-## 输出配置
-
-输出字段位于 `output`：
+Output fields live under `output`:
 
 ```yaml
 output:
@@ -258,33 +246,26 @@ output:
   export_parquet: ""
 ```
 
-说明：
+`output_dir` is the artifact directory. When `export_parquet` is non-empty, the run also saves the preprocessed, filled, and feature-lagged panel. This copies the processed input and can be large for a full 810-factor run; enable it mainly for debugging, audit, or reproduction.
 
-- `output_dir` 是产物目录。
-- `export_parquet` 非空时，会额外保存经过预处理、填充和特征滞后的面板。
+## Factor-generation CLI options
 
-`export_parquet` 会复制一份处理后的输入面板。完整 810 因子运行时，该文件可能很大，建议只在调试、审计或复现实验时开启。
-
-## 因子生成 CLI 配置
-
-TuShare 本地 Alpha158/360、纯 Python Alpha101/191 和 DolphinDB 外部 Alpha101/191 生成命令都支持：
+The local TuShare Alpha158/360, pure-Python Alpha101/191, and DolphinDB external Alpha101/191 generators support:
 
 ```bash
---factor-dtype float32  # 默认
---factor-dtype float64  # 精度敏感复核
+--factor-dtype float32  # default
+--factor-dtype float64  # for precision-sensitive checks
 ```
 
-该选项只影响 `alpha101_`、`alpha191_`、`alpha158_` 和 `alpha360_` 因子列，不会全局降精度基础行情、基准、标签或可交易过滤列。
+This option affects only `alpha101_`, `alpha191_`, `alpha158_`, and `alpha360_` columns. It does not lower precision globally for market data, benchmarks, labels, or tradability filters.
 
-## 预设配置
+## Presets
 
-文件目录：`configs/preset/`
+Preset files are in `configs/preset/`:
 
-当前预设：
+- `template_smoke.yaml`: supplies local `data_path` and `output_dir` values for a smoke run.
+- `tuning.yaml`: explicitly enables Optuna tuning for random forest.
+- `legacy_notebook_compat.yaml`: reproduces early notebook results using `pred_rel_return`, no feature lag, and notebook-compatible random-forest tuning and feature selection.
+- `notebook_compat.yaml`: deprecated transitional compatibility path; it remains readable. Prefer `legacy_notebook_compat.yaml` in new documentation.
 
-- `template_smoke.yaml`: 写入本地 `data_path` 和 `output_dir`，方便本地 smoke 运行。
-- `tuning.yaml`: 显式开启随机森林 Optuna 调参。
-- `legacy_notebook_compat.yaml`: 只用于复现早期 notebook 结果，使用 `pred_rel_return`、关闭特征滞后、切换到 notebook 兼容的随机森林调参和特征选择路径。
-- `notebook_compat.yaml`: deprecated 过渡兼容路径，仍可读取。后续文档应优先使用 `legacy_notebook_compat.yaml`。
-
-预设应放在配置列表最后，让它覆盖前面的基础配置。
+Place presets last in the configuration list so they override base configuration.

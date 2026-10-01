@@ -24,16 +24,56 @@ theme:
 extra_css:
   - stylesheets/extra.css
 nav:
-  - Home: index.md
-  - Public factor evidence: public-factor-evidence.md
-  - Publication audit: publication-audit.md
-  - Research methodology: research-methodology.md
-  - Factor catalog: factor-catalog.md
-  - Factor families: factor-families.md
-  - Data contract: data-contract.md
-  - Architecture: architecture.md
-  - CLI reference: cli-reference.md
-  - Runbook: runbook.md
+  - English:
+      - Home: index.md
+      - Documentation language status: language-migration-status.md
+      - Public factor evidence: public-factor-evidence.md
+      - Publication audit: publication-audit.md
+      - Research methodology: research-methodology.md
+      - Factor catalog: factor-catalog.md
+      - Factor families: factor-families.md
+      - Data contract: data-contract.md
+      - Architecture: architecture.md
+      - CLI reference: cli-reference.md
+      - Runbook: runbook.md
+      - Data input migration: data-platform-migration.md
+      - Data snapshots: data-snapshot.md
+      - Data release assets: data-release.md
+      - Data status checks: data-status.md
+      - Classic Alpha Python: classic-alphas-python.md
+      - Factor mining: factor-mining.md
+      - Smoke test: smoke-test.md
+      - Configuration: configuration.md
+      - Cookbook: cookbook.md
+      - Backtest outputs: outputs.md
+      - Testing: testing.md
+      - DolphinDB Alpha generation: generate-alpha101-191-with-dolphindb.md
+      - Maintenance backlog: maintenance.md
+  - 简体中文:
+      - 首页: index.zh-CN.md
+      - 文档语言状态: language-migration-status.zh-CN.md
+      - 公开因子证据: public-factor-evidence.zh-CN.md
+      - 发布审计: publication-audit.zh-CN.md
+      - 研究方法: research-methodology.zh-CN.md
+      - 因子目录: factor-catalog.zh-CN.md
+      - 因子族: factor-families.zh-CN.md
+      - 数据契约: data-contract.zh-CN.md
+      - 架构: architecture.zh-CN.md
+      - CLI 参考: cli-reference.zh-CN.md
+      - 运维手册: runbook.zh-CN.md
+      - 数据入口迁移: data-platform-migration.zh-CN.md
+      - 数据快照: data-snapshot.zh-CN.md
+      - 数据发布资产: data-release.zh-CN.md
+      - 数据状态检查: data-status.zh-CN.md
+      - 经典 Alpha Python: classic-alphas-python.zh-CN.md
+      - 因子挖掘: factor-mining.zh-CN.md
+      - 冒烟测试: smoke-test.zh-CN.md
+      - 配置说明: configuration.zh-CN.md
+      - 常见工作流: cookbook.zh-CN.md
+      - 回测产物: outputs.zh-CN.md
+      - 测试说明: testing.zh-CN.md
+      - 使用 DolphinDB 生成 Alpha101/191: generate-alpha101-191-with-dolphindb.zh-CN.md
+      - 维护待办: maintenance.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list
