@@ -26,6 +26,26 @@ TERM_DRIFT_PATTERNS = {
 }
 
 
+def test_mkdocs_supports_system_theme_with_manual_dark_mode_toggle() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = (root / "mkdocs.yml").read_text(encoding="utf-8")
+    stylesheet = (root / "docs" / "stylesheets" / "extra.css").read_text(encoding="utf-8")
+
+    assert 'media: "(prefers-color-scheme: light)"' in config
+    assert 'media: "(prefers-color-scheme: dark)"' in config
+    assert "scheme: slate" in config
+    assert "Switch to dark mode" in config
+    assert "Switch to light mode" in config
+    assert "stylesheets/extra.css" in config
+    assert "--mt-background: #f7f6f2" in stylesheet
+    assert '[data-md-color-scheme="slate"]' in stylesheet
+    assert "--mt-background: #171815" in stylesheet
+    assert "--mt-accent: #76513b" in stylesheet
+    assert "--mt-accent: #d1a07f" in stylesheet
+    assert ".md-content h1" in stylesheet
+    assert ".md-typeset table:not([class])" in stylesheet
+
+
 def _docs_paths(root: Path) -> list[Path]:
     return [
         root / "README.md",
