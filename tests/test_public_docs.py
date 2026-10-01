@@ -7,11 +7,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _navigation_markdown_paths(value: object):
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _navigation_markdown_paths(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _navigation_markdown_paths(child)
+    elif isinstance(value, str) and value.endswith(".md"):
+        yield value
+
+
 def test_mkdocs_navigation_references_existing_public_docs() -> None:
     config = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
 
     assert config["site_name"] == "Money Trees · Alpha 810 Research"
-    nav_paths = [item for section in config["nav"] for item in section.values()]
+    nav_paths = _navigation_markdown_paths(config["nav"])
     for path in nav_paths:
         assert (ROOT / "docs" / path).exists(), path
 
