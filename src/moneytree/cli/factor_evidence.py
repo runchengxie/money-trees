@@ -47,6 +47,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--return-column", default="next_period_return", help="Forward return column."
     )
+    parser.add_argument(
+        "--benchmark-return-column",
+        help="Optional realized daily benchmark return column for market-regime slices.",
+    )
+    parser.add_argument("--benchmark-name", help="Human-readable benchmark identifier.")
+    parser.add_argument(
+        "--regime-window", type=int, default=252, help="Prior trading days used for regime labels."
+    )
+    parser.add_argument(
+        "--holding-period-days",
+        type=int,
+        help="Forward-return holding period; required before inferential diagnostics are emitted.",
+    )
     parser.add_argument("--data-version", default="unknown", help="Input data version label.")
     parser.add_argument("--output", required=True, help="Output JSON path.")
     parser.add_argument(
@@ -88,6 +101,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     return_column=args.return_column,
                     data_version=args.data_version,
                     group_count=args.group_count,
+                    benchmark_return_column=args.benchmark_return_column,
+                    benchmark_name=args.benchmark_name,
+                    regime_window=args.regime_window,
                 )
             else:
                 payload = build_factor_evidence_snapshot_from_archive(
@@ -98,6 +114,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     return_column=args.return_column,
                     data_version=args.data_version,
                     group_count=args.group_count,
+                    benchmark_return_column=args.benchmark_return_column,
+                    benchmark_name=args.benchmark_name,
+                    regime_window=args.regime_window,
                 )
         else:
             panel = load_market_data(Path(args.panel))
@@ -107,6 +126,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return_column=args.return_column,
                 data_version=args.data_version,
                 config={"group_count": args.group_count},
+                benchmark_return_column=args.benchmark_return_column,
+                benchmark_name=args.benchmark_name,
+                regime_window=args.regime_window,
             )
         audit_public_snapshot(payload)
         output = Path(args.output)

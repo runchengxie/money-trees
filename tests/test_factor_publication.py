@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from moneytree.factors import publication
 from moneytree.factors.publication import build_factor_evidence_snapshot
 
 
@@ -41,8 +42,11 @@ def test_public_snapshot_contains_aggregate_factor_evidence_only() -> None:
     assert payload["dataset"]["date_end"] == "2024-01-03"
     assert payload["factors"][0]["name"] == "alpha001"
     assert "group_returns" in payload["factors"][0]
-    assert payload["factors"][0]["annual_slices"] == []
+    assert payload["factors"][0]["annual_slices"][0]["label"] == "2024"
+    assert payload["factors"][0]["annual_slices"][0]["valid_dates"] == 2
+    assert payload["factors"][0]["annual_slices"][0]["rank_ic_mean"] == pytest.approx(0.0)
     assert payload["factors"][0]["regime_slices"] == []
+    assert payload["temporal_validation"]["market_regime"]["reason"] == "benchmark_returns_not_supplied"
     assert payload["factors"][0]["uncertainty"]["status"] == "not_provided"
     assert payload["multiple_testing"]["status"] == "not_provided"
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
@@ -75,3 +79,87 @@ def test_public_snapshot_normalizes_non_finite_values_to_json_null() -> None:
 
     json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert payload["factors"][0]["ic"]["mean"] is None
+
+
+def test_annual_temporal_slices_group_daily_rank_ic_and_group_returns() -> None:
+    assert hasattr(publication, "build_temporal_slices")
+    daily_metrics = {
+        "alpha001": [
+            {"date": "2023-12-29", "rank_ic": 0.1},
+            {"date": "2024-01-02", "rank_ic": -0.1},
+            {"date": "2024-01-03", "rank_ic": 0.3},
+        ]
+    }
+    daily_group_returns = {
+        "alpha001": [
+            {"date": "2024-01-02", "group": 1, "mean_return": -0.02},
+            {"date": "2024-01-02", "group": 2, "mean_return": 0.02},
+            {"date": "2024-01-03", "group": 1, "mean_return": -0.01},
+            {"date": "2024-01-03", "group": 2, "mean_return": 0.01},
+        ]
+    }
+
+    result = publication.build_temporal_slices(daily_metrics, daily_group_returns)
+
+    annual = result["annual"]["alpha001"]
+    assert [item["label"] for item in annual] == ["2023", "2024"]
+    assert [item["valid_dates"] for item in annual] == [1, 2]
+    assert [item["rank_ic_mean"] for item in annual] == pytest.approx([0.1, 0.1])
+    assert [item["rank_ic_positive_rate"] for item in annual] == [1.0, 0.5]
+    assert annual[0]["group_returns"] == []
+    assert annual[1]["group_returns"] == [
+        {"group": 1, "mean_return": pytest.approx(-0.015), "periods": 2},
+        {"group": 2, "mean_return": pytest.approx(0.015), "periods": 2},
+    ]
+
+
+def test_market_regime_uses_only_complete_prior_benchmark_window() -> None:
+    assert hasattr(publication, "build_temporal_slices")
+    dates = pd.bdate_range("2023-01-02", periods=255)
+    benchmark = pd.Series(0.001, index=dates)
+    benchmark.iloc[252:] = -0.5
+    metrics = {
+        "alpha001": [
+            {"date": date, "rank_ic": 0.2 if index < 254 else -0.2}
+            for index, date in enumerate(dates)
+        ]
+    }
+
+    result = publication.build_temporal_slices(
+        metrics,
+        {"alpha001": []},
+        benchmark_returns=benchmark,
+        regime_window=252,
+        benchmark_name="fixture_index",
+    )
+
+    factor_regimes = result["regime"]["alpha001"]
+    assert [item["label"] for item in factor_regimes] == ["bull", "bear"]
+    assert [item["valid_dates"] for item in factor_regimes] == [1, 2]
+    assert factor_regimes[0]["rank_ic_mean"] == pytest.approx(0.2)
+    assert factor_regimes[1]["rank_ic_mean"] == pytest.approx(0.0)
+    assert result["regime_metadata"]["benchmark_name"] == "fixture_index"
+
+
+def test_market_regime_is_unavailable_without_benchmark() -> None:
+    assert hasattr(publication, "build_temporal_slices")
+    result = publication.build_temporal_slices({"alpha001": []}, {"alpha001": []})
+
+    assert result["regime_status"]["status"] == "not_provided"
+    assert result["regime_status"]["reason"] == "benchmark_returns_not_supplied"
+
+
+def test_market_regime_rejects_conflicting_benchmark_values_on_same_date() -> None:
+    benchmark = pd.Series(
+        [0.01, 0.02],
+        index=pd.to_datetime(["2024-01-02", "2024-01-02"]),
+    )
+
+    with pytest.raises(ValueError, match="agree within each date"):
+        publication.build_temporal_slices(
+            {"alpha001": []},
+            {"alpha001": []},
+            benchmark_returns=benchmark,
+            regime_window=1,
+            benchmark_name="fixture_index",
+        )
