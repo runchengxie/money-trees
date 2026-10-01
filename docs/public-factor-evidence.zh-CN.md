@@ -40,8 +40,11 @@ uv run moneytrees-factor-evidence \
   --holding-period-days 1 \
   --benchmark-return-column benchmark_daily_return \
   --benchmark-name "CSI 300" \
+  --code-revision "$(git rev-parse HEAD)" \
   --output /tmp/alpha810-snapshot.json
 ```
+
+传入 `--code-revision` 可在公开快照中记录源代码提交号。若同时指定 `--evidence-v1-output`，同一提交号也会写入统一证据文件的来源信息。
 
 平均 RankIC 的不确定性采用 Newey–West HAC、Bartlett 权重和 `holding_period_days - 1` 阶滞后，
 使用双侧标准正态参考分布和 95% 置信区间。缺失 RankIC 日期保留在每日序列中的原位置；不会把它
@@ -112,6 +115,7 @@ uv run moneytrees-factor-evidence \
   --date-start 2016-01-01 \
   --date-end 2025-12-31 \
   --data-version cn-factor-store-2016-2025-archive \
+  --code-revision "$(git rev-parse HEAD)" \
   --output /tmp/alpha810-2016-2025.json \
   --quality-output /tmp/alpha810-2016-2025-quality.json
 ```

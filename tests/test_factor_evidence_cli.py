@@ -66,6 +66,7 @@ def _write_factor_store_archive(path) -> None:
 def test_factor_evidence_cli_writes_public_json_snapshot(tmp_path, capsys) -> None:
     panel_path = tmp_path / "panel.parquet"
     output_path = tmp_path / "public" / "alpha810.json"
+    evidence_path = tmp_path / "public" / "factor_evidence.v1.json"
     _write_panel(panel_path)
 
     exit_code = main(
@@ -76,8 +77,12 @@ def test_factor_evidence_cli_writes_public_json_snapshot(tmp_path, capsys) -> No
             "alpha001",
             "--data-version",
             "fixture-v1",
+            "--code-revision",
+            "abc1234",
             "--output",
             str(output_path),
+            "--evidence-v1-output",
+            str(evidence_path),
             "--format",
             "json",
         ]
@@ -87,6 +92,9 @@ def test_factor_evidence_cli_writes_public_json_snapshot(tmp_path, capsys) -> No
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["kind"] == "moneytree_factor_evidence_snapshot"
     assert payload["data_version"] == "fixture-v1"
+    assert payload["code_revision"] == "abc1234"
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert evidence["provenance"]["code_revision"] == "abc1234"
     assert '"kind": "moneytree_factor_evidence_snapshot"' in capsys.readouterr().out
 
 
@@ -150,6 +158,8 @@ def test_factor_evidence_cli_accepts_unextracted_factor_store_archive(tmp_path) 
                 "all",
                 "--data-version",
                 "archive-fixture-v1",
+                "--code-revision",
+                "archive123",
                 "--output",
                 str(output_path),
             ]
@@ -158,6 +168,7 @@ def test_factor_evidence_cli_accepts_unextracted_factor_store_archive(tmp_path) 
     )
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["data_version"] == "archive-fixture-v1"
+    assert payload["code_revision"] == "archive123"
     assert payload["factors"][0]["name"] == "alpha101_001"
 
 
