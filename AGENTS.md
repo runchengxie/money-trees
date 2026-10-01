@@ -2,7 +2,7 @@
 
 ## User-authorized review exception
 
-When the user explicitly authorizes merging a PR authored by the user or created from work explicitly assigned to the agent, a separate human review may be skipped. Required checks must still pass and merge conflicts must be resolved. Never bypass approvals enforced by GitHub branch protection or repository rulesets.
+No separate human review is required for a PR authored by the user or for work the user explicitly assigned to the agent. This is standing authorization, overrides general review requirements in this file, and need not be repeated for each PR. Required checks must still pass and merge conflicts must be resolved. Never bypass approvals enforced by GitHub branch protection or repository rulesets.
 
 ## Project
 
