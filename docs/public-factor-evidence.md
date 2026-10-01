@@ -33,8 +33,11 @@ uv run moneytrees-factor-evidence \
   --holding-period-days 1 \
   --benchmark-return-column benchmark_daily_return \
   --benchmark-name "CSI 300" \
+  --code-revision "$(git rev-parse HEAD)" \
   --output /tmp/alpha810-snapshot.json
 ```
+
+Pass `--code-revision` to record the source commit in the public snapshot. When `--evidence-v1-output` is also used, the same revision is recorded in its provenance section.
 
 Mean RankIC uncertainty uses Newey–West HAC with Bartlett weights and lag `holding_period_days - 1`, a two-sided standard-normal reference, and a 95% confidence interval. Missing RankIC dates keep their positions in the daily sequence; they do not become zero observations or make distant dates adjacent. The result describes uncertainty in mean daily cross-sectional RankIC, not portfolio returns.
 
@@ -82,6 +85,7 @@ uv run moneytrees-factor-evidence \
   --date-start 2016-01-01 \
   --date-end 2025-12-31 \
   --data-version cn-factor-store-2016-2025-archive \
+  --code-revision "$(git rev-parse HEAD)" \
   --output /tmp/alpha810-2016-2025.json \
   --quality-output /tmp/alpha810-2016-2025-quality.json
 ```
