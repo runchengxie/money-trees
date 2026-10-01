@@ -43,6 +43,8 @@ nav:
       - Classic Alpha Python: classic-alphas-python.md
       - Factor mining: factor-mining.md
       - Smoke test: smoke-test.md
+      - Configuration: configuration.md
+      - Cookbook: cookbook.md
   - 简体中文:
       - 首页: index.zh-CN.md
       - 文档语言状态: language-migration-status.zh-CN.md
@@ -62,6 +64,8 @@ nav:
       - 经典 Alpha Python: classic-alphas-python.zh-CN.md
       - 因子挖掘: factor-mining.zh-CN.md
       - 冒烟测试: smoke-test.zh-CN.md
+      - 配置说明: configuration.zh-CN.md
+      - 常见工作流: cookbook.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list

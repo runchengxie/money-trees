@@ -25,20 +25,20 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 | [Classic Alpha Python](classic-alphas-python.md) | [经典 Alpha Python](classic-alphas-python.zh-CN.md) |
 | [Factor mining](factor-mining.md) | [因子挖掘](factor-mining.zh-CN.md) |
 | [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
+| [Configuration](configuration.md) | [配置说明](configuration.zh-CN.md) |
+| [Cookbook](cookbook.md) | [常见工作流](cookbook.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 `theme.language` 配置为 `en`。页面配色会跟随系统的 `prefers-color-scheme`，并提供手动切换明暗主题的控件。语言只影响文档展示，不改变项目行为或机器可读契约。
 
 ## 后续范围
 
-上面新增的三篇数据文档此前由 README 链接，但只有中文版本。现在它们已有英文主版本、中文 companion，并加入两种语言的导航。
+本清单建立后迁移的九篇指南此前由 README 链接，但只有中文版本。现在它们已有英文主版本、中文 companion，并加入两种语言的导航。
 
 ## 尚待补充英文主版本的 README 文档
 
-以下六篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
+以下四篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
 
-- `configuration.md`
-- `cookbook.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`
 - `outputs.md`

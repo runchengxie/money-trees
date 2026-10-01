@@ -25,20 +25,20 @@ The MkDocs site defaults to English and publishes English and Simplified Chinese
 | [Classic Alpha Python](classic-alphas-python.md) | [经典 Alpha Python](classic-alphas-python.zh-CN.md) |
 | [Factor mining](factor-mining.md) | [因子挖掘](factor-mining.zh-CN.md) |
 | [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
+| [Configuration](configuration.md) | [配置说明](configuration.zh-CN.md) |
+| [Cookbook](cookbook.md) | [常见工作流](cookbook.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 The `theme.language` setting is `en`. Light and dark palettes follow `prefers-color-scheme`, and the theme provides manual light/dark controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
 
 ## Remaining scope
 
-The three data pages added above were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages, Chinese companions, and entries in both navigation groups.
+The nine guides added since this inventory was created were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages, Chinese companions, and entries in both navigation groups.
 
 ## Remaining README-linked pages needing English canonical versions
 
-These six pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
+These four pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
 
-- `configuration.md`
-- `cookbook.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`
 - `outputs.md`

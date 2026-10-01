@@ -1,10 +1,12 @@
 # Cookbook
 
-Cookbook 记录常见任务的可复制做法，重点在怎么用。Runbook 记录日常运行、失败恢复和归档检查，重点在怎么稳定地执行。排障流程见 [runbook.md](runbook.md)。
+[简体中文](cookbook.zh-CN.md)
 
-## 1. 跑最小本地回测
+This cookbook collects reproducible workflows and focuses on how to use the tools. The [runbook](runbook.md) covers routine operations, recovery, and archive checks.
 
-准备一个满足 [data-contract.md](data-contract.md) 的 parquet 文件后运行：
+## 1. Run a minimal local backtest
+
+Prepare a parquet file that follows the [data contract](data-contract.md):
 
 ```bash
 uv run moneytrees \
@@ -15,7 +17,7 @@ uv run moneytrees \
   --output-dir artifacts/smoke
 ```
 
-调试时建议减少滚动窗口，并保持调参关闭：
+For debugging, reduce rolling windows and leave tuning disabled:
 
 ```bash
 uv run moneytrees \
@@ -27,21 +29,18 @@ uv run moneytrees \
   --set backtest.segment2_windows=1
 ```
 
-## 2. 从 TuShare 拉日频面板
+## 2. Download a daily panel with the legacy TuShare compatibility CLI
 
-安装研究依赖：
+The TuShare commands in this section are for reproducing older notebooks and migrating historical workflows. For new production data, use versioned assets published by `quant-market-data-platform`; see [data input migration](data-platform-migration.md).
+
+Install research dependencies and set a TuShare token:
 
 ```bash
 uv sync --dev --extra research
-```
-
-设置 token：
-
-```bash
 export TUSHARE_TOKEN=your_token
 ```
 
-拉取日频数据：
+Download daily data:
 
 ```bash
 uv run moneytrees-tushare \
@@ -54,9 +53,9 @@ uv run moneytrees-tushare \
   --benchmark 000300.SH
 ```
 
-`--cache-dir` 会缓存 `daily`、`daily_basic`、`adj_factor`、`stk_limit` 和 `suspend_d` 的原始返回。重复拉取同一区间时，已有交易日会读本地 parquet。长区间全市场任务建议加 `--progress`，观察每个接口的交易日进度、累计行数、cache 命中和实际请求次数。
+`--cache-dir` caches raw responses for `daily`, `daily_basic`, `adj_factor`, `stk_limit`, and `suspend_d`. Repeated downloads of the same date range reuse locally cached parquet for dates already present. For long, full-market downloads, use `--progress` to monitor trading-date progress by API, cumulative rows, cache hits, and actual request counts.
 
-生成基础面板后先做只读质量检查：
+After creating the base panel, run a read-only quality check:
 
 ```bash
 uv run moneytrees-data-status \
@@ -65,9 +64,13 @@ uv run moneytrees-data-status \
   --mode warn
 ```
 
-这个检查会流式扫描 parquet 面板，检查 `date,ticker`、关键列空值、派生收益一致性、复权列一致性，并检查原始缓存中 `daily` 有行但 `adj_factor` 或 `daily_basic` 空分片的问题。收益列只允许自然边界空值：每个 ticker 的首尾以及基准首尾交易日。
+This streams through the parquet panel to check `date,ticker`, key-column nulls, derived-return consistency, adjusted-price consistency, and raw-cache dates where `daily` has rows but `adj_factor` or `daily_basic` is empty. Return columns allow only natural boundary nulls: the first and last row per ticker and the first and last benchmark trading dates.
 
-## 3. 按需生成本地 Alpha158/360 因子仓库
+## 3. Build a local Alpha158/360 factor store from a compatibility-path panel
+
+This section continues from the TuShare compatibility path and is intended for reproducing older workflows. New research should prefer a standard panel published by the data platform.
+
+Fetch the base panel:
 
 ```bash
 uv run moneytrees-tushare \
@@ -81,15 +84,17 @@ uv run moneytrees-tushare \
   --sanity-check warn
 ```
 
-基础面板生成后，再按需生成本地因子族。因子仓库会把基础面板和因子族分开保存，避免把所有列写进单个超宽 parquet。
+Then generate only the factor families needed. The factor store keeps the base panel and factor families separate instead of writing every column into one very wide parquet file.
 
-回测从因子仓库读取选中特征时，缺失列默认报错。迁移旧数据时可以临时设置：
+Missing selected features cause an error by default. During migration of older data, you can temporarily set:
 
 ```bash
 uv run moneytrees \
   --data data/factor_store/cn_daily/manifest.json \
   --set features.missing_feature_policy=warn_fill_zero
 ```
+
+Generate a factor family:
 
 ```bash
 uv run moneytrees-factor-store \
@@ -101,9 +106,7 @@ uv run moneytrees-factor-store \
   --progress
 ```
 
-默认优先使用复权价格生成本地 Alpha 特征，并把生成的 `alpha158_`、`alpha360_` 列保存为 `float32`。需要保留双精度时传 `--factor-dtype float64`。使用未复权价格：
-
-当 `--input` 是 parquet 时，`moneytrees-factor-store` 会按 `--chunk-trade-dates` 分区流式读取面板，并自动带上 Alpha158/360 所需的历史 overlap。大面板内存紧张时，优先把 `--chunk-trade-dates` 调低到 `20` 或 `10`，不要把因子重新并回单个超宽 parquet。
+Local Alpha features use adjusted prices by default and store `alpha158_` and `alpha360_` columns as `float32`. Pass `--factor-dtype float64` to retain double precision. To use unadjusted prices:
 
 ```bash
 uv run moneytrees-factor-store \
@@ -116,9 +119,9 @@ uv run moneytrees-factor-store \
   --raw-features
 ```
 
-`--raw-features` 只表示本地 Alpha158/360 使用未复权价格生成，不会减少 TuShare 接口拉取量。
+For parquet input, `moneytrees-factor-store` reads partitions by `--chunk-trade-dates` and includes the historical overlap needed by Alpha158/360. On memory-constrained machines, reduce the chunk size to `20` or `10` rather than merging factors back into a wide parquet. `--raw-features` changes only the price basis for local Alpha158/360 generation; it does not reduce TuShare API downloads.
 
-回测时可直接把因子仓库 `manifest.json` 作为数据入口，并用配置限定实际加载的因子族：
+Use the factor-store manifest as a backtest input and select the families to load:
 
 ```bash
 uv run moneytrees \
@@ -127,7 +130,7 @@ uv run moneytrees \
   --set 'features.include_factor_families=["alpha158"]'
 ```
 
-轻量调试时只生成 Alpha158：
+For a lightweight debug run, generate only Alpha158:
 
 ```bash
 uv run moneytrees-factor-store \
@@ -138,22 +141,22 @@ uv run moneytrees-factor-store \
   --progress
 ```
 
-## 4. 补齐 Alpha101/191，共 292 个列
+## 4. Add Alpha101/191 (292 columns)
 
-Alpha101/191 有两条生成路径：
+There are two generation paths:
 
-1. 纯 Python 本地生成（横截面语义，轻量）：`moneytrees-alpha101-191-python`。适用于教学和小规模研究，详见 [classic-alphas-python.md](classic-alphas-python.md)。
-2. DolphinDB 外部生成（生产推荐）：先离线生成，再写入同一个因子仓库。详细环境和口径见 [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md)。
+1. Local pure Python, using cross-sectional semantics: `moneytrees-alpha101-191-python`. It is suitable for learning and small-scale research; see [classic-alphas-python.md](classic-alphas-python.md).
+2. External DolphinDB generation, recommended for production: generate offline and write into the same factor store. See [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md) for environment and calculation details.
 
-DolphinDB 路径下，parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认用 `--stream-input auto` 按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免完整输入面板一次性进入内存。宽表输出或显式 `--stream-input off` 仍会走完整输入上传路径。先用小样本分别跑 `--alpha101` 和 `--alpha191` 冒烟测试，正式生成时优先按因子族分开运行。
+With parquet input and `--no-wide-output`, the DolphinDB CLI defaults to `--stream-input auto`: it reads, uploads, computes, and writes data in target-date and warmup-window chunks. Wide output or explicit `--stream-input off` still uploads the full input. First run a small smoke test for `--alpha101` and `--alpha191` separately; for full generation, prefer separate runs by factor family.
 
-安装外部 Alpha 依赖：
+Install the external-Alpha dependencies:
 
 ```bash
 uv sync --dev --extra external-alphas
 ```
 
-生成 Alpha101/191 并写入因子仓库：
+Generate both families and write them to the factor store:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -172,13 +175,13 @@ uv run moneytrees-dolphindb-alphas \
   --moneytree-alpha-module-version <your-wrapper-version>
 ```
 
-兼容旧宽表路径时仍可传 `--output data/cn_daily_alpha_all.parquet`。因子仓库路径的元数据清单写到：
+For the older wide-panel path, pass `--output data/cn_daily_alpha_all.parquet`. The factor-store manifest is written to:
 
 ```text
 data/factor_store/cn_daily/manifest.json
 ```
 
-## 5. 使用完整 810 因子仓库跑 XGBoost 回归
+## 5. Run XGBoost regression with the full 810-factor store
 
 ```bash
 uv sync --dev --extra research
@@ -192,10 +195,9 @@ uv run moneytrees \
   --set backtest.memory_budget_gb=32
 ```
 
-`xgb_regressor` 训练目标是 `rel_return`，输出连续 score 后进入组合构建。
-默认 `backtest.load_mode: auto` 会按回测日期裁剪读取，并在读取因子仓库前做内存预检。如果完整 810 因子估算超预算，先按因子族分批跑，不要切到 `backtest.load_mode=full` 硬跑。
+`xgb_regressor` predicts continuous `rel_return` scores, which then enter portfolio construction. The default `backtest.load_mode: auto` reads only the backtest date range and runs a memory preflight before loading a factor store. If the full 810-factor estimate exceeds the budget, split the run by factor family instead of forcing `backtest.load_mode=full`.
 
-调试模型时可以只读取某个因子族，避免把完整 810 因子都读入内存：
+To debug a model with one factor family, avoid loading all 810 factors:
 
 ```bash
 uv run moneytrees \
@@ -207,7 +209,7 @@ uv run moneytrees \
   --set 'features.include_factor_families=["alpha158"]'
 ```
 
-也可以直接用前缀：
+You can also select a prefix:
 
 ```bash
 uv run moneytrees \
@@ -218,7 +220,7 @@ uv run moneytrees \
   --set model.n_trials=0
 ```
 
-## 6. 单因子 IC / RankIC 诊断
+## 6. Diagnose single-factor IC / RankIC
 
 ```python
 import pandas as pd
@@ -234,11 +236,11 @@ summary = summarize_factor_ic(ic)
 print(summary)
 ```
 
-`compute_factor_ic` 默认使用 `next_period_return` 作为收益列，按日期计算截面 IC 和 RankIC。
+`compute_factor_ic` uses `next_period_return` by default and calculates cross-sectional IC and RankIC by date.
 
-## 7. 切换线性模型基准
+## 7. Switch to a linear-model baseline
 
-Ridge：
+Ridge:
 
 ```bash
 uv run moneytrees \
@@ -249,18 +251,18 @@ uv run moneytrees \
   --output-dir artifacts/ridge-alpha-daily
 ```
 
-Lasso 和 ElasticNet 只需要替换模型配置：
+For Lasso or ElasticNet, replace the model config with:
 
 ```text
 configs/model/lasso.yaml
 configs/model/elasticnet.yaml
 ```
 
-线性模型训练目标是 `rel_return`，当前不支持调参和特征选择。
+Linear models predict `rel_return` and currently do not support tuning or feature selection.
 
-## 8. 显式开启随机森林调参
+## 8. Explicitly enable random-forest tuning
 
-默认模型配置不调参。需要 Optuna 时叠加 tuning 预设：
+Model tuning is disabled by default. To use Optuna, add the tuning preset:
 
 ```bash
 uv sync --dev --extra tuning
@@ -274,9 +276,9 @@ uv run moneytrees \
   --output-dir artifacts/rf-alpha-all-tuned
 ```
 
-## 9. 使用 signal-risk QP 组合
+## 9. Use signal-risk QP portfolio weighting
 
-默认组合方法是 `heuristic`。切到 QP：
+The default portfolio method is `heuristic`. To use QP:
 
 ```bash
 uv run moneytrees \
@@ -287,9 +289,9 @@ uv run moneytrees \
   --set portfolio.qp_risk_aversion=20
 ```
 
-QP 会用训练窗口 `next_period_return` 估计协方差。求解失败时默认回退到启发式权重。
+QP estimates covariance from `next_period_return` in the training window. If the solver fails, it falls back to heuristic weights by default.
 
-## 10. 跑最终留出验证
+## 10. Run final holdout validation
 
 ```bash
 uv run moneytrees \
@@ -300,15 +302,15 @@ uv run moneytrees \
   --set backtest.holdout.model_segment=segment_b
 ```
 
-留出验证结果写到：
+Holdout results are written to:
 
 ```text
 artifacts/holdout-check/holdout/
 ```
 
-## 11. 使用本地模板预设
+## 11. Use the local template preset
 
-`configs/preset/template_smoke.yaml` 已写入：
+`configs/preset/template_smoke.yaml` sets local paths:
 
 ```yaml
 market:
@@ -318,7 +320,7 @@ output:
   output_dir: ./artifacts/template-smoke
 ```
 
-运行：
+Run it with:
 
 ```bash
 uv run moneytrees \
@@ -328,9 +330,9 @@ uv run moneytrees \
   --config configs/preset/template_smoke.yaml
 ```
 
-## 12. 迁移旧 pickle 数据
+## 12. Migrate legacy pickle data
 
-`scripts/convert_pickle_to_parquet.py` 是 deprecated 兼容迁移工具，不属于主研究路径。新迁移优先使用 `moneytrees-parquet-rewrite`：
+`scripts/convert_pickle_to_parquet.py` is a deprecated compatibility tool, not the primary research path. Prefer `moneytrees-parquet-rewrite`:
 
 ```bash
 uv run moneytrees-parquet-rewrite \
@@ -338,24 +340,24 @@ uv run moneytrees-parquet-rewrite \
   --output data_small.parquet
 ```
 
-旧脚本仍可用于可信 pickle 的简单迁移：
+The older script remains available for simple migration of trusted pickle files:
 
 ```bash
 uv run python scripts/convert_pickle_to_parquet.py \
   --input data_small.pkl
 ```
 
-## 13. Legacy notebook 复现
+## 13. Reproduce a legacy notebook
 
-`configs/preset/legacy_notebook_compat.yaml` 只用于复现早期 notebook 结果，不建议用于正式 Alpha101/191/158/360 因子研究。该预设会：
+`configs/preset/legacy_notebook_compat.yaml` is only for reproducing early notebook results. Do not use it for formal Alpha101/191/158/360 research. It:
 
-- 使用 `pred_rel_return` 作为标签来源。
-- 将 `feature_lag_periods` 设为 `0`。
-- 使用 `notebook_compat` 特征选择路径。
-- 将交易成本设为 `0`。
-- 启用 200 次随机森林调参。
+- Uses `pred_rel_return` as the label source.
+- Sets `feature_lag_periods` to `0`.
+- Uses the `notebook_compat` feature-selection path.
+- Sets trading costs to `0`.
+- Enables 200 random-forest tuning trials.
 
-命令：
+Run it with:
 
 ```bash
 uv run moneytrees \
@@ -367,4 +369,4 @@ uv run moneytrees \
   --output-dir artifacts/legacy-notebook-compat
 ```
 
-输入数据必须包含 `pred_rel_return`。
+The input must contain `pred_rel_return`.
