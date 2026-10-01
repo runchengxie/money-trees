@@ -67,6 +67,7 @@ The model registry contains ten adapters: random forest, Extra Trees, Gradient B
 The [GitHub Pages documentation](https://runchengxie.github.io/money-trees/) is built from [`docs/index.md`](docs/index.md). Data ingestion, caching, quality governance, versioning, and publication are owned by [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform); see the [data-platform migration boundary](docs/data-platform-migration.md). Full portfolio construction, risk, execution simulation, and backtest jobs are owned by `quant-platform` and `quant-backtest-runtime`.
 
 - [`docs/index.md`](docs/index.md): project boundary and published documentation entry point.
+- [`docs/language-migration-status.md`](docs/language-migration-status.md): English/Chinese page coverage and localization scope.
 - [`docs/public-factor-evidence.md`](docs/public-factor-evidence.md), [`docs/publication-audit.md`](docs/publication-audit.md), and [`docs/research-methodology.md`](docs/research-methodology.md): evidence contract, publication controls, and research method.
 - [`docs/smoke-test.md`](docs/smoke-test.md): minimal end-to-end run and required panel columns.
 - [`docs/architecture.md`](docs/architecture.md): data, market, factor, model, portfolio, backtest, and output layers.

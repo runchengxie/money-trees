@@ -24,16 +24,30 @@ theme:
 extra_css:
   - stylesheets/extra.css
 nav:
-  - Home: index.md
-  - Public factor evidence: public-factor-evidence.md
-  - Publication audit: publication-audit.md
-  - Research methodology: research-methodology.md
-  - Factor catalog: factor-catalog.md
-  - Factor families: factor-families.md
-  - Data contract: data-contract.md
-  - Architecture: architecture.md
-  - CLI reference: cli-reference.md
-  - Runbook: runbook.md
+  - English:
+      - Home: index.md
+      - Documentation language status: language-migration-status.md
+      - Public factor evidence: public-factor-evidence.md
+      - Publication audit: publication-audit.md
+      - Research methodology: research-methodology.md
+      - Factor catalog: factor-catalog.md
+      - Factor families: factor-families.md
+      - Data contract: data-contract.md
+      - Architecture: architecture.md
+      - CLI reference: cli-reference.md
+      - Runbook: runbook.md
+  - 简体中文:
+      - 首页: index.zh-CN.md
+      - 文档语言状态: language-migration-status.zh-CN.md
+      - 公开因子证据: public-factor-evidence.zh-CN.md
+      - 发布审计: publication-audit.zh-CN.md
+      - 研究方法: research-methodology.zh-CN.md
+      - 因子目录: factor-catalog.zh-CN.md
+      - 因子族: factor-families.zh-CN.md
+      - 数据契约: data-contract.zh-CN.md
+      - 架构: architecture.zh-CN.md
+      - CLI 参考: cli-reference.zh-CN.md
+      - 运维手册: runbook.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list

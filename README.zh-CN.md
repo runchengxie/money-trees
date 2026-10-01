@@ -67,6 +67,7 @@ uv run ruff check .
 [GitHub Pages 文档](https://runchengxie.github.io/money-trees/)由 [`docs/index.md`](docs/index.md) 构建。数据接入、缓存、质量治理、版本和发布由 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 负责，边界说明见[数据平台迁移文档](docs/data-platform-migration.md)。完整组合构建、风险、执行模拟和回测任务由 `quant-platform` 与 `quant-backtest-runtime` 负责。
 
 - [`docs/index.md`](docs/index.md)：项目边界和公开文档入口。
+- [`docs/language-migration-status.zh-CN.md`](docs/language-migration-status.zh-CN.md)：中英文页面覆盖和本地化范围。
 - [`docs/public-factor-evidence.md`](docs/public-factor-evidence.md)、[`docs/publication-audit.md`](docs/publication-audit.md) 和 [`docs/research-methodology.md`](docs/research-methodology.md)：证据契约、发布控制和研究方法。
 - [`docs/smoke-test.md`](docs/smoke-test.md)：最小端到端运行流程和必需面板列。
 - [`docs/architecture.md`](docs/architecture.md)：数据、市场、因子、模型、组合、回测和输出分层。
