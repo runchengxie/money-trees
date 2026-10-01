@@ -103,6 +103,11 @@ def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path
     assert payload["dataset"]["observation_count"] == 4
     assert payload["factors"][0]["name"] == "alpha101_001"
     assert payload["factors"][0]["coverage"]["valid_observations"] == 4
+    assert payload["schema_version"] == "1.1"
+    assert payload["factors"][0]["annual_slices"] == []
+    assert payload["factors"][0]["regime_slices"] == []
+    assert payload["factors"][0]["uncertainty"]["status"] == "not_provided"
+    assert payload["multiple_testing"]["status"] == "not_provided"
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert '"ticker"' not in encoded
     assert str(tmp_path) not in encoded
@@ -161,6 +166,9 @@ def test_factor_store_publication_reads_unextracted_tar_archive(tmp_path) -> Non
     assert payload["dataset"]["date_start"] == "2016-01-04"
     assert payload["dataset"]["date_end"] == "2016-01-05"
     assert payload["factors"][0]["name"] == "alpha101_001"
+    assert payload["schema_version"] == "1.1"
+    assert payload["factors"][0]["annual_slices"] == []
+    assert payload["multiple_testing"]["status"] == "not_provided"
     assert '"ticker"' not in json.dumps(payload, ensure_ascii=False)
 
 

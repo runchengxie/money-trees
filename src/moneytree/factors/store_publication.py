@@ -343,6 +343,12 @@ def build_factor_evidence_snapshot_from_store(
                 },
                 "ic": metric(ic),
                 "rank_ic": metric(rank_ic),
+                "annual_slices": [],
+                "regime_slices": [],
+                "uncertainty": {
+                    "status": "not_provided",
+                    "reason": "holding_period_days_not_supplied",
+                },
                 "group_returns": [
                     {
                         "group": int(group),
@@ -372,6 +378,18 @@ def build_factor_evidence_snapshot_from_store(
         },
         "config": {"group_count": group_count, "source": "partitioned_factor_store"},
         "factors": factor_payload,
+        "uncertainty": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
+        "temporal_validation": {
+            "status": "not_provided",
+            "reason": "temporal_slices_not_computed",
+        },
+        "multiple_testing": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",
@@ -506,6 +524,12 @@ def build_factor_evidence_snapshot_from_archive(
                 },
                 "ic": metric(np.asarray(ic_values[factor], dtype=float)),
                 "rank_ic": metric(np.asarray(rank_ic_values[factor], dtype=float)),
+                "annual_slices": [],
+                "regime_slices": [],
+                "uncertainty": {
+                    "status": "not_provided",
+                    "reason": "holding_period_days_not_supplied",
+                },
                 "group_returns": [
                     {
                         "group": int(group),
@@ -535,6 +559,18 @@ def build_factor_evidence_snapshot_from_archive(
         },
         "config": {"group_count": group_count, "source": "tar_factor_store_archive"},
         "factors": factor_payload,
+        "uncertainty": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
+        "temporal_validation": {
+            "status": "not_provided",
+            "reason": "temporal_slices_not_computed",
+        },
+        "multiple_testing": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",

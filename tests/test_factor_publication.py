@@ -34,13 +34,17 @@ def test_public_snapshot_contains_aggregate_factor_evidence_only() -> None:
     )
 
     assert payload["kind"] == "moneytree_factor_evidence_snapshot"
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == "1.1"
     assert payload["data_version"] == "fixture-v1"
     assert payload["code_revision"] == "abc123"
     assert payload["dataset"]["date_start"] == "2024-01-02"
     assert payload["dataset"]["date_end"] == "2024-01-03"
     assert payload["factors"][0]["name"] == "alpha001"
     assert "group_returns" in payload["factors"][0]
+    assert payload["factors"][0]["annual_slices"] == []
+    assert payload["factors"][0]["regime_slices"] == []
+    assert payload["factors"][0]["uncertainty"]["status"] == "not_provided"
+    assert payload["multiple_testing"]["status"] == "not_provided"
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert "private_weight" not in encoded
     assert '"ticker"' not in encoded
@@ -54,6 +58,7 @@ def test_public_snapshot_keeps_factor_with_no_valid_observations() -> None:
     assert factor["coverage"]["valid_observations"] == 0
     assert factor["ic"]["mean"] is None
     assert factor["rank_ic"]["mean"] is None
+    assert factor["uncertainty"]["status"] == "not_provided"
 
 
 def test_public_snapshot_rejects_missing_panel_contract() -> None:

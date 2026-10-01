@@ -29,8 +29,8 @@ def build_factor_evidence_v1(
     audit_public_snapshot(snapshot)
     if snapshot.get("kind") != "moneytree_factor_evidence_snapshot":
         raise ValueError("snapshot must be a moneytree factor evidence snapshot")
-    if snapshot.get("schema_version") != "1.0":
-        raise ValueError("snapshot schema_version must be 1.0")
+    if snapshot.get("schema_version") not in {"1.0", "1.1"}:
+        raise ValueError("snapshot schema_version must be 1.0 or 1.1")
     factors = snapshot.get("factors")
     if not isinstance(factors, list) or not factors:
         raise ValueError("snapshot factors must be a non-empty list")
@@ -45,10 +45,13 @@ def build_factor_evidence_v1(
             "source_schema": snapshot["schema_version"],
             "factors": factors,
         },
-        "uncertainty": _section(uncertainty),
+        "uncertainty": _section(uncertainty or snapshot.get("uncertainty")),
         "risk": _section(risk),
         "residual": _section(residual),
-        "temporal_validation": _section(temporal_validation),
+        "temporal_validation": _section(
+            temporal_validation or snapshot.get("temporal_validation")
+        ),
+        "multiple_testing": _section(snapshot.get("multiple_testing")),
         "provenance": _section(provenance),
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",

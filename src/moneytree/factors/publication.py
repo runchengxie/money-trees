@@ -10,7 +10,7 @@ import pandas as pd
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors.evaluate import compute_factor_ic, summarize_factor_ic
 
-PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.0"
+PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.1"
 PUBLIC_SNAPSHOT_KIND = "moneytree_factor_evidence_snapshot"
 _FORBIDDEN_PUBLIC_KEYS = {
     "ticker",
@@ -163,6 +163,12 @@ def build_factor_evidence_snapshot(
                     ),
                 },
                 "group_returns": _group_returns(panel, factor, return_column, group_count),
+                "annual_slices": [],
+                "regime_slices": [],
+                "uncertainty": {
+                    "status": "not_provided",
+                    "reason": "holding_period_days_not_supplied",
+                },
             }
         )
 
@@ -184,6 +190,18 @@ def build_factor_evidence_snapshot(
         },
         "config": {"group_count": group_count},
         "factors": factor_payload,
+        "uncertainty": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
+        "temporal_validation": {
+            "status": "not_provided",
+            "reason": "temporal_slices_not_computed",
+        },
+        "multiple_testing": {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        },
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",
