@@ -21,6 +21,8 @@ theme:
     - navigation.instant
     - navigation.sections
     - content.code.copy
+extra_css:
+  - stylesheets/extra.css
 nav:
   - Home: index.md
   - Public factor evidence: public-factor-evidence.md
