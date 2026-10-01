@@ -40,6 +40,9 @@ nav:
       - Data snapshots: data-snapshot.md
       - Data release assets: data-release.md
       - Data status checks: data-status.md
+      - Classic Alpha Python: classic-alphas-python.md
+      - Factor mining: factor-mining.md
+      - Smoke test: smoke-test.md
   - 简体中文:
       - 首页: index.zh-CN.md
       - 文档语言状态: language-migration-status.zh-CN.md
@@ -56,6 +59,9 @@ nav:
       - 数据快照: data-snapshot.zh-CN.md
       - 数据发布资产: data-release.zh-CN.md
       - 数据状态检查: data-status.zh-CN.md
+      - 经典 Alpha Python: classic-alphas-python.zh-CN.md
+      - 因子挖掘: factor-mining.zh-CN.md
+      - 冒烟测试: smoke-test.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list

@@ -22,6 +22,9 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 | [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
 | [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
 | [Data status checks](data-status.md) | [数据状态检查](data-status.zh-CN.md) |
+| [Classic Alpha Python](classic-alphas-python.md) | [经典 Alpha Python](classic-alphas-python.zh-CN.md) |
+| [Factor mining](factor-mining.md) | [因子挖掘](factor-mining.zh-CN.md) |
+| [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 `theme.language` 配置为 `en`。页面配色会跟随系统的 `prefers-color-scheme`，并提供手动切换明暗主题的控件。语言只影响文档展示，不改变项目行为或机器可读契约。
@@ -32,16 +35,13 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 
 ## 尚待补充英文主版本的 README 文档
 
-以下九篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
+以下六篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
 
-- `classic-alphas-python.md`
 - `configuration.md`
 - `cookbook.md`
-- `factor-mining.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`
 - `outputs.md`
-- `smoke-test.md`
 - `testing.md`
 
 在根据当前实现核实英文内容并配好中文页面前，这些文档暂不加入导航。`docs/superpowers/` 下的两篇 Markdown 是内部计划和规格，不属于 README 的公开入口。MkDocs 仍会构建未列入导航的 Markdown；严格构建会列出它们，但这不代表它们都应进入公开导航。

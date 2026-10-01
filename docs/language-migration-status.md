@@ -22,6 +22,9 @@ The MkDocs site defaults to English and publishes English and Simplified Chinese
 | [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
 | [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
 | [Data status checks](data-status.md) | [数据状态检查](data-status.zh-CN.md) |
+| [Classic Alpha Python](classic-alphas-python.md) | [经典 Alpha Python](classic-alphas-python.zh-CN.md) |
+| [Factor mining](factor-mining.md) | [因子挖掘](factor-mining.zh-CN.md) |
+| [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 The `theme.language` setting is `en`. Light and dark palettes follow `prefers-color-scheme`, and the theme provides manual light/dark controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
@@ -32,16 +35,13 @@ The three data pages added above were previously linked from the READMEs but exi
 
 ## Remaining README-linked pages needing English canonical versions
 
-These nine pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
+These six pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
 
-- `classic-alphas-python.md`
 - `configuration.md`
 - `cookbook.md`
-- `factor-mining.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`
 - `outputs.md`
-- `smoke-test.md`
 - `testing.md`
 
 They remain outside the configured navigation until each English version is checked against the current implementation and paired with its Chinese page. The two Markdown files under `docs/superpowers/` are internal plans/specifications and are not public README entry points. MkDocs still builds unlisted Markdown files; strict-build output identifies them but does not imply that they belong in public navigation.

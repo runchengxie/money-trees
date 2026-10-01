@@ -1,29 +1,31 @@
-# 用纯 Python 生成 Alpha101/191
+# Generate Alpha101/191 with pure Python
 
-本文说明如何使用 Money Trees 内置的纯 Python Alpha101/191 生成器。该实现移植自 `wu-alpha191-alpha101` 参考仓库，但把 `rank`、`scale` 改为横截面语义（按交易日分组），滚动算子仍按股票时间序列计算。
+[简体中文](classic-alphas-python.zh-CN.md)
 
-## 背景
+This guide covers the built-in pure-Python Alpha101/191 generators in Money Trees. The implementation was ported from the `wu-alpha191-alpha101` reference repository, but `rank` and `scale` use cross-sectional semantics grouped by trading date. Rolling operators still run over each ticker's time series.
 
-- 早期参考仓库 `wu-alpha191-alpha101` 提供逐股票的 Alpha191/Alpha101 Python 实现，但 `rank`/`scale` 用的是单只股票时间序列排名，与标准定义（横截面排名）不一致。
-- Money Trees 的 `src/moneytree/factors/classic.py` 把公式移植到标准 `date, ticker` 面板上，`rank`/`scale` 按交易日横截面计算，`ts_*` 滚动算子按股票分组。
-- 参考仓库 `wu-alpha191-alpha101` 的 README 已标注本仓库为取代者。公式来自公开研报和论文，迁移时保留了结构，只修正了口径。
+## Background
 
-## 支持的字段
+- The original `wu-alpha191-alpha101` repository provides per-ticker Python implementations of Alpha191/Alpha101. Its `rank` and `scale` operators rank a single ticker's time series, which differs from the standard cross-sectional definition.
+- `src/moneytree/factors/classic.py` ports the formulas to the standard `date, ticker` panel. `rank` and `scale` are calculated cross-sectionally by trading date; `ts_*` rolling operators are grouped by ticker.
+- The reference repository's README identifies this repository as its successor. The formulas come from public research reports and papers; the port preserves their structure while correcting the calculation semantics.
 
-| 字段 | 来源列（优先复权，`--raw-price-fields` 时用未复权） | 说明 |
+## Supported fields
+
+| Field | Source column (adjusted by default; raw when using `--raw-price-fields`) | Meaning |
 | --- | --- | --- |
-| `open` / `high` / `low` / `close` | `open_adj` / `high_adj` / `low_adj` / `close_adj`，缺省退回 `open` 等 | 价格类字段。 |
-| `vwap` | `vwap_adj`，缺省退回 `vwap` | 成交量加权均价。 |
-| `volume` | `volume` | 原始成交量（股）。 |
-| `returns` | 由 `close` 按股票计算 `pct_change` | 收益序列。 |
-| `turnover` | `amount` | 成交额。 |
-| `turnover_rate` | `turnover_rate` | 换手率，缺失时该因子输出缺失。 |
-| `cap` | `circ_mv`，缺省退回 `total_mv` | 市值。 |
-| `industry` | `industry` | 行业。 |
+| `open` / `high` / `low` / `close` | `open_adj` / `high_adj` / `low_adj` / `close_adj`, falling back to `open` and similar columns | Price fields. |
+| `vwap` | `vwap_adj`, falling back to `vwap` | Volume-weighted average price. |
+| `volume` | `volume` | Raw volume in shares. |
+| `returns` | `pct_change` of `close`, calculated by ticker | Return series. |
+| `turnover` | `amount` | Trading amount. |
+| `turnover_rate` | `turnover_rate` | If missing, factors that need it return missing values. |
+| `cap` | `circ_mv`, falling back to `total_mv` | Market capitalization. |
+| `industry` | `industry` | Industry classification. |
 
-`index_open` / `index_close`（`benchmark_open` / `benchmark_close`）保留在上下文里，当前移植的公式未使用。
+`index_open` / `index_close` (also available as `benchmark_open` / `benchmark_close`) remain in the context but are not used by the currently ported formulas.
 
-## Python 调用
+## Python API
 
 ```python
 import pandas as pd
@@ -34,11 +36,11 @@ alpha101 = build_alpha101_features(panel)
 alpha191 = build_alpha191_features(panel)
 ```
 
-返回按 `(date, ticker)` 索引的 DataFrame，列名为 `alpha101_001`…`alpha101_101` 和 `alpha191_001`…`alpha191_191`，默认 `float32`。
+The functions return DataFrames indexed by `(date, ticker)`, with columns `alpha101_001`…`alpha101_101` and `alpha191_001`…`alpha191_191`. The default dtype is `float32`.
 
-## CLI 用法
+## CLI
 
-写入兼容宽面板：
+Write a compatible wide panel:
 
 ```bash
 uv run moneytrees-alpha101-191-python \
@@ -48,7 +50,7 @@ uv run moneytrees-alpha101-191-python \
   --alpha191
 ```
 
-写入因子仓库：
+Write to a factor store:
 
 ```bash
 uv run moneytrees-alpha101-191-python \
@@ -59,25 +61,25 @@ uv run moneytrees-alpha101-191-python \
   --alpha191
 ```
 
-常用参数：
+Common options:
 
-| 参数 | 说明 |
+| Option | Description |
 | --- | --- |
-| `--family` / `--alpha101` / `--alpha191` | 选择因子族。 |
-| `--raw-price-fields` | 使用未复权价格字段。 |
-| `--factor-dtype` | `float32`（默认）或 `float64`。 |
-| `--compression` / `--compression-level` / `--row-group-size` | parquet 写入参数。 |
-| `--chunk-trade-dates` | 因子仓库分片交易日数量。 |
-| `--overwrite` | 已存在同名因子族时强制重算。 |
-| `--progress` | 输出逐因子计算和分片写入进度。 |
+| `--family` / `--alpha101` / `--alpha191` | Select factor families. |
+| `--raw-price-fields` | Use unadjusted price fields. |
+| `--factor-dtype` | `float32` (default) or `float64`. |
+| `--compression` / `--compression-level` / `--row-group-size` | Parquet write options. |
+| `--chunk-trade-dates` | Number of trading dates per factor-store chunk. |
+| `--overwrite` | Force recomputation when a factor family with the same name already exists. |
+| `--progress` | Report per-factor calculation and chunk-write progress. |
 
-## 与 DolphinDB 路径的差异
+## Differences from the DolphinDB path
 
-- 横截面语义：本地实现按交易日分组做 `rank`/`scale`。DolphinDB 模块也按截面处理，但两者的缺失值填充、`SMA`/`DECAYLINEAR` 边界和复权口径可能不同。
-- 输入：本地实现直接读取标准面板。DolphinDB 路径上传 `tradetime/securityid` 表。
-- 资源：本地实现会一次性在内存中计算全部请求因子。全市场多年面板内存紧张时，建议分因子族、分时间窗口运行，或继续使用 DolphinDB 流式路径（`--stream-input auto`）。
-- 建议：正式全量生成前，先抽几个因子和 DolphinDB 输出做小样本对拍，确认口径后再推广。
+- Semantics: the local implementation computes `rank` and `scale` cross-sectionally by trading date. DolphinDB modules also process cross-sections, but null handling, `SMA`/`DECAYLINEAR` boundaries, and price-adjustment conventions may differ.
+- Input: the local implementation reads the standard panel directly. The DolphinDB path uploads a `tradetime/securityid` table.
+- Resources: the local implementation computes all requested factors in memory. For multi-year, full-market panels on memory-constrained machines, run factor families or date ranges separately, or use the DolphinDB streaming path with `--stream-input auto`.
+- Before a full production run, compare a small sample of selected factors against DolphinDB output and confirm the calculation conventions.
 
-## 计算资源提示
+## Runtime considerations
 
-滚动 `ts_rank`、`decay_linear`、`ts_argmax` 等算子使用逐股票 `rolling.apply`，在非常大的面板上较慢。可以用 `--progress` 观察进度。需要极大规模生产时优先考虑 DolphinDB 路径或并行分窗。
+Rolling operators such as `ts_rank`, `decay_linear`, and `ts_argmax` use per-ticker `rolling.apply` and can be slow on very large panels. Use `--progress` to monitor progress. For very large production workloads, prefer the DolphinDB path or process date windows in parallel.

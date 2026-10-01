@@ -69,7 +69,7 @@ uv run ruff check .
 - [`docs/index.md`](docs/index.md)：项目边界和公开文档入口。
 - [`docs/language-migration-status.zh-CN.md`](docs/language-migration-status.zh-CN.md)：中英文页面覆盖和本地化范围。
 - [`docs/public-factor-evidence.md`](docs/public-factor-evidence.md)、[`docs/publication-audit.md`](docs/publication-audit.md) 和 [`docs/research-methodology.md`](docs/research-methodology.md)：证据契约、发布控制和研究方法。
-- [`docs/smoke-test.md`](docs/smoke-test.md)：最小端到端运行流程和必需面板列。
+- [`docs/smoke-test.zh-CN.md`](docs/smoke-test.zh-CN.md)：最小端到端运行流程和必需面板列。
 - [`docs/architecture.md`](docs/architecture.md)：数据、市场、因子、模型、组合、回测和输出分层。
 - [`docs/data-contract.md`](docs/data-contract.md)：面板索引、必需与可选列、标签和特征语义。
 - [`docs/data-status.zh-CN.md`](docs/data-status.zh-CN.md)、[`docs/data-snapshot.zh-CN.md`](docs/data-snapshot.zh-CN.md) 和 [`docs/data-release.zh-CN.md`](docs/data-release.zh-CN.md)：只读状态、元数据快照和发布资产。
@@ -78,8 +78,8 @@ uv run ruff check .
 - [`docs/outputs.md`](docs/outputs.md)、[`docs/cookbook.md`](docs/cookbook.md) 和 [`docs/runbook.md`](docs/runbook.md)：回测产物、常见研究流程、运维与排障。
 - [`docs/testing.md`](docs/testing.md)：测试命令、覆盖情况和已知缺口。
 - [`docs/factor-families.md`](docs/factor-families.md) 和 [`docs/factor-catalog.md`](docs/factor-catalog.md)：因子族来源和目录；机器可读目录见 [`docs/factor-catalog.csv`](docs/factor-catalog.csv)。
-- [`docs/classic-alphas-python.md`](docs/classic-alphas-python.md) 和 [`docs/generate-alpha101-191-with-dolphindb.md`](docs/generate-alpha101-191-with-dolphindb.md)：Alpha101/191 的两种生成方式。
-- [`docs/factor-mining.md`](docs/factor-mining.md) 和 [`docs/maintenance.md`](docs/maintenance.md)：因子挖掘和仓库维护。
+- [`docs/classic-alphas-python.zh-CN.md`](docs/classic-alphas-python.zh-CN.md) 和 [`docs/generate-alpha101-191-with-dolphindb.md`](docs/generate-alpha101-191-with-dolphindb.md)：Alpha101/191 的两种生成方式。
+- [`docs/factor-mining.zh-CN.md`](docs/factor-mining.zh-CN.md) 和 [`docs/maintenance.md`](docs/maintenance.md)：因子挖掘和仓库维护。
 
 ## 项目结构
 
