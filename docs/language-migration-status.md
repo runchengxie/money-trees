@@ -21,6 +21,7 @@ The MkDocs site defaults to English and publishes English and Simplified Chinese
 | [Data input migration](data-platform-migration.md) | [数据入口迁移](data-platform-migration.zh-CN.md) |
 | [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
 | [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
+| [Data status checks](data-status.md) | [数据状态检查](data-status.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 The `theme.language` setting is `en`. Light and dark palettes follow `prefers-color-scheme`, and the theme provides manual light/dark controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
@@ -31,12 +32,11 @@ The three data pages added above were previously linked from the READMEs but exi
 
 ## Remaining README-linked pages needing English canonical versions
 
-These ten pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
+These nine pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
 
 - `classic-alphas-python.md`
 - `configuration.md`
 - `cookbook.md`
-- `data-status.md`
 - `factor-mining.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`

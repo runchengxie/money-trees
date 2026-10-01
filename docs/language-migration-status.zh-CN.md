@@ -21,6 +21,7 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 | [Data input migration](data-platform-migration.md) | [数据入口迁移](data-platform-migration.zh-CN.md) |
 | [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
 | [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
+| [Data status checks](data-status.md) | [数据状态检查](data-status.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 `theme.language` 配置为 `en`。页面配色会跟随系统的 `prefers-color-scheme`，并提供手动切换明暗主题的控件。语言只影响文档展示，不改变项目行为或机器可读契约。
@@ -31,12 +32,11 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 
 ## 尚待补充英文主版本的 README 文档
 
-以下十篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
+以下九篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
 
 - `classic-alphas-python.md`
 - `configuration.md`
 - `cookbook.md`
-- `data-status.md`
 - `factor-mining.md`
 - `generate-alpha101-191-with-dolphindb.md`
 - `maintenance.md`

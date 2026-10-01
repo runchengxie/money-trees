@@ -72,7 +72,7 @@ uv run ruff check .
 - [`docs/smoke-test.md`](docs/smoke-test.md)：最小端到端运行流程和必需面板列。
 - [`docs/architecture.md`](docs/architecture.md)：数据、市场、因子、模型、组合、回测和输出分层。
 - [`docs/data-contract.md`](docs/data-contract.md)：面板索引、必需与可选列、标签和特征语义。
-- [`docs/data-status.md`](docs/data-status.md)、[`docs/data-snapshot.zh-CN.md`](docs/data-snapshot.zh-CN.md) 和 [`docs/data-release.zh-CN.md`](docs/data-release.zh-CN.md)：只读状态、元数据快照和发布资产。
+- [`docs/data-status.zh-CN.md`](docs/data-status.zh-CN.md)、[`docs/data-snapshot.zh-CN.md`](docs/data-snapshot.zh-CN.md) 和 [`docs/data-release.zh-CN.md`](docs/data-release.zh-CN.md)：只读状态、元数据快照和发布资产。
 - [`docs/configuration.md`](docs/configuration.md)：配置分层、合并规则和字段。
 - [`docs/cli-reference.md`](docs/cli-reference.md)：`moneytrees*` 命令、兼容别名和高风险选项。
 - [`docs/outputs.md`](docs/outputs.md)、[`docs/cookbook.md`](docs/cookbook.md) 和 [`docs/runbook.md`](docs/runbook.md)：回测产物、常见研究流程、运维与排障。

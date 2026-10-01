@@ -1,25 +1,27 @@
-# 数据状态检查
+# Data status checks
 
-本文说明 Money Trees 的数据分层、状态检查命令和存储策略。README 只保留入口链接。日常排障、覆盖确认和空间估算放在这里。
+[简体中文](data-status.zh-CN.md)
 
-## 数据分层
+This guide describes Money Trees data layers, the status-check command, and storage practices. The README links to the entry points; daily troubleshooting, coverage checks, and storage estimates are documented here.
 
-推荐把运行数据分成四层：
+## Data layers
+
+Keep runtime data in four layers:
 
 ```text
-data/raw/tushare/        TuShare 原始接口缓存，可重建基础面板
-data/panel/cn/           清洗后的基础 date,ticker 面板，不内嵌大批因子
-data/factor_store/cn/    Alpha101/191/158/360 分族、分日期 chunk 的因子存储
-artifacts/               回测输出，按实验保留或短生命周期清理
+data/raw/tushare/        Raw TuShare API cache; can be used to rebuild the base panel
+data/panel/cn/           Clean base date,ticker panel without a large set of factors
+data/factor_store/cn/    Alpha101/191/158/360 factor store partitioned by family and date chunk
+artifacts/               Backtest outputs retained by experiment or cleaned up on a short lifecycle
 ```
 
-`date, ticker` 是标准面板键。市场配置档（market profile）仍由 `configs/market/cn.yaml` 和 `src/moneytree/markets/cn.py` 管理，默认基准是 `000300.SH`。
+The standard panel key is `date, ticker`. The market profile remains defined by `configs/market/cn.yaml` and `src/moneytree/markets/cn.py`; the default benchmark is `000300.SH`.
 
-## 查看当前覆盖
+## Inspect current coverage
 
-`moneytrees-data-status` 是只读命令，不删除、不刷新、不修复、不重写文件。
+`moneytrees-data-status` is read-only. It does not delete, refresh, repair, or rewrite files.
 
-检查基础面板。Parquet 面板会走 streaming / narrow-column 检查路径，避免为了状态检查把多年全市场面板完整读进 pandas：
+Check a base panel. Parquet panels use streaming, narrow-column checks so a multi-year, full-market panel is not loaded completely into pandas just for a status report:
 
 ```bash
 uv run moneytrees-data-status \
@@ -28,7 +30,7 @@ uv run moneytrees-data-status \
   --mode warn
 ```
 
-检查 TuShare 原始缓存：
+Check a raw TuShare cache:
 
 ```bash
 uv run moneytrees-data-status \
@@ -36,7 +38,7 @@ uv run moneytrees-data-status \
   --format text
 ```
 
-检查因子仓库：
+Check a factor store:
 
 ```bash
 uv run moneytrees-data-status \
@@ -44,7 +46,7 @@ uv run moneytrees-data-status \
   --format text
 ```
 
-全量因子仓库质量检查会逐分片扫描所有因子值。需要快速确认元数据时先跳过值扫描。需要定位单个因子族时只扫对应因子族：
+A full factor-store quality check scans every factor value in every partition. Skip value scans when you only need a quick metadata check, or scan one factor family to investigate it:
 
 ```bash
 uv run moneytrees-data-status \
@@ -57,7 +59,7 @@ uv run moneytrees-data-status \
   --progress
 ```
 
-对已知不可用或定义上恒定的列，可用 `--allow-factor-column` 标记为允许，从而把状态检查聚焦到新的异常。例如 Alpha191 的 `alpha191_030` 依赖外部 `MKT/SMB/HML` 输入。Alpha360 的 lag0 相对变化列按定义为 0：
+Use `--allow-factor-column` to allow known unavailable or definitionally constant columns and focus the report on new anomalies. For example, `alpha191_030` depends on external `MKT/SMB/HML` inputs. Alpha360 lag-0 relative-change columns are zero by definition:
 
 ```bash
 uv run moneytrees-data-status \
@@ -67,7 +69,7 @@ uv run moneytrees-data-status \
   --mode error
 ```
 
-检查回测产物：
+Check backtest artifacts:
 
 ```bash
 uv run moneytrees-data-status \
@@ -75,7 +77,7 @@ uv run moneytrees-data-status \
   --format text
 ```
 
-一次性检查四层，并在 CI 中用 JSON：
+Check all four layers once and emit JSON for CI:
 
 ```bash
 uv run moneytrees-data-status \
@@ -87,50 +89,46 @@ uv run moneytrees-data-status \
   --mode error
 ```
 
-`--mode warn` 会报告问题但不因数据错误返回失败。`--mode error` 遇到错误会返回非零退出码。参数错误和无法读取输入仍会失败。`moneytrees-data-status` 仍然是只读命令：它不会刷新原始缓存、不会修复面板，也不会重写因子仓库或回测产物。
+`--mode warn` reports data errors without returning a failure exit code. `--mode error` returns nonzero when data errors are found. Invalid arguments and unreadable inputs still fail. The command remains read-only: it never refreshes the raw cache, repairs a panel, or rewrites a factor store or backtest artifact.
 
-## 检查项
+## Checks performed
 
-基础面板检查：
+Base panel:
 
-- 文件大小、行数、列数。
-- 日期范围、交易日数量、ticker 数量。
-- 重复 `date, ticker` 键。
-- 必需列缺失。
-- 关键列缺失数量和缺失率。
-- 原始和复权价格的非正值、负成交量、`high < low`。
-- parquet 面板按 streaming / narrow-column 方式扫描。如果 `date, ticker` 不是排序状态，会报告乱序并使用窄列 fallback 计算精确重复键数量。
-- 派生收益列一致性：`return_1d`、`next_period_return`、`benchmark_return`、`benchmark_next_period_return` 会按 `close_adj`（缺失时用 `close`）和 `benchmark_close` 重新计算后比对。
-- 允许自然边界空值：每个 ticker 第一条 `return_1d`、每个 ticker 最后一条 `next_period_return`、全局首日 `benchmark_return`、全局末日 `benchmark_next_period_return`。
-- 复权列一致性：当存在 `adj_factor` 和 `open_adj/high_adj/low_adj/close_adj/vwap_adj` 时，检查空值，并验证复权列约等于原始价格乘以 `adj_factor`。
+- File size, row count, column count, date range, trading-day count, and ticker count.
+- Duplicate `date, ticker` keys and missing required columns.
+- Missing counts and rates for key columns.
+- Non-positive raw or adjusted prices, negative volume, and `high < low`.
+- Parquet scans use streaming, narrow columns. If `date, ticker` is not sorted, the report flags the order and uses a narrow-column fallback to count duplicate keys exactly.
+- Derived-return consistency. The checker recomputes `return_1d`, `next_period_return`, `benchmark_return`, and `benchmark_next_period_return` from `close_adj` (falling back to `close`) and `benchmark_close`.
+- Natural boundary nulls are allowed: the first `return_1d` and last `next_period_return` for each ticker, plus the global first `benchmark_return` and last `benchmark_next_period_return`.
+- Adjusted-price consistency. When `adj_factor` and `open_adj/high_adj/low_adj/close_adj/vwap_adj` are present, the checker checks nulls and verifies adjusted prices approximately equal raw prices multiplied by `adj_factor`.
 
-TuShare 原始缓存检查：
+Raw TuShare cache:
 
-- `manifest.sqlite` 是否存在。
-- 每个 API 的日期范围。
-- 分片数量和累计行数。
-- schema hash 和 content hash 数量。
-- 原始缓存异常分片：当 `daily` 某交易日有行数，但同日 `adj_factor` 或 `daily_basic` 为 0 行或缺失时报告错误。
-- schema hash 多版本会作为 warning 展示，便于识别 TuShare 上游字段变化。
+- Whether `manifest.sqlite` exists.
+- Date range for each API, partition count, and total row count.
+- Number of schema hashes and content hashes.
+- Missing or empty source partitions: an error is reported when `daily` has rows for a trading date but that date has no `adj_factor` or `daily_basic` rows.
+- Multiple schema-hash versions are reported as warnings to help identify upstream TuShare field changes.
 
-因子仓库检查：
+Factor store:
 
-- `manifest.json` 是否存在。
-- 基础面板行数、列数、schema hash。
-- 因子族、前缀、列数、行数、分片数量。
-- 元数据清单指向的 base/factor 文件是否存在。
-- `key_validation` 中的对齐状态。
-- 因子值卫生检查会按 parquet 分片 streaming 扫描，不把完整因子仓库一次性读进 pandas。检查项包括实际行数/列数、分片行数元数据、重复 `date, ticker`、NaN 数量、Inf 数量、最大空值率、整列全空和整列常数。
-- 文本输出会列出整列全空、整列常数和高空值率列名。`--factor-family` 可只检查指定因子族，`--skip-factor-quality` 可只检查元数据清单和文件存在性，`--progress` 可把分片扫描进度输出到 stderr。
+- Whether `manifest.json` exists; base-panel row and column counts; and schema hash.
+- Factor families, prefixes, columns, rows, and partition counts.
+- Whether base and factor files referenced by the manifest exist.
+- Alignment status in `key_validation`.
+- Factor-value checks stream through parquet partitions instead of loading the entire store into pandas. Checks include actual row and column counts, partition row-count metadata, duplicate `date, ticker` keys, NaN and Inf counts, maximum null rate, all-null columns, and constant columns.
+- Text output names all-null, constant, and high-null-rate columns. `--factor-family` limits the scan to selected families, `--skip-factor-quality` checks only manifest metadata and file existence, and `--progress` reports partition scan progress to stderr.
 
-回测产物检查：
+Backtest artifacts:
 
-- `experiment_manifest.json`、metrics、run config 和常见 parquet 输出是否存在。
-- 产物目录总大小。
+- Presence of `experiment_manifest.json`, metrics, run configuration, and common parquet outputs.
+- Total artifact-directory size.
 
-## 刷新策略
+## Refresh strategy
 
-原始缓存适合增量刷新和重建基础面板：
+Use the raw cache for incremental refreshes and to rebuild the base panel:
 
 ```bash
 uv run moneytrees-tushare \
@@ -143,7 +141,7 @@ uv run moneytrees-tushare \
   --sanity-check warn
 ```
 
-基础面板稳定后，再按需生成本地和外部因子：
+After the base panel is stable, generate local and external factors as needed:
 
 ```bash
 uv run moneytrees-factor-store \
@@ -155,7 +153,7 @@ uv run moneytrees-factor-store \
   --chunk-trade-dates 60
 ```
 
-Alpha101/191 由 DolphinDB 外部生产器全量计算后写入同一个因子仓库：
+The DolphinDB external producer computes Alpha101/191 and writes them to the same factor store:
 
 ```bash
 uv run moneytrees-dolphindb-alphas \
@@ -172,42 +170,42 @@ uv run moneytrees-dolphindb-alphas \
   --stream-input auto
 ```
 
-parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认按 `--stream-input auto` 分片读取输入、上传到 DolphinDB、下载结果并落盘。每个窗口应保留 `--dolphindb-warmup-trade-dates` 历史上下文，避免滚动窗口、delay、rank 和 correlation 类算子的边界污染。宽表输出或 `--stream-input off` 仍会走完整输入上传路径，内存紧张时先用小样本验证。
+For parquet input with `--no-wide-output`, the external Alpha CLI defaults to `--stream-input auto`, reading input, uploading it to DolphinDB, downloading results, and writing output in chunks. Retain historical context using `--dolphindb-warmup-trade-dates` so rolling, delay, rank, and correlation operators do not suffer from window-boundary contamination. Wide output or `--stream-input off` still uploads the full input; validate with a small sample first when memory is constrained.
 
-## 空间估算
+## Storage estimates
 
-以 5 年约 1200 个交易日、全市场约 5000 只股票估算，单个因子矩阵约 600 万行：
+For five years, about 1,200 trading days, and roughly 5,000 stocks, one factor matrix has about six million rows:
 
 ```text
-6000000 * 810 * 8 bytes ~= 38.9 GB  # float64 裸数据
-6000000 * 810 * 4 bytes ~= 19.4 GB  # float32 裸数据
+6000000 * 810 * 8 bytes ~= 38.9 GB  # float64 raw values
+6000000 * 810 * 4 bytes ~= 19.4 GB  # float32 raw values
 ```
 
-Parquet 压缩会降低落盘体积，但原始缓存、基础面板、因子仓库和回测产物会叠加占用。完整 810 因子多年全市场实验应按几十 GB 到上百 GB 规划。
+Parquet compression reduces on-disk size, but raw cache, base panels, factor stores, and backtest artifacts accumulate. Plan for tens to hundreds of GB for multi-year, full-market experiments with all 810 factors.
 
-## Parquet 策略
+## Parquet policy
 
-Money Trees 新写入 parquet 默认使用 `zstd`，默认 level 3。需要兼容旧输出时显式传：
+Money Trees defaults to `zstd` compression at level 3 for new parquet output. To retain compatibility with older output, pass:
 
 ```bash
 --compression snappy
 ```
 
-需要控制 row group 时显式传：
+Set a row-group size explicitly when needed:
 
 ```bash
 --row-group-size 100000
 ```
 
-建议：
+Recommendations:
 
-- 原始缓存：默认 parquet 分片。空间紧张时新写入使用默认 `zstd` level 3。
-- 基础面板：默认 `zstd` level 3。
-- 因子仓库：默认 `float32` + `zstd` level 3。
-- 回测产物：默认 `zstd`，避免默认导出完整预处理 parquet。
-- pickle 不作为长期数据格式。CSV 只用于小报表。
+- Raw cache: use parquet partitions; new writes default to `zstd` level 3 when storage is constrained.
+- Base panels: default to `zstd` level 3.
+- Factor stores: default to `float32` and `zstd` level 3.
+- Backtest artifacts: default to `zstd`; avoid exporting a full preprocessed parquet by default.
+- Do not use pickle as a long-term data format. Reserve CSV for small reports.
 
-已有文件不会自动迁移。需要重写时使用旁路输出：
+Existing files are not migrated automatically. Rewrite to a separate output path:
 
 ```bash
 uv run moneytrees-parquet-rewrite \
@@ -218,15 +216,15 @@ uv run moneytrees-parquet-rewrite \
   --row-group-size 100000
 ```
 
-## 清理前只预览
+## Preview before cleanup
 
-当前没有自动清理命令。清理前先只读检查空间：
+There is currently no automatic cleanup command. Inspect storage read-only before removing files:
 
 ```bash
 du -sh data/raw/tushare data/panel data/factor_store artifacts 2>/dev/null
 ```
 
-查看大文件：
+List the largest files:
 
 ```bash
 find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
@@ -234,4 +232,4 @@ find data artifacts -type f -name "*.parquet" -printf "%s %p\n" 2>/dev/null \
   | head -20
 ```
 
-后续如果增加清理工具，默认必须只预览：先打印候选文件、大小和原因，只有显式确认后才允许删除。不要对 `data/`、`artifacts/`、TuShare 原始缓存或因子仓库做隐式清理。
+Any future cleanup tool must default to preview: list candidate files, sizes, and reasons, and require explicit confirmation before deletion. Never silently clean `data/`, `artifacts/`, the raw TuShare cache, or a factor store.
