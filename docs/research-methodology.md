@@ -21,6 +21,8 @@ With overlapping labels, ordinary random cross-validation can leak test-label in
 
 Average IC or cumulative return is not sufficient evidence. Formal reports should include block bootstrap or another dependence-aware uncertainty estimate, effective sample size, maximum drawdown, VaR/CVaR, and cost sensitivity where possible. Without those diagnostics, `factor_evidence.v1` marks the corresponding sections `not_provided` and does not interpret missing diagnostics as a pass.
 
+The public Alpha evidence producer estimates uncertainty for mean daily RankIC with Newey–West HAC when the forward-return holding period is explicit. The lag is the holding period minus one trading day, missing dates retain their positions, and the interval uses a two-sided standard-normal reference. Across the declared factor family, Benjamini–Yekutieli is the primary false-discovery adjustment; unavailable tests remain in the denominator and do not receive q-values. These tests concern predictive RankIC only and do not replace portfolio-level risk, cost, or execution analysis.
+
 ## Residuals and publication
 
 After controlling for size, volatility, liquidity, or industry exposure, factor residual predictability still needs to be checked. The public site accepts aggregated results only; it does not accept per-security signals, portfolio weights, raw paths, or vendor fields. `factor_evidence.v1` is the shared aggregated contract between the research layer and Observatory.
