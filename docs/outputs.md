@@ -1,64 +1,64 @@
-# 输出产物
+# Backtest outputs
 
-默认输出目录由 `--output-dir` 或 `output.output_dir` 控制。一次正常回测会写出策略净值、基准净值、信号诊断、指标、运行配置和报告数据。
+[简体中文](outputs.zh-CN.md)
 
-## 核心文件
+The output directory is set by `--output-dir` or `output.output_dir`. A normal backtest writes strategy and benchmark NAV, signal diagnostics, metrics, resolved run configuration, and report data.
 
-| 文件 | 内容 |
+## Core files
+
+| File | Contents |
 | --- | --- |
-| `metrics.json` | 策略、基准、风险、换手、持仓数、IC 和 RankIC 指标。 |
-| `run_config.json` | 解析后的配置、基准净值口径、segment 规格、segment fit 元数据、留出验证信息、运行时间和 git commit。 |
-| `experiment_manifest.json` | 可复现实验元数据，包括输入 hash、schema hash、配置 hash、运行环境和数据版本。 |
-| `run_summary.txt` | 面向人工阅读的回测摘要。 |
-| `segment_a_features.txt` | Segment A 最终使用的特征列。 |
-| `segment_b_features.txt` | Segment B 最终使用的特征列。 |
+| `metrics.json` | Strategy, benchmark, risk, turnover, holding-count, IC, and RankIC metrics. |
+| `run_config.json` | Resolved configuration, benchmark NAV convention, segment specifications and fit metadata, holdout details, run time, and Git commit. |
+| `experiment_manifest.json` | Reproducibility metadata, including input and schema hashes, configuration hash, runtime environment, and data version. |
+| `run_summary.txt` | Human-readable backtest summary. |
+| `segment_a_features.txt` | Final feature columns used by Segment A. |
+| `segment_b_features.txt` | Final feature columns used by Segment B. |
 
-## 净值和收益
+## NAV and returns
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `strategy_nav.csv` | 组合权重回测净值。 |
-| `signal_nav.csv` | 基于离散信号的诊断净值。 |
-| `benchmark_nav.csv` | 基准净值，对齐策略评估日期。 |
-| `strategy_returns.csv` | 策略分期收益。 |
-| `benchmark_returns.csv` | 基准分期收益。 |
-| `strategy_vs_benchmark.csv` | 策略和基准净值合并表。 |
+| `strategy_nav.csv` | NAV from portfolio-weight backtesting. |
+| `signal_nav.csv` | Diagnostic NAV derived from discrete signals. |
+| `benchmark_nav.csv` | Benchmark NAV aligned to strategy evaluation dates. |
+| `strategy_returns.csv` | Strategy returns by period. |
+| `benchmark_returns.csv` | Benchmark returns by period. |
+| `strategy_vs_benchmark.csv` | Combined strategy and benchmark NAV. |
 
-## 诊断文件
+## Diagnostics
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `signal_profit.csv` | 信号收益、信号换手和信号活跃股票数。 |
-| `strategy_turnover.csv` | 策略换手。 |
-| `active_names.csv` | 每期组合持仓数量。 |
-| `ic_series.csv` | 每期 IC 和 RankIC。 |
-| `oos_period_diagnostics.csv` | 样本外分期收益、换手、持仓数、信号收益、IC、RankIC、目标/实际暴露、未分配暴露和 QP fallback 状态。 |
+| `signal_profit.csv` | Signal returns, signal turnover, and number of active signal names. |
+| `strategy_turnover.csv` | Portfolio turnover. |
+| `active_names.csv` | Number of portfolio holdings per period. |
+| `ic_series.csv` | IC and RankIC by period. |
+| `oos_period_diagnostics.csv` | Out-of-sample returns, turnover, holdings, signal returns, IC, RankIC, target and realized exposures, unallocated exposure, and QP fallback status. |
 
-## Notebook 报告数据
+## Notebook report data
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `notebook_report_navs.csv` | 策略、基准、信号和可选对冲净值。 |
-| `notebook_rolling_beta.csv` | 滚动 beta。 |
-| `notebook_residual_returns.csv` | 回归残差收益。 |
-| `notebook_residual_distribution.csv` | 残差分布直方图数据。 |
+| `notebook_report_navs.csv` | Strategy, benchmark, signal, and optional hedged NAV. |
+| `notebook_rolling_beta.csv` | Rolling beta series. |
+| `notebook_residual_returns.csv` | Regression residual returns. |
+| `notebook_residual_distribution.csv` | Histogram data for residual returns. |
 
-## 特征选择产物
+## Feature-selection outputs
 
-以下文件只在特征选择历史存在时输出：
+These files are written only when feature-selection history is available:
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `segment_a_selection_history.csv` | Segment A 特征选择历史。 |
-| `segment_b_selection_history.csv` | Segment B 特征选择历史。 |
-| `segment_a_feature_score_curve.csv` | Segment A 特征数和验证收益曲线。 |
-| `segment_b_feature_score_curve.csv` | Segment B 特征数和验证收益曲线。 |
+| `segment_a_selection_history.csv` | Segment A feature-selection history. |
+| `segment_b_selection_history.csv` | Segment B feature-selection history. |
+| `segment_a_feature_score_curve.csv` | Segment A feature-count and validation-return curve. |
+| `segment_b_feature_score_curve.csv` | Segment B feature-count and validation-return curve. |
 
-## 留出验证子目录
+## Holdout directory
 
-配置 `backtest.holdout.start` 和 `backtest.holdout.end` 后，会生成 `holdout/` 子目录。
-
-`holdout/` 包含：
+Setting both `backtest.holdout.start` and `backtest.holdout.end` creates a `holdout/` directory containing:
 
 - `strategy_nav.csv`
 - `signal_nav.csv`
@@ -78,49 +78,48 @@
 - `metrics.json`
 - `holdout_config.json`
 
-`holdout_config.json` 记录留出验证使用的模型 segment、训练区间、验证区间和基准名称。
+`holdout_config.json` records the model segment, training and validation ranges, and benchmark name used for holdout evaluation.
 
-## `metrics.json` 指标
+## `metrics.json`
 
-主要指标包括：
+Main metrics include:
 
-- 总收益和年化收益。
-- 年化波动、最大回撤、Sharpe、Sortino、Calmar。
-- VaR 95% 和 CVaR 95%。
-- 相对基准胜率、平均超额收益、年化 tracking error、information ratio。
-- Alpha、Beta 和 hedged Sharpe。
-- 平均、最大和年化换手。
-- 平均、最小和最大持仓数。
-- IC、RankIC 的均值、标准差、IR 和正值比例。
-- Segment A/B 的验证收益、验证换手、特征数和调参最优值。
+- Total and annualized returns.
+- Annualized volatility, maximum drawdown, Sharpe, Sortino, and Calmar ratios.
+- 95% VaR and CVaR.
+- Benchmark-relative win rate, average excess return, annualized tracking error, and information ratio.
+- Alpha, beta, and hedged Sharpe.
+- Average, maximum, and annualized turnover.
+- Average, minimum, and maximum number of holdings.
+- Mean, standard deviation, IR, and positive-value ratio for IC and RankIC.
+- Segment A/B validation return, validation turnover, feature count, and best tuning value.
 
-## `run_config.json` 元数据
+## `run_config.json`
 
-当前记录：
+Current metadata includes:
 
 - `resolved_at_utc`
 - `git_commit`
 - `output_schema_version`
-- CLI 和配置解析后的参数。
-- 基准名称、基准列和 `benchmark_cum_mode`。
-- Segment A/B 的训练、验证和滚动回测规格。
-- Segment A/B 的模型 ID、验证区间、特征数、调参状态和调参最优值。
-- 留出验证是否开启及其区间。
-- `reproducibility` 摘要，包括 `dataset_version`、输入文件 hash、schema hash、配置 hash 和 `experiment_manifest.json` 自身 hash。
+- Parameters resolved from the CLI and configuration files.
+- Benchmark name and column mappings, plus `benchmark_cum_mode`.
+- Segment A/B training, validation, and rolling-backtest specifications.
+- Segment A/B model IDs, validation ranges, feature counts, tuning status, and best tuning values.
+- Whether holdout validation is enabled and its date range.
+- A `reproducibility` summary with `dataset_version`, input-file hash, schema hash, configuration hash, and the hash of `experiment_manifest.json`.
 
 ## `experiment_manifest.json`
 
-该文件用于复现实验，当前包含：
+The manifest supports experiment reproduction and currently records:
 
-- `manifest_schema_version`
-- `output_schema_version`
-- 运行时间、git commit、随机种子和输出目录。
-- `dataset_version`，由输入文件 SHA-256 和 raw 输入 schema hash 派生。
-- 输入数据路径、文件大小、修改时间和 SHA-256。
-- raw 输入面板和模型输入面板的行数、列数、日期范围、ticker 数量、schema 和 schema hash。
-- 配置文件路径、文件 SHA-256、配置文件集合 hash 和解析后配置 hash。
-- 模型 ID、训练目标列和模型参数。
-- 市场配置摘要。
-- Python、平台和关键依赖包版本。
+- `manifest_schema_version` and `output_schema_version`.
+- Run time, Git commit, random seed, and output directory.
+- `dataset_version`, derived from the input-file SHA-256 and raw-input schema hash.
+- Input path, file size, modification time, and SHA-256.
+- Row and column counts, date ranges, ticker counts, schemas, and schema hashes for the raw input panel and model input panel.
+- Configuration paths, each file's SHA-256, the combined configuration-file hash, and the resolved-configuration hash.
+- Model ID, training-target column, and model parameters.
+- Market-configuration summary.
+- Python, platform, and key dependency versions.
 
-后续仍可补充输出文件 hash、TuShare 原始缓存元数据清单版本和外部数据源版本。
+Output-file hashes, the version of the TuShare raw-cache manifest, and external data-source versions may be added later.

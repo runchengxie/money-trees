@@ -45,6 +45,10 @@ nav:
       - Smoke test: smoke-test.md
       - Configuration: configuration.md
       - Cookbook: cookbook.md
+      - Backtest outputs: outputs.md
+      - Testing: testing.md
+      - DolphinDB Alpha generation: generate-alpha101-191-with-dolphindb.md
+      - Maintenance backlog: maintenance.md
   - 简体中文:
       - 首页: index.zh-CN.md
       - 文档语言状态: language-migration-status.zh-CN.md
@@ -66,6 +70,10 @@ nav:
       - 冒烟测试: smoke-test.zh-CN.md
       - 配置说明: configuration.zh-CN.md
       - 常见工作流: cookbook.zh-CN.md
+      - 回测产物: outputs.zh-CN.md
+      - 测试说明: testing.zh-CN.md
+      - 使用 DolphinDB 生成 Alpha101/191: generate-alpha101-191-with-dolphindb.zh-CN.md
+      - 维护待办: maintenance.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list

@@ -1,142 +1,144 @@
-# 测试说明
+# Testing
 
-项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、因子仓库、数据状态、数据快照、数据发布资产、外部 Alpha 生产、容器运行文件、维护脚本和文档清单。
+[简体中文](testing.zh-CN.md)
 
-## 命令
+The test suite covers data contracts, configuration parsing, model adapters, portfolio weights, backtest metrics, CLI smoke paths, TuShare normalization, factor stores, data status, snapshots and release assets, external Alpha generation, container files, maintenance scripts, and documentation inventories.
 
-完整测试：
+## Commands
+
+Run the full test suite:
 
 ```bash
 uv run pytest -q
 ```
 
-运行 lint：
+Run lint:
 
 ```bash
 uv run ruff check .
 ```
 
-只跑 CLI 冒烟测试：
+Run CLI smoke tests only:
 
 ```bash
 uv run pytest -q tests/test_smoke.py tests/test_backtest_cli.py
 ```
 
-只跑 TuShare 数据源测试：
+Run TuShare source tests:
 
 ```bash
 uv run pytest -q tests/test_tushare_data_source.py
 ```
 
-只跑 DolphinDB 外部 Alpha mocked 测试：
+Run mocked DolphinDB external-Alpha tests:
 
 ```bash
 uv run pytest -q tests/test_build_dolphindb_alphas_script.py tests/test_external_alphas.py
 ```
 
-只跑经典 Alpha101/191 本地生成和因子挖掘：
+Run local Alpha101/191 and factor-mining tests:
 
 ```bash
 uv run pytest -q tests/test_classic_alphas.py tests/test_mining.py
 ```
 
-只跑组合和回测核心：
+Run portfolio and backtest core tests:
 
 ```bash
 uv run pytest -q tests/test_portfolio.py tests/test_backtest.py
 ```
 
-只跑工程化 CLI 测试：
+Run data and factor-store CLI tests:
 
 ```bash
 uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/test_data_release.py tests/test_factor_store.py tests/test_parquet_rewrite_cli.py
 ```
 
-只跑文档 guard 测试：
+Run documentation guard tests:
 
 ```bash
 uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
 ```
 
-文档 guard 测试覆盖测试文件登记、console script 名称、README 文档导航、内部 Markdown 链接、部分文风规则、核心术语反向检查、CLI 高风险参数覆盖和因子目录状态一致性。它们不会逐条执行 README 或 docs 中的完整命令示例。涉及 TuShare token、DolphinDB server、大型数据文件或长时间运行的命令仍需按运行手册单独验证。
+The documentation guards check test-file inventory, console-script names, README navigation, local Markdown links, selected style rules, core terminology, high-risk CLI parameter coverage, and factor-catalog status consistency. They do not execute every full command example in the README or docs. Commands requiring a TuShare token, DolphinDB server, large data files, or long runtimes must be validated separately using the runbook.
 
-## 当前覆盖
+## Test coverage by file
 
-| 文件 | 覆盖重点 |
+| Test file | Coverage |
 | --- | --- |
-| `tests/test_backtest.py` | 滚动窗口、绩效指标、基准净值口径、缺失特征策略、组合诊断、Notebook 报告数据和样本外结果序列。 |
-| `tests/test_backtest_cli.py` | CLI 配置栈、`--set` 覆盖、默认配置、留出验证、输出文件、run config 元数据和错误参数。 |
-| `tests/test_build_dolphindb_alphas_script.py` | DolphinDB Alpha101/191 CLI、兼容入口、元数据清单脱敏和可选依赖报错。 |
-| `tests/test_classic_alphas.py` | 纯 Python Alpha101/191 本地生成：列契约、横截面 rank 语义、CLI 宽面板和因子仓库输出。 |
-| `tests/test_container_runtime.py` | Dockerfile、`.dockerignore`、DolphinDB compose 和 runtime 输出隔离。 |
-| `tests/test_convert_pickle_to_parquet_script.py` | 可信 pickle 到 parquet 的 deprecated 兼容迁移脚本和迁移提示。 |
-| `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
-| `tests/test_data_release.py` | 数据发布资产、本地分片、不压缩 tar、GitHub CLI 命令预览和敏感文件保护。 |
-| `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
-| `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
-| `tests/test_data_platform_migration.py` | 数据下载兼容入口与 `quant-market-data-platform` 主路径的迁移文档契约。 |
-| `tests/test_docs_console_scripts.py` | `pyproject.toml` 中 console scripts、兼容别名和 CLI 高风险参数在 README 或 docs 中的覆盖。 |
-| `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
-| `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |
-| `tests/test_docs_style.py` | 中文文档中高风险间接句式、核心术语漂移、DolphinDB 模块事实和因子目录状态一致性。 |
-| `tests/test_factor_evidence_cli.py` | 公开 Alpha 因子证据 CLI、文件参数、错误路径和发布字段审计。 |
-| `tests/test_factor_evidence_v1.py` | 统一 `factor_evidence.v1` 契约和公开字段边界。 |
-| `tests/test_factor_publication.py` | 聚合 Alpha 证据快照 schema、覆盖率、IC/RankIC 和非有限值规范化。 |
-| `tests/test_factor_store_publication.py` | 从分区因子仓库增量读取并生成脱敏 Alpha 证据快照。 |
-| `tests/test_export_repo_source.py` | 源码导出工具是否包含配置和因子清单，同时继续排除运行数据目录。 |
-| `tests/test_external_alphas.py` | 外部 Alpha101/191 列名、字段映射、输入依赖、并入和元数据清单校验。 |
-| `tests/test_factor_store.py` | 本地因子仓库、外部因子仓库、元数据清单、分区、压缩、覆盖和选择加载。 |
-| `tests/test_factors.py` | Alpha158/360 列数、本地因子追加、因子 IC、因子目录元数据和 internal factor ops 状态。 |
-| `tests/test_model.py` | 随机森林调参、时间序列 CV、特征选择、Optuna 可选依赖和 legacy notebook 兼容路径。 |
-| `tests/test_mining.py` | GP 因子挖掘：终端解析、表达式工具、适应度、报告输出和 CLI 冒烟。 |
-| `tests/test_moneytree_registry.py` | 模型注册表、市场注册表、`cn` 基准列映射和可交易过滤。 |
-| `tests/test_package_script.py` | `project_tools/package.sh` 输出目录、运行数据包含策略、source-only 模式和压缩格式。 |
-| `tests/test_public_docs.py` | MkDocs 导航、公开证据文档链接和 GitHub Pages workflow 契约。 |
-| `tests/test_public_factor_release.py` | 合成数据端到端生成脱敏公开 Alpha 快照。 |
-| `tests/test_parquet_rewrite_cli.py` | parquet/pickle 重写、压缩、row group 和禁止原地覆盖。 |
-| `tests/test_portfolio.py` | 信号分数、启发式权重、暴露约束、波动率缩放、行业中性、QP 权重、换手惩罚和 fallback 诊断。 |
-| `tests/test_project_identity.py` | Money Trees distribution identity、`moneytree` import 兼容和 CLI alias。 |
-| `tests/test_resources.py` | 内存预检、parquet 加载估算和字节格式化。 |
-| `tests/test_rolling_rank.py` | Alpha 因子滚动百分位排名的 ties、NaN、`min_periods` 和逐股票隔离语义。 |
-| `tests/test_smoke.py` | 冒烟测试配置栈端到端运行。 |
-| `tests/test_tushare_data_source.py` | TuShare 标准化、token、原始缓存、`manifest.sqlite` 元数据、旧元数据清单迁移、近期刷新和最新名称 ST 标记。 |
-| `tests/test_tree_models.py` | Extra Trees、梯度提升、直方图梯度提升和 XGBRanker 适配器的拟合、预测和可选依赖行为。 |
+| `tests/test_backtest.py` | Rolling windows, performance metrics, benchmark NAV semantics, missing-feature policy, portfolio diagnostics, notebook report data, and OOS result series. |
+| `tests/test_backtest_cli.py` | Configuration stack, `--set` overrides, defaults, holdout, output files, run metadata, and invalid arguments. |
+| `tests/test_build_dolphindb_alphas_script.py` | DolphinDB Alpha101/191 CLI, compatibility entry point, metadata-manifest sanitization, and optional-dependency errors. |
+| `tests/test_classic_alphas.py` | Pure-Python Alpha101/191: column contract, cross-sectional rank semantics, wide-panel CLI output, and factor-store output. |
+| `tests/test_container_runtime.py` | Dockerfile, `.dockerignore`, DolphinDB compose configuration, and runtime-output isolation. |
+| `tests/test_convert_pickle_to_parquet_script.py` | Deprecated migration of trusted pickle files to parquet and migration notices. |
+| `tests/test_data.py` | `date,ticker` index, label creation, missing-feature filling, non-feature column protection, feature lag, and invalid file formats. |
+| `tests/test_data_release.py` | Release assets, local sharding, uncompressed tar files, GitHub CLI preview, and sensitive-file protection. |
+| `tests/test_data_snapshot.py` | Snapshot metadata, checksums, README, quality summary, and CLI error paths. |
+| `tests/test_data_status.py` | Read-only checks for panels, raw cache, factor stores, and backtest artifacts; JSON output and error/warn modes. |
+| `tests/test_data_platform_migration.py` | Documentation contract for the compatibility download path and the primary `quant-market-data-platform` path. |
+| `tests/test_docs_console_scripts.py` | `pyproject.toml` console scripts, compatibility aliases, and coverage of high-risk CLI options in README or docs. |
+| `tests/test_docs_inventory.py` | Whether every `tests/test_*.py` file is listed in this document. |
+| `tests/test_docs_links.py` | Local Markdown links in README and docs, plus README navigation coverage of user documentation. |
+| `tests/test_docs_style.py` | High-risk indirect phrasing, core terminology drift, DolphinDB module facts, and factor-catalog consistency in Chinese docs. |
+| `tests/test_factor_evidence_cli.py` | Public Alpha evidence CLI, file arguments, error paths, and release-field auditing. |
+| `tests/test_factor_evidence_v1.py` | `factor_evidence.v1` contract and public-field boundaries. |
+| `tests/test_factor_publication.py` | Aggregate Alpha evidence snapshot schema, coverage, IC/RankIC, and normalization of non-finite values. |
+| `tests/test_factor_store_publication.py` | Incremental reads from partitioned factor stores and generation of sanitized public Alpha evidence snapshots. |
+| `tests/test_export_repo_source.py` | Source-export contents and continued exclusion of runtime-data directories. |
+| `tests/test_external_alphas.py` | External Alpha101/191 columns, field mappings, input dependencies, merging, and metadata-manifest validation. |
+| `tests/test_factor_store.py` | Local and external factor stores, manifests, partitioning, compression, overwrite, and selective loading. |
+| `tests/test_factors.py` | Alpha158/360 column counts, local factor extension, factor IC, catalog metadata, and internal factor-operator status. |
+| `tests/test_model.py` | Random-forest tuning, time-series CV, feature selection, optional Optuna, and legacy notebook compatibility. |
+| `tests/test_mining.py` | GP factor mining: terminal parsing, expression utilities, fitness, report output, and CLI smoke. |
+| `tests/test_moneytree_registry.py` | Model and market registries, `cn` benchmark-column mapping, and tradability filters. |
+| `tests/test_package_script.py` | `project_tools/package.sh` output paths, inclusion of runtime data, source-only mode, and archive format. |
+| `tests/test_public_docs.py` | MkDocs navigation, public-evidence links, and GitHub Pages workflow contract. |
+| `tests/test_public_factor_release.py` | End-to-end generation of a sanitized public Alpha snapshot from synthetic data. |
+| `tests/test_parquet_rewrite_cli.py` | Parquet/pickle rewriting, compression, row groups, and prevention of in-place overwrite. |
+| `tests/test_portfolio.py` | Signal scores, heuristic weights, exposure constraints, volatility scaling, sector neutrality, QP weights, turnover penalty, and fallback diagnostics. |
+| `tests/test_project_identity.py` | Distribution identity, `moneytree` import compatibility, and CLI aliases. |
+| `tests/test_resources.py` | Memory preflight, parquet-load estimates, and byte formatting. |
+| `tests/test_rolling_rank.py` | Alpha rolling-percentile ties, NaN values, `min_periods`, and per-ticker isolation. |
+| `tests/test_smoke.py` | End-to-end run using the smoke-test configuration stack. |
+| `tests/test_tushare_data_source.py` | TuShare normalization, token, raw cache, `manifest.sqlite` metadata, legacy manifest migration, recent refresh, and latest-name ST tagging. |
+| `tests/test_tree_models.py` | Extra Trees, gradient boosting, histogram gradient boosting, and XGBRanker fit/predict and optional-dependency behavior. |
 
-## 可选依赖
+## Optional dependencies
 
-默认开发依赖本身不要求 XGBoost、TuShare 或 DolphinDB：
+The default development dependencies do not require XGBoost, TuShare, or DolphinDB:
 
 ```bash
 uv sync --dev
 ```
 
-XGBoost 相关测试会验证缺依赖时报错清晰。如果当前环境已经安装 `xgboost`，缺依赖断言会跳过。需要真实运行 XGBoost 模型时：
+XGBoost tests verify clear errors when the dependency is absent. If `xgboost` is already installed, the missing-dependency assertion is skipped. To run XGBoost models:
 
 ```bash
 uv sync --dev --extra xgboost
 ```
 
-TuShare CLI 真实拉取需要：
+Real TuShare downloads require:
 
 ```bash
 uv sync --dev --extra tushare
 ```
 
-DolphinDB 外部 Alpha101/191 生成需要：
+DolphinDB external Alpha101/191 generation requires:
 
 ```bash
 uv sync --dev --extra external-alphas
 ```
 
-Optuna 调参运行需要：
+Optuna tuning requires:
 
 ```bash
 uv sync --dev --extra tuning
 ```
 
-## 当前测试缺口
+## Known test gaps
 
-- 文档命令执行检查：README 和 docs 中出现的完整 CLI 示例目前只做存在性、链接和关键参数覆盖保护，尚未逐条运行。
-- 输出文件 hash 检查：`experiment_manifest.json` 已记录输入和配置 hash，后续可继续记录每个 CSV/JSON 产物 hash。
-- 更真实的 A 股执行模型：当前组合测试覆盖权重、暴露和换手，尚未覆盖涨跌停无法成交、成交量容量和冲击成本。
-- 历史 point-in-time ST 和行业归属：当前测试只保证最新名称 ST 标记被明确标注语义。
+- Command-example execution: complete CLI examples in README and docs are checked for links and key options but are not all executed individually.
+- Output-file hashes: `experiment_manifest.json` records input and configuration hashes; hashes for each CSV/JSON output may be added later.
+- Realistic A-share execution: portfolio tests cover weights, exposures, and turnover, but not unfilled orders at price limits, volume capacity, or market impact.
+- Historical point-in-time ST and industry classification: tests currently ensure only that latest-name ST tags have explicit semantics.

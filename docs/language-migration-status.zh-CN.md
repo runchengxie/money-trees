@@ -27,23 +27,18 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 | [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
 | [Configuration](configuration.md) | [配置说明](configuration.zh-CN.md) |
 | [Cookbook](cookbook.md) | [常见工作流](cookbook.zh-CN.md) |
+| [Backtest outputs](outputs.md) | [回测产物](outputs.zh-CN.md) |
+| [Testing](testing.md) | [测试说明](testing.zh-CN.md) |
+| [DolphinDB Alpha generation](generate-alpha101-191-with-dolphindb.md) | [使用 DolphinDB 生成 Alpha101/191](generate-alpha101-191-with-dolphindb.zh-CN.md) |
+| [Maintenance tasks](maintenance.md) | [维护待办](maintenance.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 `theme.language` 配置为 `en`。页面配色会跟随系统的 `prefers-color-scheme`，并提供手动切换明暗主题的控件。语言只影响文档展示，不改变项目行为或机器可读契约。
 
 ## 后续范围
 
-本清单建立后迁移的九篇指南此前由 README 链接，但只有中文版本。现在它们已有英文主版本、中文 companion，并加入两种语言的导航。
+本清单建立后迁移的 13 篇指南此前由 README 链接，但只有中文版本。现在它们已有英文主版本、中文 companion，并加入两种语言的导航。
 
-## 尚待补充英文主版本的 README 文档
-
-以下四篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
-
-- `generate-alpha101-191-with-dolphindb.md`
-- `maintenance.md`
-- `outputs.md`
-- `testing.md`
-
-在根据当前实现核实英文内容并配好中文页面前，这些文档暂不加入导航。`docs/superpowers/` 下的两篇 Markdown 是内部计划和规格，不属于 README 的公开入口。MkDocs 仍会构建未列入导航的 Markdown；严格构建会列出它们，但这不代表它们都应进入公开导航。
+README 链接的 13 篇原本只有中文的公开指南，现在都有英文主版本、中文 companion，并进入两种语言的导航。`docs/superpowers/` 下的两篇 Markdown 是内部计划和规格，不属于 README 的公开入口。MkDocs 仍会构建它们，但不应加入公开导航。
 
 新增导航页面时，应先根据当前实现和测试核实内容，再补充中文 companion、双向语言链接，并将两个版本都加入对应语言导航组。

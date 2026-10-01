@@ -27,23 +27,18 @@ The MkDocs site defaults to English and publishes English and Simplified Chinese
 | [Smoke test](smoke-test.md) | [冒烟测试](smoke-test.zh-CN.md) |
 | [Configuration](configuration.md) | [配置说明](configuration.zh-CN.md) |
 | [Cookbook](cookbook.md) | [常见工作流](cookbook.zh-CN.md) |
+| [Backtest outputs](outputs.md) | [回测产物](outputs.zh-CN.md) |
+| [Testing](testing.md) | [测试说明](testing.zh-CN.md) |
+| [DolphinDB Alpha generation](generate-alpha101-191-with-dolphindb.md) | [使用 DolphinDB 生成 Alpha101/191](generate-alpha101-191-with-dolphindb.zh-CN.md) |
+| [Maintenance tasks](maintenance.md) | [维护待办](maintenance.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 The `theme.language` setting is `en`. Light and dark palettes follow `prefers-color-scheme`, and the theme provides manual light/dark controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
 
 ## Remaining scope
 
-The nine guides added since this inventory was created were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages, Chinese companions, and entries in both navigation groups.
+The 13 guides added since this inventory was created were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages, Chinese companions, and entries in both navigation groups.
 
-## Remaining README-linked pages needing English canonical versions
-
-These four pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
-
-- `generate-alpha101-191-with-dolphindb.md`
-- `maintenance.md`
-- `outputs.md`
-- `testing.md`
-
-They remain outside the configured navigation until each English version is checked against the current implementation and paired with its Chinese page. The two Markdown files under `docs/superpowers/` are internal plans/specifications and are not public README entry points. MkDocs still builds unlisted Markdown files; strict-build output identifies them but does not imply that they belong in public navigation.
+All 13 previously Chinese-only README-linked public guides now have an English canonical page, a Chinese companion, and entries in both navigation groups. The two Markdown files under `docs/superpowers/` are internal plans/specifications and are not public README entry points. MkDocs still builds them, but they do not belong in public navigation.
 
 When a page is promoted into the navigation, verify its claims against the current implementation and tests, add its Chinese companion, provide reciprocal links, and add both versions to the corresponding language navigation groups.

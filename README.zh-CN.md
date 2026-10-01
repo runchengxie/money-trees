@@ -75,11 +75,11 @@ uv run ruff check .
 - [`docs/data-status.zh-CN.md`](docs/data-status.zh-CN.md)、[`docs/data-snapshot.zh-CN.md`](docs/data-snapshot.zh-CN.md) 和 [`docs/data-release.zh-CN.md`](docs/data-release.zh-CN.md)：只读状态、元数据快照和发布资产。
 - [`docs/configuration.zh-CN.md`](docs/configuration.zh-CN.md)：配置分层、合并规则和字段。
 - [`docs/cli-reference.zh-CN.md`](docs/cli-reference.zh-CN.md)：`moneytrees*` 命令、兼容别名和高风险选项。
-- [`docs/outputs.md`](docs/outputs.md)、[`docs/cookbook.zh-CN.md`](docs/cookbook.zh-CN.md) 和 [`docs/runbook.zh-CN.md`](docs/runbook.zh-CN.md)：回测产物、常见研究流程、运维与排障。
-- [`docs/testing.md`](docs/testing.md)：测试命令、覆盖情况和已知缺口。
+- [`docs/outputs.zh-CN.md`](docs/outputs.zh-CN.md)、[`docs/cookbook.zh-CN.md`](docs/cookbook.zh-CN.md) 和 [`docs/runbook.zh-CN.md`](docs/runbook.zh-CN.md)：回测产物、常见研究流程、运维与排障。
+- [`docs/testing.zh-CN.md`](docs/testing.zh-CN.md)：测试命令、覆盖情况和已知缺口。
 - [`docs/factor-families.zh-CN.md`](docs/factor-families.zh-CN.md) 和 [`docs/factor-catalog.zh-CN.md`](docs/factor-catalog.zh-CN.md)：因子族来源和目录；机器可读目录见 [`docs/factor-catalog.csv`](docs/factor-catalog.csv)。
-- [`docs/classic-alphas-python.zh-CN.md`](docs/classic-alphas-python.zh-CN.md) 和 [`docs/generate-alpha101-191-with-dolphindb.md`](docs/generate-alpha101-191-with-dolphindb.md)：Alpha101/191 的两种生成方式。
-- [`docs/factor-mining.zh-CN.md`](docs/factor-mining.zh-CN.md) 和 [`docs/maintenance.md`](docs/maintenance.md)：因子挖掘和仓库维护。
+- [`docs/classic-alphas-python.zh-CN.md`](docs/classic-alphas-python.zh-CN.md) 和 [`docs/generate-alpha101-191-with-dolphindb.zh-CN.md`](docs/generate-alpha101-191-with-dolphindb.zh-CN.md)：Alpha101/191 的两种生成方式。
+- [`docs/factor-mining.zh-CN.md`](docs/factor-mining.zh-CN.md) 和 [`docs/maintenance.zh-CN.md`](docs/maintenance.zh-CN.md)：因子挖掘和仓库维护。
 
 ## 项目结构
 
@@ -98,8 +98,8 @@ tests/           单元测试、CLI 冒烟测试和数据源测试
 
 ## 当前边界
 
-- 内置市场配置档为 `cn`，默认基准是 `000300.SH`。可交易过滤和基准累计收益语义见 [`docs/data-contract.md`](docs/data-contract.md)。
+- 内置市场配置档为 `cn`，默认基准是 `000300.SH`。可交易过滤和基准累计收益语义见 [`docs/data-contract.zh-CN.md`](docs/data-contract.zh-CN.md)。
 - 输入支持 Parquet 和可信 pickle，推荐使用 `date, ticker` Parquet。
 - Alpha101/191 可通过纯 Python 本地生成或外部 DolphinDB 生成。正式研究前应核对两者语义，详见上述生成指南。
 - DolphinDB、TuShare、XGBoost 和 Optuna 均为可选依赖。使用标准面板回测不要求全部安装。
-- TuShare 派生标签存在上游数据治理限制，包括历史 ST 状态、历史行业、退市样本和幸存者偏差。详见 [`docs/data-contract.md`](docs/data-contract.md)。
+- TuShare 派生标签存在上游数据治理限制，包括历史 ST 状态、历史行业、退市样本和幸存者偏差。详见 [`docs/data-contract.zh-CN.md`](docs/data-contract.zh-CN.md)。
