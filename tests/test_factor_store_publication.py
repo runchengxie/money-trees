@@ -97,6 +97,7 @@ def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path
         manifest_path,
         data_version="hard-drive-factor-store-v1",
         group_count=2,
+        holding_period_days=1,
     )
 
     assert payload["data_version"] == "hard-drive-factor-store-v1"
@@ -107,8 +108,9 @@ def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path
     assert payload["factors"][0]["annual_slices"][0]["label"] == "2024"
     assert payload["factors"][0]["annual_slices"][0]["valid_dates"] == 2
     assert payload["factors"][0]["regime_slices"] == []
-    assert payload["factors"][0]["uncertainty"]["status"] == "not_provided"
-    assert payload["multiple_testing"]["status"] == "not_provided"
+    assert payload["factors"][0]["uncertainty"]["status"] == "complete"
+    assert payload["multiple_testing"]["status"] == "complete"
+    assert payload["multiple_testing"]["family_size"] == 1
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert '"ticker"' not in encoded
     assert str(tmp_path) not in encoded

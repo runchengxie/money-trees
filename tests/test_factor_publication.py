@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from moneytree.factors import publication
-from moneytree.factors.publication import build_factor_evidence_snapshot
+from moneytree.factors.publication import audit_public_snapshot, build_factor_evidence_snapshot
 
 
 def _panel() -> pd.DataFrame:
@@ -149,6 +149,25 @@ def test_market_regime_is_unavailable_without_benchmark() -> None:
     assert result["regime_status"]["reason"] == "benchmark_returns_not_supplied"
 
 
+def test_market_regime_is_unavailable_when_window_misses_factor_dates() -> None:
+    benchmark = pd.Series(
+        [0.01, 0.01, 0.01],
+        index=pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+    )
+    result = publication.TemporalSliceAccumulator(
+        ["alpha001"],
+        benchmark_returns=benchmark,
+        regime_window=2,
+        benchmark_name="fixture_index",
+    )
+    result.update(pd.Timestamp("2020-01-02"), {"alpha001": 0.1}, {})
+
+    assert result.result()["regime_status"]["status"] == "not_provided"
+    assert result.result()["regime_status"]["reason"] == (
+        "benchmark_window_does_not_overlap_factor_dates"
+    )
+
+
 def test_market_regime_rejects_conflicting_benchmark_values_on_same_date() -> None:
     benchmark = pd.Series(
         [0.01, 0.02],
@@ -163,3 +182,64 @@ def test_market_regime_rejects_conflicting_benchmark_values_on_same_date() -> No
             regime_window=1,
             benchmark_name="fixture_index",
         )
+
+
+def test_public_snapshot_rejects_forward_return_as_benchmark() -> None:
+    with pytest.raises(ValueError, match="must not match forward return column"):
+        build_factor_evidence_snapshot(
+            _panel(),
+            ["alpha001"],
+            benchmark_return_column="next_period_return",
+            benchmark_name="invalid_forward_target",
+        )
+
+
+def test_public_snapshot_adds_hac_and_multiple_testing_when_horizon_is_known() -> None:
+    payload = build_factor_evidence_snapshot(
+        _panel(),
+        ["alpha001", "alpha_empty"],
+        holding_period_days=1,
+        config={"group_count": 2},
+    )
+
+    assert payload["uncertainty"]["status"] == "partial"
+    assert payload["uncertainty"]["method"] == "newey_west_hac"
+    assert payload["multiple_testing"]["method"] == "benjamini_yekutieli"
+    assert payload["multiple_testing"]["family_size"] == 2
+    assert payload["multiple_testing"]["tested_count"] == 1
+    assert payload["factors"][0]["uncertainty"]["multiple_testing"]["q_value_by"] == pytest.approx(1.0)
+    assert payload["factors"][1]["uncertainty"]["reason"] == "insufficient_valid_observations"
+
+
+def test_810_factor_snapshot_keeps_corrected_evidence_aggregate_only() -> None:
+    frame = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2024-01-02", "2024-01-02", "2024-01-03", "2024-01-03"]
+            ),
+            "ticker": ["A", "B", "A", "B"],
+            "next_period_return": [0.01, -0.01, 0.01, -0.01],
+            **{
+                f"alpha{index:03d}": [1.0, 2.0, 2.0, 1.0]
+                for index in range(810)
+            },
+        }
+    )
+    factors = [f"alpha{index:03d}" for index in range(810)]
+
+    payload = build_factor_evidence_snapshot(
+        frame,
+        factors,
+        holding_period_days=1,
+        config={"group_count": 2},
+    )
+    audit_public_snapshot(payload)
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+
+    assert payload["multiple_testing"]["family_size"] == 810
+    assert payload["multiple_testing"]["tested_count"] == 810
+    assert all(
+        factor["uncertainty"]["multiple_testing"]["q_value_by"] == pytest.approx(1.0)
+        for factor in payload["factors"]
+    )
+    assert '"ticker"' not in encoded

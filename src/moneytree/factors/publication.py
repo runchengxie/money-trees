@@ -9,6 +9,7 @@ import pandas as pd
 
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors.evaluate import compute_factor_ic, summarize_factor_ic
+from moneytree.factors.inference import adjust_pvalues, estimate_mean_hac
 
 PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.1"
 PUBLIC_SNAPSHOT_KIND = "moneytree_factor_evidence_snapshot"
@@ -107,6 +108,11 @@ def _benchmark_series_from_panel(panel: pd.DataFrame, column: str | None) -> pd.
     return benchmark
 
 
+def validate_benchmark_source(return_column: str, benchmark_return_column: str | None) -> None:
+    if benchmark_return_column == return_column:
+        raise ValueError("Benchmark return column must not match forward return column")
+
+
 def _daily_group_returns_for_date(
     group: pd.DataFrame,
     date: pd.Timestamp,
@@ -133,6 +139,54 @@ def _daily_group_returns_for_date(
                 )
         result[factor] = rows
     return result
+
+
+def _inference_fields(
+    rank_ic_series: Mapping[str, Sequence[float]],
+    holding_period_days: int | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    if holding_period_days is None:
+        unavailable = {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        }
+        return (
+            {factor: dict(unavailable) for factor in rank_ic_series},
+            dict(unavailable),
+            {"status": "not_provided", "reason": "holding_period_days_not_supplied"},
+        )
+
+    estimates = {
+        factor: estimate_mean_hac(values, holding_period_days=holding_period_days)
+        for factor, values in rank_ic_series.items()
+    }
+    p_values = {
+        factor: estimate.get("p_value") if estimate.get("status") == "complete" else None
+        for factor, estimate in estimates.items()
+    }
+    adjusted = adjust_pvalues(p_values)
+    complete = sum(value is not None for value in p_values.values())
+    status = "complete" if complete == len(p_values) else "partial"
+    factor_results = {
+        factor: {**estimate, "multiple_testing": adjusted[factor]}
+        for factor, estimate in estimates.items()
+    }
+    summary = {
+        "status": status,
+        "method": "newey_west_hac",
+        "holding_period_days": holding_period_days,
+        "tested_factor_count": complete,
+        "factor_count": len(p_values),
+    }
+    multiple_testing = {
+        "status": status,
+        "method": "benjamini_yekutieli",
+        "sensitivity_method": "benjamini_hochberg",
+        "family_size": len(p_values),
+        "tested_count": complete,
+        "factors": adjusted,
+    }
+    return factor_results, summary, multiple_testing
 
 
 def build_temporal_slices(
@@ -183,6 +237,8 @@ class TemporalSliceAccumulator:
     ) -> None:
         if regime_window < 1:
             raise ValueError("regime_window must be at least 1")
+        if benchmark_returns is None and benchmark_name is not None:
+            raise ValueError("benchmark_name requires benchmark_returns")
         self.factors = list(factors)
         self.regime_window = regime_window
         self.benchmark_name = benchmark_name
@@ -208,6 +264,7 @@ class TemporalSliceAccumulator:
         self.aggregates: dict[str, dict[str, dict[str, Any]]] = {
             factor: {} for factor in self.factors
         }
+        self.seen_dates: set[pd.Timestamp] = set()
 
     def add_factors(self, factors: Iterable[str]) -> None:
         for factor in factors:
@@ -223,6 +280,7 @@ class TemporalSliceAccumulator:
         group_returns_by_factor: Mapping[str, Sequence[Mapping[str, Any]]],
     ) -> None:
         date = pd.Timestamp(date).normalize()
+        self.seen_dates.add(date)
         labels = [str(date.year)]
         regime = self.regime_by_date.get(date)
         if regime is not None:
@@ -291,6 +349,7 @@ class TemporalSliceAccumulator:
             )
             for factor in self.factors
         }
+        regime_dates_seen = self.seen_dates.intersection(self.regime_by_date)
         if not self.regime_by_date:
             reason = (
                 "benchmark_returns_not_supplied"
@@ -298,6 +357,11 @@ class TemporalSliceAccumulator:
                 else "benchmark_window_insufficient"
             )
             regime_status = {"status": "not_provided", "reason": reason}
+        elif not regime_dates_seen:
+            regime_status = {
+                "status": "not_provided",
+                "reason": "benchmark_window_does_not_overlap_factor_dates",
+            }
         else:
             regime_status = {"status": "complete", "reason": None}
         return {
@@ -325,6 +389,7 @@ def build_factor_evidence_snapshot(
     benchmark_return_column: str | None = None,
     benchmark_name: str | None = None,
     regime_window: int = 252,
+    holding_period_days: int | None = None,
 ) -> dict[str, Any]:
     """Build an aggregate-only, JSON-safe public factor evidence snapshot."""
     required = {"date", "ticker", return_column}
@@ -343,6 +408,7 @@ def build_factor_evidence_snapshot(
         raise ValueError("At least one factor column is required")
 
     panel = ensure_date_ticker_index(frame)
+    validate_benchmark_source(return_column, benchmark_return_column)
     ic_frame = compute_factor_ic(panel, factors, return_column=return_column)
     summaries = summarize_factor_ic(ic_frame).set_index("factor")
     group_count = int((config or {}).get("group_count", 5))
@@ -367,6 +433,14 @@ def build_factor_evidence_snapshot(
             _daily_group_returns_for_date(group, date, factors, return_column, group_count),
         )
     temporal = temporal_accumulator.result()
+    rank_ic_series = {
+        factor: group.sort_values("date")["rank_ic"].astype(float).tolist()
+        for factor, group in ic_frame.groupby("factor", sort=False)
+    }
+    factor_uncertainty, uncertainty_summary, multiple_testing = _inference_fields(
+        rank_ic_series,
+        holding_period_days,
+    )
 
     factor_payload: list[dict[str, Any]] = []
     for factor in factors:
@@ -404,10 +478,7 @@ def build_factor_evidence_snapshot(
                 "group_returns": _group_returns(panel, factor, return_column, group_count),
                 "annual_slices": temporal["annual"].get(factor, []),
                 "regime_slices": temporal["regime"].get(factor, []),
-                "uncertainty": {
-                    "status": "not_provided",
-                    "reason": "holding_period_days_not_supplied",
-                },
+                "uncertainty": factor_uncertainty[factor],
             }
         )
 
@@ -427,22 +498,22 @@ def build_factor_evidence_snapshot(
             "observation_count": int(len(panel)),
             "return_column": return_column,
         },
-        "config": {"group_count": group_count},
-        "factors": factor_payload,
-        "uncertainty": {
-            "status": "not_provided",
-            "reason": "holding_period_days_not_supplied",
+        "config": {
+            "group_count": group_count,
+            "holding_period_days": holding_period_days,
+            "benchmark_name": benchmark_name or benchmark_return_column,
+            "regime_rule": temporal["regime_metadata"]["rule"],
+            "regime_window": regime_window,
         },
+        "factors": factor_payload,
+        "uncertainty": uncertainty_summary,
         "temporal_validation": {
             "status": "partial" if temporal["regime_status"]["status"] != "complete" else "complete",
             "annual_status": "complete",
             "market_regime": temporal["regime_status"],
             "regime_metadata": temporal["regime_metadata"],
         },
-        "multiple_testing": {
-            "status": "not_provided",
-            "reason": "holding_period_days_not_supplied",
-        },
+        "multiple_testing": multiple_testing,
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",

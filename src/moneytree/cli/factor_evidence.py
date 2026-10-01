@@ -104,6 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     benchmark_return_column=args.benchmark_return_column,
                     benchmark_name=args.benchmark_name,
                     regime_window=args.regime_window,
+                    holding_period_days=args.holding_period_days,
                 )
             else:
                 payload = build_factor_evidence_snapshot_from_archive(
@@ -117,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     benchmark_return_column=args.benchmark_return_column,
                     benchmark_name=args.benchmark_name,
                     regime_window=args.regime_window,
+                    holding_period_days=args.holding_period_days,
                 )
         else:
             panel = load_market_data(Path(args.panel))
@@ -129,6 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 benchmark_return_column=args.benchmark_return_column,
                 benchmark_name=args.benchmark_name,
                 regime_window=args.regime_window,
+                holding_period_days=args.holding_period_days,
             )
         audit_public_snapshot(payload)
         output = Path(args.output)
