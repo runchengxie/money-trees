@@ -29,6 +29,11 @@ information set，不能把未来可见的数据用于特征、标签或决策�
 这些诊断时，`factor_evidence.v1` 会将对应 section 标记为 `not_provided`，
 不会把缺失诊断解释成通过。
 
+前瞻收益持有期明确时，公开 Alpha 证据生成器会用 Newey–West HAC 估算每日 RankIC 均值的不确定性，
+滞后阶数为持有期减一个交易日，缺失日期保留原序列位置，区间采用双侧标准正态参考分布。完整声明
+因子族的多重检验以 Benjamini–Yekutieli 作为主要校正；不可计算的检验仍计入分母，但不分配 q 值。
+这些检验只涉及预测性 RankIC，不能替代组合层面的风险、成本和执行分析。
+
 ## 残差与公开发布
 
 因子在控制规模、波动、流动性或行业暴露后仍需检查 residual predictability。

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,8 +9,9 @@ import pandas as pd
 
 from moneytree.data import ensure_date_ticker_index
 from moneytree.factors.evaluate import compute_factor_ic, summarize_factor_ic
+from moneytree.factors.inference import adjust_pvalues, estimate_mean_hac
 
-PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.0"
+PUBLIC_SNAPSHOT_SCHEMA_VERSION = "1.1"
 PUBLIC_SNAPSHOT_KIND = "moneytree_factor_evidence_snapshot"
 _FORBIDDEN_PUBLIC_KEYS = {
     "ticker",
@@ -97,6 +98,286 @@ def _group_returns(
     ]
 
 
+def _benchmark_series_from_panel(panel: pd.DataFrame, column: str | None) -> pd.Series | None:
+    if column is None:
+        return None
+    if column not in panel.columns:
+        raise KeyError(f"Missing benchmark return column: {column}")
+    benchmark = pd.to_numeric(panel[column], errors="coerce")
+    benchmark.index = pd.to_datetime(panel.index.get_level_values("date"))
+    return benchmark
+
+
+def validate_benchmark_source(return_column: str, benchmark_return_column: str | None) -> None:
+    if benchmark_return_column == return_column:
+        raise ValueError("Benchmark return column must not match forward return column")
+
+
+def _daily_group_returns_for_date(
+    group: pd.DataFrame,
+    date: pd.Timestamp,
+    factors: Sequence[str],
+    return_column: str,
+    group_count: int,
+) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    returns = pd.to_numeric(group[return_column], errors="coerce")
+    for factor in factors:
+        values = pd.to_numeric(group[factor], errors="coerce")
+        valid = pd.concat([values.rename("factor"), returns.rename("return")], axis=1)
+        valid = valid.replace([np.inf, -np.inf], np.nan).dropna()
+        rows: list[dict[str, Any]] = []
+        if not valid.empty:
+            ranks = valid["factor"].rank(method="first")
+            buckets = pd.qcut(ranks, q=min(group_count, len(valid)), labels=False)
+            for bucket, bucket_values in valid.assign(bucket=buckets).groupby("bucket"):
+                rows.append(
+                    {
+                        "group": int(bucket) + 1,
+                        "mean_return": float(bucket_values["return"].mean()),
+                    }
+                )
+        result[factor] = rows
+    return result
+
+
+def _inference_fields(
+    rank_ic_series: Mapping[str, Sequence[float]],
+    holding_period_days: int | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    if holding_period_days is None:
+        unavailable = {
+            "status": "not_provided",
+            "reason": "holding_period_days_not_supplied",
+        }
+        return (
+            {factor: dict(unavailable) for factor in rank_ic_series},
+            dict(unavailable),
+            {"status": "not_provided", "reason": "holding_period_days_not_supplied"},
+        )
+
+    estimates = {
+        factor: estimate_mean_hac(values, holding_period_days=holding_period_days)
+        for factor, values in rank_ic_series.items()
+    }
+    p_values = {
+        factor: estimate.get("p_value") if estimate.get("status") == "complete" else None
+        for factor, estimate in estimates.items()
+    }
+    adjusted = adjust_pvalues(p_values)
+    complete = sum(value is not None for value in p_values.values())
+    status = "complete" if complete == len(p_values) else "partial"
+    factor_results = {
+        factor: {**estimate, "multiple_testing": adjusted[factor]}
+        for factor, estimate in estimates.items()
+    }
+    summary = {
+        "status": status,
+        "method": "newey_west_hac",
+        "holding_period_days": holding_period_days,
+        "tested_factor_count": complete,
+        "factor_count": len(p_values),
+    }
+    multiple_testing = {
+        "status": status,
+        "method": "benjamini_yekutieli",
+        "sensitivity_method": "benjamini_hochberg",
+        "family_size": len(p_values),
+        "tested_count": complete,
+        "factors": adjusted,
+    }
+    return factor_results, summary, multiple_testing
+
+
+def build_temporal_slices(
+    daily_metrics: Mapping[str, Sequence[Mapping[str, Any]]],
+    daily_group_returns: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    benchmark_returns: pd.Series | None = None,
+    regime_window: int = 252,
+    benchmark_name: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate date-level factor diagnostics into annual and market regimes."""
+    factors = list(daily_metrics)
+    accumulator = TemporalSliceAccumulator(
+        factors,
+        benchmark_returns=benchmark_returns,
+        regime_window=regime_window,
+        benchmark_name=benchmark_name,
+    )
+    events: dict[pd.Timestamp, dict[str, Any]] = {}
+    for factor, observations in daily_metrics.items():
+        for item in observations:
+            date = pd.Timestamp(item["date"]).normalize()
+            value = item.get("rank_ic")
+            events.setdefault(date, {"rank_ic": {}, "groups": {}})["rank_ic"][factor] = (
+                float(value) if value is not None and np.isfinite(value) else np.nan
+            )
+    for factor, observations in daily_group_returns.items():
+        for item in observations:
+            date = pd.Timestamp(item["date"]).normalize()
+            events.setdefault(date, {"rank_ic": {}, "groups": {}})["groups"].setdefault(
+                factor, []
+            ).append(item)
+    for date, values in sorted(events.items()):
+        accumulator.update(date, values["rank_ic"], values["groups"])
+    return accumulator.result()
+
+
+class TemporalSliceAccumulator:
+    """Stream daily metrics into compact annual and regime aggregates."""
+
+    def __init__(
+        self,
+        factors: Sequence[str],
+        *,
+        benchmark_returns: pd.Series | None = None,
+        regime_window: int = 252,
+        benchmark_name: str | None = None,
+    ) -> None:
+        if regime_window < 1:
+            raise ValueError("regime_window must be at least 1")
+        if benchmark_returns is None and benchmark_name is not None:
+            raise ValueError("benchmark_name requires benchmark_returns")
+        self.factors = list(factors)
+        self.regime_window = regime_window
+        self.benchmark_name = benchmark_name
+        self.regime_by_date: dict[pd.Timestamp, str] = {}
+        if benchmark_returns is not None:
+            benchmark = pd.to_numeric(benchmark_returns, errors="coerce").copy()
+            benchmark.index = pd.to_datetime(benchmark.index, errors="coerce").normalize()
+            benchmark = benchmark.loc[benchmark.index.notna()].sort_index()
+            if benchmark.index.has_duplicates:
+                distinct = benchmark.groupby(level=0).nunique(dropna=True)
+                if (distinct > 1).any():
+                    raise ValueError("Benchmark returns must agree within each date")
+                benchmark = benchmark.groupby(level=0).first()
+            if (benchmark.dropna() <= -1).any():
+                raise ValueError("Benchmark returns must be greater than -1")
+            benchmark = benchmark.dropna()
+            values = benchmark.to_numpy(dtype=float)
+            for index in range(regime_window, len(values)):
+                trailing_return = float(np.prod(1.0 + values[index - regime_window : index]) - 1.0)
+                self.regime_by_date[benchmark.index[index]] = (
+                    "bull" if trailing_return > 0 else "bear"
+                )
+        self.aggregates: dict[str, dict[str, dict[str, Any]]] = {
+            factor: {} for factor in self.factors
+        }
+        self.seen_dates: set[pd.Timestamp] = set()
+
+    def add_factors(self, factors: Iterable[str]) -> None:
+        for factor in factors:
+            factor = str(factor)
+            if factor not in self.aggregates:
+                self.factors.append(factor)
+                self.aggregates[factor] = {}
+
+    def update(
+        self,
+        date: object,
+        rank_ic_by_factor: Mapping[str, float],
+        group_returns_by_factor: Mapping[str, Sequence[Mapping[str, Any]]],
+    ) -> None:
+        date = pd.Timestamp(date).normalize()
+        self.seen_dates.add(date)
+        labels = [str(date.year)]
+        regime = self.regime_by_date.get(date)
+        if regime is not None:
+            labels.append(regime)
+        for factor in self.factors:
+            rank_ic = rank_ic_by_factor.get(factor, np.nan)
+            rank_ic = float(rank_ic) if rank_ic is not None else np.nan
+            for label in labels:
+                state = self.aggregates[factor].setdefault(
+                    label,
+                    {"rank_sum": 0.0, "rank_count": 0, "positive_count": 0, "groups": {}},
+                )
+                if np.isfinite(rank_ic):
+                    state["rank_sum"] += rank_ic
+                    state["rank_count"] += 1
+                    state["positive_count"] += int(rank_ic > 0)
+                for row in group_returns_by_factor.get(factor, []):
+                    group = int(row["group"])
+                    value = float(row["mean_return"])
+                    if not np.isfinite(value):
+                        continue
+                    group_state = state["groups"].setdefault(group, [0.0, 0])
+                    group_state[0] += value
+                    group_state[1] += 1
+
+    def result(self) -> dict[str, Any]:
+        def render(factor: str, labels: Sequence[str]) -> list[dict[str, Any]]:
+            rows = []
+            for label in labels:
+                state = self.aggregates[factor].get(label)
+                if state is None:
+                    continue
+                count = state["rank_count"]
+                rows.append(
+                    {
+                        "label": label,
+                        "valid_dates": count,
+                        "rank_ic_mean": state["rank_sum"] / count if count else None,
+                        "rank_ic_positive_rate": state["positive_count"] / count if count else None,
+                        "group_returns": [
+                            {
+                                "group": group,
+                                "mean_return": total / periods,
+                                "periods": periods,
+                            }
+                            for group, (total, periods) in sorted(state["groups"].items())
+                        ],
+                    }
+                )
+            return rows
+
+        annual = {
+            factor: render(
+                factor,
+                sorted(
+                    (label for label in self.aggregates[factor] if label.isdigit()),
+                    key=int,
+                ),
+            )
+            for factor in self.factors
+        }
+        regimes = {
+            factor: render(
+                factor,
+                [label for label in ("bull", "bear") if label in self.aggregates[factor]],
+            )
+            for factor in self.factors
+        }
+        regime_dates_seen = self.seen_dates.intersection(self.regime_by_date)
+        if not self.regime_by_date:
+            reason = (
+                "benchmark_returns_not_supplied"
+                if self.benchmark_name is None
+                else "benchmark_window_insufficient"
+            )
+            regime_status = {"status": "not_provided", "reason": reason}
+        elif not regime_dates_seen:
+            regime_status = {
+                "status": "not_provided",
+                "reason": "benchmark_window_does_not_overlap_factor_dates",
+            }
+        else:
+            regime_status = {"status": "complete", "reason": None}
+        return {
+            "annual": annual,
+            "regime": regimes,
+            "regime_status": regime_status,
+            "regime_metadata": {
+                "benchmark_name": self.benchmark_name,
+                "rule": "trailing_compounded_return_v1"
+                if self.benchmark_name is not None
+                else None,
+                "window": self.regime_window,
+            },
+        }
+
+
 def build_factor_evidence_snapshot(
     frame: pd.DataFrame,
     factor_columns: Iterable[str],
@@ -105,6 +386,10 @@ def build_factor_evidence_snapshot(
     data_version: str = "unknown",
     config: dict[str, Any] | None = None,
     git_metadata: dict[str, Any] | None = None,
+    benchmark_return_column: str | None = None,
+    benchmark_name: str | None = None,
+    regime_window: int = 252,
+    holding_period_days: int | None = None,
 ) -> dict[str, Any]:
     """Build an aggregate-only, JSON-safe public factor evidence snapshot."""
     required = {"date", "ticker", return_column}
@@ -123,11 +408,39 @@ def build_factor_evidence_snapshot(
         raise ValueError("At least one factor column is required")
 
     panel = ensure_date_ticker_index(frame)
+    validate_benchmark_source(return_column, benchmark_return_column)
     ic_frame = compute_factor_ic(panel, factors, return_column=return_column)
     summaries = summarize_factor_ic(ic_frame).set_index("factor")
     group_count = int((config or {}).get("group_count", 5))
     if group_count < 2:
         raise ValueError("group_count must be at least 2")
+
+    temporal_accumulator = TemporalSliceAccumulator(
+        factors,
+        benchmark_returns=_benchmark_series_from_panel(panel, benchmark_return_column),
+        regime_window=regime_window,
+        benchmark_name=benchmark_name or benchmark_return_column,
+    )
+    rank_ic_by_date = {
+        pd.Timestamp(date): dict(zip(group["factor"], group["rank_ic"], strict=False))
+        for date, group in ic_frame.groupby("date", sort=True)
+    }
+    for date, group in panel.groupby(level="date", sort=True):
+        date = pd.Timestamp(date)
+        temporal_accumulator.update(
+            date,
+            rank_ic_by_date.get(date, {}),
+            _daily_group_returns_for_date(group, date, factors, return_column, group_count),
+        )
+    temporal = temporal_accumulator.result()
+    rank_ic_series = {
+        factor: group.sort_values("date")["rank_ic"].astype(float).tolist()
+        for factor, group in ic_frame.groupby("factor", sort=False)
+    }
+    factor_uncertainty, uncertainty_summary, multiple_testing = _inference_fields(
+        rank_ic_series,
+        holding_period_days,
+    )
 
     factor_payload: list[dict[str, Any]] = []
     for factor in factors:
@@ -163,6 +476,9 @@ def build_factor_evidence_snapshot(
                     ),
                 },
                 "group_returns": _group_returns(panel, factor, return_column, group_count),
+                "annual_slices": temporal["annual"].get(factor, []),
+                "regime_slices": temporal["regime"].get(factor, []),
+                "uncertainty": factor_uncertainty[factor],
             }
         )
 
@@ -182,8 +498,22 @@ def build_factor_evidence_snapshot(
             "observation_count": int(len(panel)),
             "return_column": return_column,
         },
-        "config": {"group_count": group_count},
+        "config": {
+            "group_count": group_count,
+            "holding_period_days": holding_period_days,
+            "benchmark_name": benchmark_name or benchmark_return_column,
+            "regime_rule": temporal["regime_metadata"]["rule"],
+            "regime_window": regime_window,
+        },
         "factors": factor_payload,
+        "uncertainty": uncertainty_summary,
+        "temporal_validation": {
+            "status": "partial" if temporal["regime_status"]["status"] != "complete" else "complete",
+            "annual_status": "complete",
+            "market_regime": temporal["regime_status"],
+            "regime_metadata": temporal["regime_metadata"],
+        },
+        "multiple_testing": multiple_testing,
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",

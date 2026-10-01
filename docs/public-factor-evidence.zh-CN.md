@@ -16,6 +16,42 @@
 
 快照不包含逐股票因子值、股票代码、组合权重、原始数据路径、凭证或私有模型参数。
 
+Schema 1.1 增加 `annual_slices`、`regime_slices` 和因子级 `uncertainty`；快照还会记录
+`temporal_validation`、全局不确定性信息和 `multiple_testing`。统一的 `factor_evidence.v1`
+包装器仍可读取 schema 1.0 快照。
+
+年度切片按自然年汇总每日截面指标。`valid_dates` 统计 RankIC 有限的日期；年度分组收益先计算
+每日组收益，再对有效日期求均值，并报告有效期数。这些是描述性子区间统计，不是相互独立的样本，
+也不是留出验证区间。
+
+只有因子仓库基础面板含有每日已实现基准收益、且每个日期只有一致的基准值时才发布市场状态切片。
+规则使用信号日前严格结束的 252 个交易日基准复合收益：正值为 `bull`，否则为 `bear`；完整窗口
+形成前的日期没有状态标签。不能把前瞻目标列当作基准收益。缺少基准数据或日期不重叠时，状态为
+`not_provided` 并附原因；年度切片仍可用。
+
+## 不确定性与多重检验
+
+只有在已知前瞻目标构造时才传入 `--holding-period-days`：
+
+```bash
+uv run moneytrees-factor-evidence \
+  --factor-store /data/moneytree-factor-store/manifest.json \
+  --factors all \
+  --holding-period-days 1 \
+  --benchmark-return-column benchmark_daily_return \
+  --benchmark-name "CSI 300" \
+  --output /tmp/alpha810-snapshot.json
+```
+
+平均 RankIC 的不确定性采用 Newey–West HAC、Bartlett 权重和 `holding_period_days - 1` 阶滞后，
+使用双侧标准正态参考分布和 95% 置信区间。缺失 RankIC 日期保留在每日序列中的原位置；不会把它
+们视为零值，也不会把相隔多日的数据当作相邻观测。该结果描述每日截面 RankIC 均值的不确定性，
+不代表组合收益的不确定性。
+
+原始 p 值以 Benjamini–Yekutieli（BY）作为主要错误发现校正；Benjamini–Hochberg（BH）作为明确
+标记的敏感性结果。校正分母是完整声明的因子族；数据不足的因子仍计入族规模，但不分配 q 值。
+持有期缺失时，推断字段标记为 `not_provided`。原始 p 值和校正 q 值都不能证明可交易性或未来收益。
+
 ## 信号质量检查
 
 可在生成快照时同时生成聚合质量报告：

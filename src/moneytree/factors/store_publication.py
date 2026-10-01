@@ -18,9 +18,12 @@ from moneytree.data import ensure_date_ticker_index
 from moneytree.factors.publication import (
     PUBLIC_SNAPSHOT_KIND,
     PUBLIC_SNAPSHOT_SCHEMA_VERSION,
+    TemporalSliceAccumulator,
     _factor_family,
+    _inference_fields,
     _json_safe,
     audit_public_snapshot,
+    validate_benchmark_source,
 )
 
 SIGNAL_QUALITY_SCHEMA_VERSION = "1.0"
@@ -179,6 +182,8 @@ def _update_chunk(
     total_observations: dict[str, int],
     dates_seen: set[pd.Timestamp],
     tickers_seen: set[str],
+    temporal_accumulator: TemporalSliceAccumulator | None = None,
+    rank_ic_series: dict[str, list[float]] | None = None,
 ) -> None:
     indexed = ensure_date_ticker_index(factor_frame)
     target = pd.to_numeric(returns.reindex(indexed.index), errors="coerce").to_numpy(dtype=float)
@@ -192,6 +197,9 @@ def _update_chunk(
         date_target = target[mask]
         valid_target = np.isfinite(date_target)
         if not valid_target.any():
+            if rank_ic_series is not None:
+                for factor in factor_names:
+                    rank_ic_series[factor].append(float("nan"))
             continue
         dates_seen.add(pd.Timestamp(date))
         ic = _corr_columns(date_values, date_target)
@@ -199,6 +207,8 @@ def _update_chunk(
         ranked_values = _rank_columns(np.where(valid_pairs, date_values, np.nan))
         ranked_target = _rank_columns(np.where(valid_pairs, date_target[:, None], np.nan))
         rank_ic = _corr_columns(ranked_values, ranked_target)
+        day_rank_ic: dict[str, float] = {}
+        day_group_returns: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for position, factor in enumerate(factor_names):
             valid = np.isfinite(date_values[:, position]) & valid_target
             valid_count = int(valid.sum())
@@ -208,6 +218,11 @@ def _update_chunk(
                 ic_values[factor].append(float(ic[position]))
             if np.isfinite(rank_ic[position]):
                 rank_ic_values[factor].append(float(rank_ic[position]))
+                day_rank_ic[factor] = float(rank_ic[position])
+            else:
+                day_rank_ic[factor] = float("nan")
+            if rank_ic_series is not None:
+                rank_ic_series[factor].append(day_rank_ic[factor])
             if valid_count < 2:
                 continue
             factor_values = date_values[valid, position]
@@ -223,6 +238,24 @@ def _update_chunk(
                     key = str(group + 1)
                     sums[factor][key] += float(factor_returns[selected].mean())
                     counts[factor][key] += 1
+                    day_group_returns[factor].append(
+                        {"group": group + 1, "mean_return": float(factor_returns[selected].mean())}
+                    )
+        if temporal_accumulator is not None:
+            temporal_accumulator.update(pd.Timestamp(date), day_rank_ic, day_group_returns)
+
+
+def _load_benchmark_returns(
+    panel: pd.DataFrame,
+    column: str | None,
+) -> pd.Series | None:
+    if column is None:
+        return None
+    if column not in panel.columns:
+        raise KeyError(f"Missing benchmark return column: {column}")
+    values = pd.to_numeric(panel[column], errors="coerce")
+    values.index = pd.to_datetime(panel.index.get_level_values("date"))
+    return values
 
 
 def build_factor_evidence_snapshot_from_store(
@@ -235,15 +268,35 @@ def build_factor_evidence_snapshot_from_store(
     data_version: str = "unknown",
     group_count: int = 5,
     code_revision: str | None = None,
+    benchmark_return_column: str | None = None,
+    benchmark_name: str | None = None,
+    regime_window: int = 252,
+    holding_period_days: int | None = None,
 ) -> dict[str, Any]:
     """Build a public snapshot by reading a partitioned factor store incrementally."""
     if group_count < 2:
         raise ValueError("group_count must be at least 2")
+    validate_benchmark_source(return_column, benchmark_return_column)
     manifest_file = Path(manifest_path)
     manifest = read_factor_store_manifest(manifest_file)
     selected = _selected_families(manifest, families)
     root = manifest_file.parent
     base_path = root / str(manifest["base_panel"]["path"])
+    benchmark_panel = None
+    if benchmark_return_column is not None:
+        benchmark_panel = ensure_date_ticker_index(
+            pd.read_parquet(base_path, columns=[benchmark_return_column])
+        )
+    temporal_accumulator = TemporalSliceAccumulator(
+        [],
+        benchmark_returns=(
+            _load_benchmark_returns(benchmark_panel, benchmark_return_column)
+            if benchmark_panel is not None
+            else None
+        ),
+        regime_window=regime_window,
+        benchmark_name=benchmark_name or benchmark_return_column,
+    )
     start = pd.Timestamp(date_start) if date_start else None
     end = pd.Timestamp(date_end) if date_end else None
 
@@ -251,6 +304,7 @@ def build_factor_evidence_snapshot_from_store(
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     ic_values: dict[str, list[float]] = defaultdict(list)
     rank_ic_values: dict[str, list[float]] = defaultdict(list)
+    rank_ic_series: dict[str, list[float]] = defaultdict(list)
     valid_counts: dict[str, int] = defaultdict(int)
     total_observations: dict[str, int] = defaultdict(int)
     dates_seen: set[pd.Timestamp] = set()
@@ -283,6 +337,7 @@ def build_factor_evidence_snapshot_from_store(
                 if any(name in factor_names for name in current_factor_names):
                     raise ValueError("Selected factor families contain duplicate factor columns")
                 factor_names.extend(current_factor_names)
+                temporal_accumulator.add_factors(current_factor_names)
                 registered_families.add(family)
             if family == selected[0]:
                 observation_count += len(factor_frame)
@@ -309,10 +364,18 @@ def build_factor_evidence_snapshot_from_store(
                 total_observations=total_observations,
                 dates_seen=dates_seen,
                 tickers_seen=tickers_seen,
+                temporal_accumulator=temporal_accumulator,
+                rank_ic_series=rank_ic_series,
             )
 
     if not factor_names:
         raise ValueError("No factor partitions match the requested range")
+
+    temporal = temporal_accumulator.result()
+    factor_uncertainty, uncertainty_summary, multiple_testing = _inference_fields(
+        rank_ic_series,
+        holding_period_days,
+    )
 
     factor_payload: list[dict[str, Any]] = []
     for factor in factor_names:
@@ -343,6 +406,9 @@ def build_factor_evidence_snapshot_from_store(
                 },
                 "ic": metric(ic),
                 "rank_ic": metric(rank_ic),
+                "annual_slices": temporal["annual"].get(factor, []),
+                "regime_slices": temporal["regime"].get(factor, []),
+                "uncertainty": factor_uncertainty[factor],
                 "group_returns": [
                     {
                         "group": int(group),
@@ -370,8 +436,23 @@ def build_factor_evidence_snapshot_from_store(
             "observation_count": observation_count,
             "return_column": return_column,
         },
-        "config": {"group_count": group_count, "source": "partitioned_factor_store"},
+        "config": {
+            "group_count": group_count,
+            "source": "partitioned_factor_store",
+            "holding_period_days": holding_period_days,
+            "benchmark_name": benchmark_name or benchmark_return_column,
+            "regime_rule": temporal["regime_metadata"]["rule"],
+            "regime_window": regime_window,
+        },
         "factors": factor_payload,
+        "uncertainty": uncertainty_summary,
+        "temporal_validation": {
+            "status": "partial" if temporal["regime_status"]["status"] != "complete" else "complete",
+            "annual_status": "complete",
+            "market_regime": temporal["regime_status"],
+            "regime_metadata": temporal["regime_metadata"],
+        },
+        "multiple_testing": multiple_testing,
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",
@@ -393,6 +474,10 @@ def build_factor_evidence_snapshot_from_archive(
     data_version: str = "unknown",
     group_count: int = 5,
     code_revision: str | None = None,
+    benchmark_return_column: str | None = None,
+    benchmark_name: str | None = None,
+    regime_window: int = 252,
+    holding_period_days: int | None = None,
 ) -> dict[str, Any]:
     """Build public evidence from an uncompressed tar factor-store archive.
 
@@ -401,6 +486,7 @@ def build_factor_evidence_snapshot_from_archive(
     """
     if group_count < 2:
         raise ValueError("group_count must be at least 2")
+    validate_benchmark_source(return_column, benchmark_return_column)
     archive_file = Path(archive_path)
     manifest, members, prefix = _archive_manifest(archive_file)
     selected = _selected_families(manifest, families)
@@ -411,14 +497,24 @@ def build_factor_evidence_snapshot_from_archive(
     base_member = members.get(f"{prefix}{base_relative}")
     if base_member is None:
         raise ValueError(f"Archive is missing base panel: {base_relative}")
+    base_columns = [return_column]
+    if benchmark_return_column and benchmark_return_column not in base_columns:
+        base_columns.append(benchmark_return_column)
     base_frame = ensure_date_ticker_index(
-        _read_tar_parquet(archive_file, base_member, columns=[return_column])
+        _read_tar_parquet(archive_file, base_member, columns=base_columns)
+    )
+    temporal_accumulator = TemporalSliceAccumulator(
+        [],
+        benchmark_returns=_load_benchmark_returns(base_frame, benchmark_return_column),
+        regime_window=regime_window,
+        benchmark_name=benchmark_name or benchmark_return_column,
     )
 
     sums: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     ic_values: dict[str, list[float]] = defaultdict(list)
     rank_ic_values: dict[str, list[float]] = defaultdict(list)
+    rank_ic_series: dict[str, list[float]] = defaultdict(list)
     valid_counts: dict[str, int] = defaultdict(int)
     total_observations: dict[str, int] = defaultdict(int)
     dates_seen: set[pd.Timestamp] = set()
@@ -454,6 +550,7 @@ def build_factor_evidence_snapshot_from_archive(
                 if any(name in factor_names for name in current_factor_names):
                     raise ValueError("Selected factor families contain duplicate factor columns")
                 factor_names.extend(current_factor_names)
+                temporal_accumulator.add_factors(current_factor_names)
                 registered_families.add(family)
             if family == selected[0]:
                 observation_count += len(factor_frame)
@@ -475,10 +572,18 @@ def build_factor_evidence_snapshot_from_archive(
                 total_observations=total_observations,
                 dates_seen=dates_seen,
                 tickers_seen=tickers_seen,
+                temporal_accumulator=temporal_accumulator,
+                rank_ic_series=rank_ic_series,
             )
 
     if not factor_names:
         raise ValueError("No factor partitions match the requested range")
+
+    temporal = temporal_accumulator.result()
+    factor_uncertainty, uncertainty_summary, multiple_testing = _inference_fields(
+        rank_ic_series,
+        holding_period_days,
+    )
 
     def metric(values: np.ndarray) -> dict[str, float | None]:
         mean = float(values.mean()) if len(values) else None
@@ -506,6 +611,9 @@ def build_factor_evidence_snapshot_from_archive(
                 },
                 "ic": metric(np.asarray(ic_values[factor], dtype=float)),
                 "rank_ic": metric(np.asarray(rank_ic_values[factor], dtype=float)),
+                "annual_slices": temporal["annual"].get(factor, []),
+                "regime_slices": temporal["regime"].get(factor, []),
+                "uncertainty": factor_uncertainty[factor],
                 "group_returns": [
                     {
                         "group": int(group),
@@ -533,8 +641,23 @@ def build_factor_evidence_snapshot_from_archive(
             "observation_count": observation_count,
             "return_column": return_column,
         },
-        "config": {"group_count": group_count, "source": "tar_factor_store_archive"},
+        "config": {
+            "group_count": group_count,
+            "source": "tar_factor_store_archive",
+            "holding_period_days": holding_period_days,
+            "benchmark_name": benchmark_name or benchmark_return_column,
+            "regime_rule": temporal["regime_metadata"]["rule"],
+            "regime_window": regime_window,
+        },
         "factors": factor_payload,
+        "uncertainty": uncertainty_summary,
+        "temporal_validation": {
+            "status": "partial" if temporal["regime_status"]["status"] != "complete" else "complete",
+            "annual_status": "complete",
+            "market_regime": temporal["regime_status"],
+            "regime_metadata": temporal["regime_metadata"],
+        },
+        "multiple_testing": multiple_testing,
         "public_limits": [
             "Aggregate evidence only; no ticker-level values or portfolio weights.",
             "Evidence is descriptive research output and is not a return guarantee.",

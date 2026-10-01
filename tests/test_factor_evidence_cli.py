@@ -113,6 +113,29 @@ def test_factor_evidence_cli_accepts_factor_file(tmp_path) -> None:
     assert json.loads(output_path.read_text(encoding="utf-8"))["factors"][0]["name"] == "alpha001"
 
 
+def test_factor_evidence_cli_uses_explicit_holding_period(tmp_path) -> None:
+    panel_path = tmp_path / "panel.parquet"
+    output_path = tmp_path / "alpha810.json"
+    _write_panel(panel_path)
+
+    assert main(
+        [
+            "--panel",
+            str(panel_path),
+            "--factors",
+            "alpha001",
+            "--holding-period-days",
+            "1",
+            "--output",
+            str(output_path),
+        ]
+    ) == 0
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["uncertainty"]["status"] == "complete"
+    assert payload["uncertainty"]["holding_period_days"] == 1
+
+
 def test_factor_evidence_cli_accepts_unextracted_factor_store_archive(tmp_path) -> None:
     archive_path = tmp_path / "factor-store.tar"
     output_path = tmp_path / "alpha810.json"

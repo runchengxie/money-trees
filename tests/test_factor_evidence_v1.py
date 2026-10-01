@@ -39,6 +39,20 @@ def test_build_factor_evidence_v1_groups_research_evidence() -> None:
     assert result["risk"]["cvar_95"] == -0.12
 
 
+def test_build_factor_evidence_v1_preserves_snapshot_diagnostics() -> None:
+    snapshot = _snapshot()
+    snapshot["schema_version"] = "1.1"
+    snapshot["multiple_testing"] = {"status": "not_provided", "reason": "no horizon"}
+    snapshot["temporal_validation"] = {"status": "partial", "annual": "available"}
+    snapshot["uncertainty"] = {"status": "not_provided", "reason": "no horizon"}
+
+    result = build_factor_evidence_v1(snapshot)
+
+    assert result["uncertainty"] == snapshot["uncertainty"]
+    assert result["temporal_validation"] == snapshot["temporal_validation"]
+    assert result["multiple_testing"] == snapshot["multiple_testing"]
+
+
 def test_build_factor_evidence_v1_rejects_private_fields() -> None:
     snapshot = _snapshot()
     snapshot["factors"][0]["ticker"] = "000001.SZ"

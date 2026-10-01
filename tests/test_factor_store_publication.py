@@ -97,15 +97,70 @@ def test_factor_store_publication_reads_partitions_without_private_rows(tmp_path
         manifest_path,
         data_version="hard-drive-factor-store-v1",
         group_count=2,
+        holding_period_days=1,
     )
 
     assert payload["data_version"] == "hard-drive-factor-store-v1"
     assert payload["dataset"]["observation_count"] == 4
     assert payload["factors"][0]["name"] == "alpha101_001"
     assert payload["factors"][0]["coverage"]["valid_observations"] == 4
+    assert payload["schema_version"] == "1.1"
+    assert payload["factors"][0]["annual_slices"][0]["label"] == "2024"
+    assert payload["factors"][0]["annual_slices"][0]["valid_dates"] == 2
+    assert payload["factors"][0]["regime_slices"] == []
+    assert payload["factors"][0]["uncertainty"]["status"] == "complete"
+    assert payload["multiple_testing"]["status"] == "complete"
+    assert payload["multiple_testing"]["family_size"] == 1
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     assert '"ticker"' not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_factor_store_publication_adds_benchmark_regime_slices(tmp_path) -> None:
+    dates = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"])
+    index = pd.MultiIndex.from_product([dates, ["A", "B"]], names=["date", "ticker"])
+    base = pd.DataFrame(
+        {
+            "next_period_return": [0.01, -0.01] * len(dates),
+            "benchmark_return": [0.1] * 4 + [-0.5] * 4,
+        },
+        index=index,
+    )
+    factors = pd.DataFrame({"alpha101_001": [1.0, 2.0] * len(dates)}, index=index)
+    store = tmp_path / "store"
+    (store / "factors" / "alpha101").mkdir(parents=True)
+    base.to_parquet(store / "base.parquet")
+    factors.to_parquet(store / "factors" / "alpha101" / "part.parquet")
+    manifest = {
+        "manifest_schema_version": "1.0",
+        "kind": "moneytree_factor_store",
+        "base_panel": {"path": "base.parquet", "rows": len(base), "columns": 2},
+        "factor_families": {
+            "alpha101": {
+                "paths": ["factors/alpha101/part.parquet"],
+                "parts": [{
+                    "path": "factors/alpha101/part.parquet",
+                    "start_date": str(dates.min().date()),
+                    "end_date": str(dates.max().date()),
+                    "rows": len(factors),
+                }],
+            }
+        },
+    }
+    manifest_path = store / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    payload = build_factor_evidence_snapshot_from_store(
+        manifest_path,
+        benchmark_return_column="benchmark_return",
+        benchmark_name="fixture_index",
+        regime_window=2,
+    )
+
+    assert payload["temporal_validation"]["market_regime"]["status"] == "complete"
+    assert payload["temporal_validation"]["regime_metadata"]["benchmark_name"] == "fixture_index"
+    assert [item["label"] for item in payload["factors"][0]["regime_slices"]] == ["bull", "bear"]
+    assert [item["valid_dates"] for item in payload["factors"][0]["regime_slices"]] == [1, 1]
 
 
 def test_factor_store_publication_reads_unextracted_tar_archive(tmp_path) -> None:
@@ -161,6 +216,10 @@ def test_factor_store_publication_reads_unextracted_tar_archive(tmp_path) -> Non
     assert payload["dataset"]["date_start"] == "2016-01-04"
     assert payload["dataset"]["date_end"] == "2016-01-05"
     assert payload["factors"][0]["name"] == "alpha101_001"
+    assert payload["schema_version"] == "1.1"
+    assert payload["factors"][0]["annual_slices"][0]["label"] == "2016"
+    assert payload["factors"][0]["annual_slices"][0]["valid_dates"] == 2
+    assert payload["multiple_testing"]["status"] == "not_provided"
     assert '"ticker"' not in json.dumps(payload, ensure_ascii=False)
 
 

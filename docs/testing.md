@@ -82,9 +82,10 @@ The documentation guards check test-file inventory, console-script names, README
 | `tests/test_docs_links.py` | Local Markdown links in README and docs, plus README navigation coverage of user documentation. |
 | `tests/test_docs_style.py` | High-risk indirect phrasing, core terminology drift, DolphinDB module facts, and factor-catalog consistency in Chinese docs. |
 | `tests/test_factor_evidence_cli.py` | Public Alpha evidence CLI, file arguments, error paths, and release-field auditing. |
+| `tests/test_factor_inference.py` | Newey–West HAC uncertainty and BY/BH multiple-testing corrections. |
 | `tests/test_factor_evidence_v1.py` | `factor_evidence.v1` contract and public-field boundaries. |
-| `tests/test_factor_publication.py` | Aggregate Alpha evidence snapshot schema, coverage, IC/RankIC, and normalization of non-finite values. |
-| `tests/test_factor_store_publication.py` | Incremental reads from partitioned factor stores and generation of sanitized public Alpha evidence snapshots. |
+| `tests/test_factor_publication.py` | Aggregate Alpha evidence schema, annual/regime slices, uncertainty, and public-field boundaries. |
+| `tests/test_factor_store_publication.py` | Partitioned/archive Alpha evidence generation, temporal slices, and incremental disclosure-safe output. |
 | `tests/test_export_repo_source.py` | Source-export contents and continued exclusion of runtime-data directories. |
 | `tests/test_external_alphas.py` | External Alpha101/191 columns, field mappings, input dependencies, merging, and metadata-manifest validation. |
 | `tests/test_factor_store.py` | Local and external factor stores, manifests, partitioning, compression, overwrite, and selective loading. |
