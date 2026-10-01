@@ -1,8 +1,8 @@
-# 数据快照
+# Data snapshots
 
-`moneytrees-data-snapshot` 用来记录 Money Trees 标准面板的数据版本信息。它只写入 metadata、checksum 和 README，不复制大型 parquet、原始缓存或因子仓库文件。
+[简体中文](data-snapshot.zh-CN.md)
 
-基础用法：
+`moneytrees-data-snapshot` records version metadata for a Money Trees standard panel. It writes metadata, checksums, and a README. It does not copy large parquet files, raw caches, or factor-store files.
 
 ```bash
 uv run moneytrees-data-snapshot \
@@ -12,7 +12,7 @@ uv run moneytrees-data-snapshot \
   --label cn_daily_2016_2025
 ```
 
-输出目录包含：
+The output directory contains:
 
 ```text
 dataset_meta.json
@@ -20,9 +20,9 @@ checksums.sha256
 README.md
 ```
 
-`dataset_meta.json` 记录面板路径、文件大小、SHA-256、行数、列数、日期范围、ticker 数量、parquet 表结构哈希、可选原始缓存/因子仓库引用、轻量质量摘要和可用的 git commit 信息。
+`dataset_meta.json` records the panel path, file size, SHA-256, row and column counts, date range, ticker count, parquet schema hash, optional raw-cache and factor-store references, a lightweight quality summary, and available Git commit information.
 
-质量摘要包含：
+The quality summary contains:
 
 ```text
 status
@@ -37,9 +37,9 @@ errors
 warnings
 ```
 
-质量摘要用于回答备份前的数据是否已经通过 `moneytrees-data-status` 暴露的轻量检查。它不会修复数据，也不会嵌入大体量的逐日期或逐 ticker 诊断。
+The summary indicates whether the data passed the lightweight checks exposed by `moneytrees-data-status` before backup. It does not repair data or include large per-date or per-ticker diagnostics.
 
-同时记录因子仓库和说明：
+To include a factor-store reference and a note:
 
 ```bash
 uv run moneytrees-data-snapshot \
@@ -51,4 +51,4 @@ uv run moneytrees-data-snapshot \
   --note "full 810 factor research snapshot"
 ```
 
-这个命令用于保存数据版本记录。大型文件本身请用 `cp`、`rsync` 或对象存储工具复制。
+This command saves a data-version record. Copy large files separately with `cp`, `rsync`, or an object-storage tool.

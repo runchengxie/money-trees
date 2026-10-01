@@ -18,12 +18,32 @@ The MkDocs site defaults to English and publishes English and Simplified Chinese
 | [Architecture](architecture.md) | [架构](architecture.zh-CN.md) |
 | [CLI reference](cli-reference.md) | [CLI 参考](cli-reference.zh-CN.md) |
 | [Runbook](runbook.md) | [运维手册](runbook.zh-CN.md) |
+| [Data input migration](data-platform-migration.md) | [数据入口迁移](data-platform-migration.zh-CN.md) |
+| [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
+| [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 The `theme.language` setting is `en`. Light and dark palettes follow `prefers-color-scheme`, and the theme provides manual light/dark controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
 
 ## Remaining scope
 
-This inventory covers the pages configured in `mkdocs.yml` navigation. Additional Markdown files exist under `docs/` outside that navigation and are not counted as localized public entry pages here. MkDocs reports unlisted pages during a strict build; review their intended publication and reader access before deciding whether to add them to navigation or translate them.
+The three data pages added above were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages, Chinese companions, and entries in both navigation groups.
+
+## Remaining README-linked pages needing English canonical versions
+
+These ten pages are linked from the READMEs, but their unsuffixed files are still Chinese and do not yet have English canonical versions:
+
+- `classic-alphas-python.md`
+- `configuration.md`
+- `cookbook.md`
+- `data-status.md`
+- `factor-mining.md`
+- `generate-alpha101-191-with-dolphindb.md`
+- `maintenance.md`
+- `outputs.md`
+- `smoke-test.md`
+- `testing.md`
+
+They remain outside the configured navigation until each English version is checked against the current implementation and paired with its Chinese page. The two Markdown files under `docs/superpowers/` are internal plans/specifications and are not public README entry points. MkDocs still builds unlisted Markdown files; strict-build output identifies them but does not imply that they belong in public navigation.
 
 When a page is promoted into the navigation, verify its claims against the current implementation and tests, add its Chinese companion, provide reciprocal links, and add both versions to the corresponding language navigation groups.

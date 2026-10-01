@@ -64,7 +64,7 @@ uv run ruff check .
 
 ## 文档
 
-[GitHub Pages 文档](https://runchengxie.github.io/money-trees/)由 [`docs/index.md`](docs/index.md) 构建。数据接入、缓存、质量治理、版本和发布由 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 负责，边界说明见[数据平台迁移文档](docs/data-platform-migration.md)。完整组合构建、风险、执行模拟和回测任务由 `quant-platform` 与 `quant-backtest-runtime` 负责。
+[GitHub Pages 文档](https://runchengxie.github.io/money-trees/)由 [`docs/index.md`](docs/index.md) 构建。数据接入、缓存、质量治理、版本和发布由 [`quant-market-data-platform`](https://github.com/runchengxie/quant-market-data-platform) 负责，边界说明见[数据平台迁移文档](docs/data-platform-migration.zh-CN.md)。完整组合构建、风险、执行模拟和回测任务由 `quant-platform` 与 `quant-backtest-runtime` 负责。
 
 - [`docs/index.md`](docs/index.md)：项目边界和公开文档入口。
 - [`docs/language-migration-status.zh-CN.md`](docs/language-migration-status.zh-CN.md)：中英文页面覆盖和本地化范围。
@@ -72,7 +72,7 @@ uv run ruff check .
 - [`docs/smoke-test.md`](docs/smoke-test.md)：最小端到端运行流程和必需面板列。
 - [`docs/architecture.md`](docs/architecture.md)：数据、市场、因子、模型、组合、回测和输出分层。
 - [`docs/data-contract.md`](docs/data-contract.md)：面板索引、必需与可选列、标签和特征语义。
-- [`docs/data-status.md`](docs/data-status.md)、[`docs/data-snapshot.md`](docs/data-snapshot.md) 和 [`docs/data-release.md`](docs/data-release.md)：只读状态、元数据快照和发布资产。
+- [`docs/data-status.md`](docs/data-status.md)、[`docs/data-snapshot.zh-CN.md`](docs/data-snapshot.zh-CN.md) 和 [`docs/data-release.zh-CN.md`](docs/data-release.zh-CN.md)：只读状态、元数据快照和发布资产。
 - [`docs/configuration.md`](docs/configuration.md)：配置分层、合并规则和字段。
 - [`docs/cli-reference.md`](docs/cli-reference.md)：`moneytrees*` 命令、兼容别名和高风险选项。
 - [`docs/outputs.md`](docs/outputs.md)、[`docs/cookbook.md`](docs/cookbook.md) 和 [`docs/runbook.md`](docs/runbook.md)：回测产物、常见研究流程、运维与排障。

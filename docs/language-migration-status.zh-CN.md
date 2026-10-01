@@ -18,12 +18,32 @@ MkDocs 站点默认使用英文，英文和简体中文页面分别发布在独�
 | [Architecture](architecture.md) | [架构](architecture.zh-CN.md) |
 | [CLI reference](cli-reference.md) | [CLI 参考](cli-reference.zh-CN.md) |
 | [Runbook](runbook.md) | [运维手册](runbook.zh-CN.md) |
+| [Data input migration](data-platform-migration.md) | [数据入口迁移](data-platform-migration.zh-CN.md) |
+| [Data snapshots](data-snapshot.md) | [数据快照](data-snapshot.zh-CN.md) |
+| [Data release assets](data-release.md) | [数据发布资产](data-release.zh-CN.md) |
 | [Documentation language status](language-migration-status.md) | [文档语言状态](language-migration-status.zh-CN.md) |
 
 `theme.language` 配置为 `en`。页面配色会跟随系统的 `prefers-color-scheme`，并提供手动切换明暗主题的控件。语言只影响文档展示，不改变项目行为或机器可读契约。
 
 ## 后续范围
 
-本清单只统计 `mkdocs.yml` 导航中列出的页面。`docs/` 下还有其他未列入导航的 Markdown 文件，因此它们不计入当前公开入口的双语覆盖。严格构建会提示这些未列入导航的页面；决定是否加入导航或翻译前，应先确认它们是否需要公开以及读者如何访问。
+上面新增的三篇数据文档此前由 README 链接，但只有中文版本。现在它们已有英文主版本、中文 companion，并加入两种语言的导航。
+
+## 尚待补充英文主版本的 README 文档
+
+以下十篇由 README 链接的文档，其无后缀文件目前仍为中文，也还没有英文主版本：
+
+- `classic-alphas-python.md`
+- `configuration.md`
+- `cookbook.md`
+- `data-status.md`
+- `factor-mining.md`
+- `generate-alpha101-191-with-dolphindb.md`
+- `maintenance.md`
+- `outputs.md`
+- `smoke-test.md`
+- `testing.md`
+
+在根据当前实现核实英文内容并配好中文页面前，这些文档暂不加入导航。`docs/superpowers/` 下的两篇 Markdown 是内部计划和规格，不属于 README 的公开入口。MkDocs 仍会构建未列入导航的 Markdown；严格构建会列出它们，但这不代表它们都应进入公开导航。
 
 新增导航页面时，应先根据当前实现和测试核实内容，再补充中文 companion、双向语言链接，并将两个版本都加入对应语言导航组。

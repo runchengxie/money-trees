@@ -36,6 +36,9 @@ nav:
       - Architecture: architecture.md
       - CLI reference: cli-reference.md
       - Runbook: runbook.md
+      - Data input migration: data-platform-migration.md
+      - Data snapshots: data-snapshot.md
+      - Data release assets: data-release.md
   - 简体中文:
       - 首页: index.zh-CN.md
       - 文档语言状态: language-migration-status.zh-CN.md
@@ -48,6 +51,9 @@ nav:
       - 架构: architecture.zh-CN.md
       - CLI 参考: cli-reference.zh-CN.md
       - 运维手册: runbook.zh-CN.md
+      - 数据入口迁移: data-platform-migration.zh-CN.md
+      - 数据快照: data-snapshot.zh-CN.md
+      - 数据发布资产: data-release.zh-CN.md
 markdown_extensions:
   - admonition
   - attr_list
