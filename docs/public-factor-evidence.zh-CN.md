@@ -1,6 +1,6 @@
 # 公开因子证据
 
-[English page](public-factor-evidence.md)
+[English page](https://runchengxie.github.io/money-trees/public-factor-evidence/)
 
 ## 公开快照的定位
 

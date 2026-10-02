@@ -1,6 +1,6 @@
 # Data snapshots
 
-[简体中文](data-snapshot.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/data-snapshot/)
 
 `moneytrees-data-snapshot` records version metadata for a Money Trees standard panel. It writes metadata, checksums, and a README. It does not copy large parquet files, raw caches, or factor-store files.
 

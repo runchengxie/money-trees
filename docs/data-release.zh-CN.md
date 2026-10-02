@@ -1,6 +1,6 @@
 # 数据发布资产
 
-[English page](data-release.md)
+[English page](https://runchengxie.github.io/money-trees/data-release/)
 
 `moneytrees-data-release` 用来生成适合上传到 GitHub Releases 的数据发布资产。它会复制基础面板，把原始缓存和因子仓库（factor store）整理成不压缩的 tar 分片，并写出元数据清单、校验码和 README。
 

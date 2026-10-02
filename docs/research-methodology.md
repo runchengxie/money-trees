@@ -1,6 +1,6 @@
 # Research methodology and evidence boundaries
 
-[中文页面](research-methodology.zh-CN.md)
+[中文页面](https://runchengxie.github.io/money-trees/zh-CN/research-methodology/)
 
 Money Trees computes factors and produces aggregated evidence. Formal portfolio construction, execution simulation, and risk attribution belong to `quant-platform` and `quant-backtest-runtime`. Every research result must be bound to an explicit information set; data that was not observable at the decision point must not enter features, labels, or decisions.
 

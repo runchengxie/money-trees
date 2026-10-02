@@ -1,12 +1,12 @@
 # 常见工作流
 
-[English page](cookbook.md)
+[English page](https://runchengxie.github.io/money-trees/cookbook/)
 
-Cookbook 记录常见任务的可复制做法，重点在怎么用。Runbook 记录日常运行、失败恢复和归档检查，重点在怎么稳定地执行。排障流程见[运维手册](runbook.zh-CN.md)。
+Cookbook 记录常见任务的可复制做法，重点在怎么用。Runbook 记录日常运行、失败恢复和归档检查，重点在怎么稳定地执行。排障流程见[运维手册](https://runchengxie.github.io/money-trees/zh-CN/runbook/)。
 
 ## 1. 跑最小本地回测
 
-准备一个符合[数据契约](data-contract.zh-CN.md)的 parquet 文件后运行：
+准备一个符合[数据契约](https://runchengxie.github.io/money-trees/zh-CN/data-contract/)的 parquet 文件后运行：
 
 ```bash
 uv run moneytrees \
@@ -31,7 +31,7 @@ uv run moneytrees \
 
 ## 2. 使用 TuShare 兼容入口拉取日频面板
 
-以下 TuShare 命令仅用于复现旧 notebook 和迁移历史工作流。新生产数据应使用 `quant-market-data-platform` 发布的版本化数据资产，详见[数据入口迁移](data-platform-migration.zh-CN.md)。
+以下 TuShare 命令仅用于复现旧 notebook 和迁移历史工作流。新生产数据应使用 `quant-market-data-platform` 发布的版本化数据资产，详见[数据入口迁移](https://runchengxie.github.io/money-trees/zh-CN/data-platform-migration/)。
 
 安装研究依赖：
 
@@ -148,7 +148,7 @@ uv run moneytrees-factor-store \
 
 Alpha101/191 有两条生成路径：
 
-1. 纯 Python 本地生成（横截面语义，轻量）：`moneytrees-alpha101-191-python`。适用于教学和小规模研究，详见[纯 Python 生成 Alpha101/191](classic-alphas-python.zh-CN.md)。
+1. 纯 Python 本地生成（横截面语义，轻量）：`moneytrees-alpha101-191-python`。适用于教学和小规模研究，详见[纯 Python 生成 Alpha101/191](https://runchengxie.github.io/money-trees/zh-CN/classic-alphas-python/)。
 2. DolphinDB 外部生成（生产推荐）：先离线生成，再写入同一个因子仓库。详细环境和口径见 [generate-alpha101-191-with-dolphindb.md](generate-alpha101-191-with-dolphindb.md)。
 
 DolphinDB 路径下，parquet 输入配合 `--no-wide-output` 时，外部 Alpha CLI 默认用 `--stream-input auto` 按目标交易日和 warmup 窗口分片读取、上传、计算和落盘，避免完整输入面板一次性进入内存。宽表输出或显式 `--stream-input off` 仍会走完整输入上传路径。先用小样本分别跑 `--alpha101` 和 `--alpha191` 冒烟测试，正式生成时优先按因子族分开运行。

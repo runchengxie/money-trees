@@ -1,6 +1,6 @@
 # Data contract
 
-[中文页面](data-contract.zh-CN.md)
+[中文页面](https://runchengxie.github.io/money-trees/zh-CN/data-contract/)
 
 This page defines the data shape, required columns, optional columns, and label semantics used by Money Trees backtests.
 

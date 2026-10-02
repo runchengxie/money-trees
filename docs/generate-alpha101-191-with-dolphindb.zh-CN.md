@@ -1,6 +1,6 @@
 # 使用 DolphinDB 生成 Alpha101/191
 
-[English page](generate-alpha101-191-with-dolphindb.md)
+[English page](https://runchengxie.github.io/money-trees/generate-alpha101-191-with-dolphindb/)
 
 本文说明如何把 DolphinDB 作为 Alpha101/191 的外部因子生产器使用。Money Trees 仍然只消费离线生成结果，不在回测过程中实时调用 DolphinDB。推荐新路径是写入因子仓库。旧的宽 parquet 面板输出继续保留用于兼容。
 
@@ -15,7 +15,7 @@
 | Alpha158 | 158 | 本地 `build_alpha158_features` 生成 |
 | Alpha360 | 360 | 本地 `build_alpha360_features` 生成 |
 
-也就是说，810 个因子都有项目内计算路径：Alpha158/360 由 `qlib.py` 本地生成，Alpha101/191 由 `classic.py` 纯 Python 本地生成（横截面语义，见[纯 Python Alpha101/191](classic-alphas-python.zh-CN.md)），也可以继续走本文的 DolphinDB 外部生成契约。DolphinDB 路径的 rank/scale、缺失值、SMA/DECAYLINEAR 语义与本地路径可能不同，正式使用前建议小样本对拍。
+也就是说，810 个因子都有项目内计算路径：Alpha158/360 由 `qlib.py` 本地生成，Alpha101/191 由 `classic.py` 纯 Python 本地生成（横截面语义，见[纯 Python Alpha101/191](https://runchengxie.github.io/money-trees/zh-CN/classic-alphas-python/)），也可以继续走本文的 DolphinDB 外部生成契约。DolphinDB 路径的 rank/scale、缺失值、SMA/DECAYLINEAR 语义与本地路径可能不同，正式使用前建议小样本对拍。
 
 推荐数据流：
 
@@ -188,7 +188,7 @@ Alpha191 请求会要求 `benchmark_open` 和 `benchmark_close` 存在。Alpha10
 
 ## 运行生成
 
-新研究应优先使用 `quant-market-data-platform` 发布的版本化面板。下方 `moneytrees-tushare` 命令仅用于复现旧 notebook 和迁移历史工作流；数据职责边界见[数据入口迁移](data-platform-migration.zh-CN.md)。DolphinDB 生成器本身只读取现有面板，不负责获取原始数据。
+新研究应优先使用 `quant-market-data-platform` 发布的版本化面板。下方 `moneytrees-tushare` 命令仅用于复现旧 notebook 和迁移历史工作流；数据职责边界见[数据入口迁移](https://runchengxie.github.io/money-trees/zh-CN/data-platform-migration/)。DolphinDB 生成器本身只读取现有面板，不负责获取原始数据。
 
 DolphinDB Python client 不在核心依赖中。需要生成外部因子时，在当前环境安装 external-alpha 依赖：
 

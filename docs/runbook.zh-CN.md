@@ -1,6 +1,6 @@
 # Runbook
 
-[English page](runbook.md)
+[English page](https://runchengxie.github.io/money-trees/runbook/)
 
 Runbook 记录日常执行、排障和归档检查。常见使用示例见 [cookbook.md](cookbook.md)。
 

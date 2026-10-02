@@ -1,6 +1,6 @@
 # Configuration
 
-[简体中文](configuration.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/configuration/)
 
 `moneytrees` combines YAML, JSON, or TOML files into a run configuration. Keep market, model, backtest, and local preset configuration separate. The older `moneytree` CLI aliases remain available.
 

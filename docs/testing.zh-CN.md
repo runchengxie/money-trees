@@ -1,6 +1,6 @@
 # 测试说明
 
-[English page](testing.md)
+[English page](https://runchengxie.github.io/money-trees/testing/)
 
 项目测试覆盖数据契约、配置解析、模型适配器、组合权重、回测指标、CLI 冒烟路径、TuShare 标准化、因子仓库、数据状态、数据快照、数据发布资产、外部 Alpha 生产、容器运行文件、维护脚本和文档清单。
 
@@ -57,7 +57,7 @@ uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/tes
 只跑文档 guard 测试：
 
 ```bash
-uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
+uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py tests/test_legacy_locale_redirects.py
 ```
 
 文档 guard 测试覆盖测试文件登记、console script 名称、README 文档导航、内部 Markdown 链接、部分文风规则、核心术语反向检查、CLI 高风险参数覆盖和因子目录状态一致性。它们不会逐条执行 README 或 docs 中的完整命令示例。涉及 TuShare token、DolphinDB server、大型数据文件或长时间运行的命令仍需按运行手册单独验证。
@@ -81,6 +81,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_docs_inventory.py` | `tests/test_*.py` 文件是否全部登记在本文档。 |
 | `tests/test_docs_links.py` | README 和 docs 内部 Markdown 链接是否存在，README 文档导航是否覆盖所有用户文档。 |
 | `tests/test_docs_style.py` | 中文文档中高风险间接句式、核心术语漂移、DolphinDB 模块事实和因子目录状态一致性。 |
+| `tests/test_legacy_locale_redirects.py` | 旧中文文档 URL 重定向及防止覆盖已生成页面。 |
 | `tests/test_factor_evidence_cli.py` | 公开 Alpha 因子证据 CLI、文件参数、错误路径和发布字段审计。 |
 | `tests/test_factor_inference.py` | Newey–West HAC 不确定性估计及 BY/BH 多重检验校正。 |
 | `tests/test_factor_evidence_v1.py` | 统一 `factor_evidence.v1` 契约和公开字段边界。 |

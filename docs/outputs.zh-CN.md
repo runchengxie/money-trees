@@ -1,6 +1,6 @@
 # 输出产物
 
-[English page](outputs.md)
+[English page](https://runchengxie.github.io/money-trees/outputs/)
 
 默认输出目录由 `--output-dir` 或 `output.output_dir` 控制。一次正常回测会写出策略净值、基准净值、信号诊断、指标、运行配置和报告数据。
 

@@ -1,6 +1,6 @@
 # 因子挖掘
 
-[English page](factor-mining.md)
+[English page](https://runchengxie.github.io/money-trees/factor-mining/)
 
 本文说明如何用遗传算法（GP）在已有 Alpha 因子上挖掘新的合成因子。该功能移植自 `wu-alpha191-alpha101` 参考仓库的 `factor_generator.py`，适配 Money Trees 的标准 `date, ticker` 面板，并以横截面 Spearman IC 作为适应度。
 

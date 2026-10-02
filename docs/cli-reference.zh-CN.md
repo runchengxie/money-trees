@@ -1,6 +1,6 @@
 # CLI 参考
 
-[English page](cli-reference.md)
+[English page](https://runchengxie.github.io/money-trees/cli-reference/)
 
 本文汇总 Money Trees 当前 console scripts 和高风险参数。示例优先使用 `moneytrees*` 命令。`moneytree*` 同名别名仍保留，用于兼容旧脚本。数据下载不再是长期主路径；`moneytrees-tushare` 仅用于兼容，正式数据生产请使用 `quant-market-data-platform`。
 
@@ -18,6 +18,7 @@
 | `moneytrees-data-snapshot` | `moneytree-data-snapshot` | 生成基础面板、原始缓存和因子仓库的轻量元数据快照。 |
 | `moneytrees-data-release` | `moneytree-data-release` | 生成 GitHub Releases 友好的数据发布资产并可选上传。 |
 | `moneytrees-parquet-rewrite` | `moneytree-parquet-rewrite` | 重写 parquet 或迁移可信 pickle。 |
+| `moneytrees-factor-evidence` | `moneytree-factor-evidence` | 生成仅含聚合信息的公开 Alpha 证据快照。 |
 
 ## `moneytrees`
 
@@ -195,3 +196,24 @@
 | `--no-verify` | 跳过写出后的行列和索引验证。 |
 
 pickle 输入只适合可信历史数据迁移。日常研究路径优先使用 parquet。
+
+## `moneytrees-factor-evidence`
+
+本命令生成聚合研究证据，不代替完整策略回测。结果解释和发布边界见[公开因子证据](public-factor-evidence.md)。
+
+| 参数 | 说明 |
+| --- | --- |
+| `--panel`、`--factor-store`、`--factor-store-archive` | 三种输入只能选一种：面板、分区因子仓库清单或不压缩的仓库归档。 |
+| `--families` | 逗号分隔的仓库因子族，默认使用全部。 |
+| `--date-start`、`--date-end` | 包含边界日期的仓库数据筛选。 |
+| `--factors` | 必填，逗号分隔的因子名或每行一个因子名的文本文件；仓库输入只接受 `all` 或 `*`。 |
+| `--return-column` | 未来收益列，默认 `next_period_return`。 |
+| `--benchmark-return-column`、`--benchmark-name` | 市场状态分层所用的已实现日基准收益列和可读名称。 |
+| `--regime-window` | 市场状态标签使用的此前交易日数，默认 252。 |
+| `--holding-period-days` | 未来收益持有天数；输出推断性诊断前必须提供。 |
+| `--data-version`、`--code-revision` | 写入快照的数据版本和代码修订号。 |
+| `--output` | 必填，聚合快照 JSON 路径。 |
+| `--quality-output` | 可选的聚合信号质量 JSON 路径。 |
+| `--evidence-v1-output` | 可选的统一 `factor_evidence.v1` JSON 路径。 |
+| `--group-count` | 收益分组数，默认 5。 |
+| `--format` | CLI 输出为 `text` 或 `json`。 |

@@ -1,6 +1,6 @@
 # 研究方法与证据边界
 
-[English page](research-methodology.md)
+[English page](https://runchengxie.github.io/money-trees/research-methodology/)
 
 Money Trees 负责因子计算和聚合证据生产；正式组合、执行模拟与风险归因由
 `quant-platform` 和 `quant-backtest-runtime` 负责。研究结果必须绑定一个明确的
