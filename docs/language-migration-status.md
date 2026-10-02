@@ -2,7 +2,7 @@
 
 [简体中文](https://runchengxie.github.io/money-trees/zh-CN/language-migration-status/)
 
-The MkDocs site defaults to English at the existing root URLs. Chinese pages live under `/zh-CN/`, with the same page slug. Each locale shows only its own navigation; the language switcher opens the matching page. The current search index includes both languages, so search results may cross languages. Old `*.zh-CN/` URLs redirect to the new Chinese routes. Every page in the configured navigation has a companion.
+The MkDocs site defaults to English at the existing root URLs. Chinese pages live under `/zh-CN/`, with the same page slug. Each locale has its own navigation and search index. The language selector opens the matching page. Chinese search currently uses the English Lunr tokenizer, so phrase matching can be limited. Old `*.zh-CN/` URLs redirect to the new Chinese routes. Every page in the configured navigation has a companion.
 
 ## Configured navigation coverage
 
@@ -36,8 +36,6 @@ The MkDocs site defaults to English at the existing root URLs. Chinese pages liv
 The theme uses English on root pages and Chinese on `/zh-CN/` pages. Light and dark palettes follow `prefers-color-scheme`, with manual controls. Language selection changes documentation presentation only; it does not change project behavior or machine-readable contracts.
 
 ## Remaining scope
-
-The 13 guides added since this inventory was created were previously linked from the READMEs but existed only in Chinese. They now have English canonical pages and Chinese companions in their corresponding language navigations.
 
 All 13 previously Chinese-only README-linked public guides now have an English canonical page and a Chinese companion. The two Markdown files under `docs/superpowers/` are internal plans/specifications and are excluded from the public MkDocs build.
 

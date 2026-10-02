@@ -2,6 +2,14 @@ site_name: Money Trees · Alpha 810 Research
 site_description: A-share classic-alpha factor computation and research evidence toolkit.
 site_url: https://runchengxie.github.io/money-trees/
 repo_url: https://github.com/runchengxie/money-trees
+extra:
+  alternate:
+    - name: English
+      link: https://runchengxie.github.io/money-trees/
+      lang: en
+    - name: 简体中文
+      link: https://runchengxie.github.io/money-trees/zh-CN/
+      lang: zh
 docs_dir: docs
 exclude_docs: |
   superpowers/
@@ -26,6 +34,7 @@ plugins:
   - search
   - i18n:
       docs_structure: suffix
+      build_only_locale: !ENV [BUILD_ONLY_LOCALE]
       fallback_to_default: false
       languages:
         - locale: en
@@ -33,6 +42,7 @@ plugins:
           name: English
         - locale: zh-CN
           name: 简体中文
+          site_url: https://runchengxie.github.io/money-trees/zh-CN/
           theme:
             language: zh
           nav:

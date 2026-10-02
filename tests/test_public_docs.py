@@ -7,6 +7,13 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class _MkDocsLoader(yaml.SafeLoader):
+    """Read MkDocs environment tags without evaluating environment values."""
+
+
+_MkDocsLoader.add_constructor("!ENV", lambda loader, node: loader.construct_sequence(node))
+
+
 def _navigation_markdown_paths(value: object):
     if isinstance(value, dict):
         for child in value.values():
@@ -19,7 +26,7 @@ def _navigation_markdown_paths(value: object):
 
 
 def test_mkdocs_navigation_references_existing_public_docs() -> None:
-    config = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
+    config = yaml.load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"), Loader=_MkDocsLoader)
 
     assert config["site_name"] == "Money Trees · Alpha 810 Research"
     nav_paths = _navigation_markdown_paths(config["nav"])

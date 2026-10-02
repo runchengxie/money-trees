@@ -8,6 +8,13 @@ import yaml
 LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
 
+class _MkDocsLoader(yaml.SafeLoader):
+    """Read MkDocs environment tags without evaluating environment values."""
+
+
+_MkDocsLoader.add_constructor("!ENV", lambda loader, node: loader.construct_sequence(node))
+
+
 def _local_markdown_files(root: Path) -> list[Path]:
     return [
         root / "README.md",
@@ -62,7 +69,7 @@ def test_root_readme_is_english_canonical_with_chinese_companion() -> None:
 
 def test_every_mkdocs_navigation_page_has_a_chinese_companion() -> None:
     root = Path(__file__).resolve().parents[1]
-    config = yaml.safe_load((root / "mkdocs.yml").read_text(encoding="utf-8"))
+    config = yaml.load((root / "mkdocs.yml").read_text(encoding="utf-8"), Loader=_MkDocsLoader)
 
     def markdown_paths(value):
         if isinstance(value, dict):

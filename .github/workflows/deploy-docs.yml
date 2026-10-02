@@ -7,6 +7,7 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - "project_tools/create_legacy_locale_redirects.py"
+      - "project_tools/check_locale_search.py"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 
@@ -28,11 +29,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install documentation dependencies
-        run: python -m pip install "mkdocs-material==9.6.21" "mkdocs-static-i18n==1.3.1"
+        run: python -m pip install "mkdocs-material==9.7.7" "mkdocs-static-i18n==1.3.1"
       - name: Build documentation
         run: |
-          mkdocs build --strict
+          BUILD_ONLY_LOCALE=en mkdocs build --strict
+          BUILD_ONLY_LOCALE=zh-CN mkdocs build --strict --site-dir site/zh-CN
           python project_tools/create_legacy_locale_redirects.py
+          python project_tools/check_locale_search.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
