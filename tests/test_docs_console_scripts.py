@@ -98,7 +98,26 @@ HIGH_RISK_FLAGS = {
         "--overwrite",
         "--no-verify",
     ],
+    "moneytrees-factor-evidence": [
+        "--panel",
+        "--factor-store",
+        "--factor-store-archive",
+        "--factors",
+        "--holding-period-days",
+        "--output",
+        "--quality-output",
+        "--evidence-v1-output",
+    ],
 }
+
+
+def test_english_cli_reference_covers_high_risk_options() -> None:
+    root = Path(__file__).resolve().parents[1]
+    reference = (root / "docs/cli-reference.md").read_text(encoding="utf-8")
+    for command, flags in HIGH_RISK_FLAGS.items():
+        assert f"## `{command}`" in reference
+        for flag in flags:
+            assert f"`{flag}`" in reference
 
 
 def _docs_text(root: Path) -> str:

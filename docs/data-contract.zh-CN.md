@@ -1,6 +1,6 @@
 # 数据契约
 
-[English page](data-contract.md)
+[English page](https://runchengxie.github.io/money-trees/data-contract/)
 
 本文说明 Money Trees 运行回测时需要的数据形状、必需列、可选列和标签口径。
 

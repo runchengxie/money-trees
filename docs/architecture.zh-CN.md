@@ -1,6 +1,6 @@
 # 架构设计
 
-[English page](architecture.md)
+[English page](https://runchengxie.github.io/money-trees/architecture/)
 
 本文说明 Money Trees 当前实现的分层、数据流和保存策略。项目定位是 A 股经典 Alpha 因子计算、验证和研究证据生产工具，核心目标是把 810 因子列契约、数据契约和公开证据出口拆开维护。完整组合、风险、执行模拟和正式回测不属于本项目的长期核心边界。
 

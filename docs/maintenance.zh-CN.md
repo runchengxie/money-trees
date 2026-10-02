@@ -1,6 +1,6 @@
 # 维护待办
 
-[English page](maintenance.md)
+[English page](https://runchengxie.github.io/money-trees/maintenance/)
 
 本文记录当前暂不强行重构、但后续值得拆分和治理的模块边界。它不是主运行手册。实施较大重构前，应先补充或更新对应的设计说明或实施方案。
 

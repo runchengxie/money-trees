@@ -1,8 +1,8 @@
 # 因子列级清单
 
-[English page](factor-catalog.md)
+[English page](https://runchengxie.github.io/money-trees/factor-catalog/)
 
-本页说明完整列级清单的使用方式。机器可读清单见 [factor-catalog.csv](factor-catalog.csv)，生成脚本见 `project_tools/generate_factor_catalog.py`。
+本页说明完整列级清单的使用方式。机器可读清单见 [factor-catalog.csv](https://runchengxie.github.io/money-trees/factor-catalog.csv)，生成脚本见 `project_tools/generate_factor_catalog.py`。
 
 ## 覆盖范围
 

@@ -1,8 +1,8 @@
 # Money Trees · Alpha 810 Research
 
-[English page](index.md)
+[English page](https://runchengxie.github.io/money-trees/)
 
-页面翻译范围和剩余事项见[文档语言状态](language-migration-status.zh-CN.md)。
+页面翻译范围和剩余事项见[文档语言状态](https://runchengxie.github.io/money-trees/zh-CN/language-migration-status/)。
 
 Money Trees 是面向 A 股经典 Alpha 因子计算、验证和研究证据生产的工具。项目维护 Alpha101、Alpha191、Alpha158 和 Alpha360 共 810 个因子的生成入口、列级目录、因子仓库和基础评估。
 

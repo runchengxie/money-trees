@@ -1,6 +1,6 @@
 # 配置说明
 
-[English page](configuration.md)
+[English page](https://runchengxie.github.io/money-trees/configuration/)
 
 `moneytrees` 使用多个 YAML、JSON 或 TOML 配置文件叠加生成一次运行配置。推荐把市场、模型、回测和本地预设拆开维护。旧的 `moneytree` CLI 仍然可用。
 

@@ -1,6 +1,6 @@
 # 公开发布审计
 
-[English page](publication-audit.md)
+[English page](https://runchengxie.github.io/money-trees/publication-audit/)
 
 公开快照在进入 `quant-factor-observatory` 或 GitHub Pages 前必须满足以下条件：
 

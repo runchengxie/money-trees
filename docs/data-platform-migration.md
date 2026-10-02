@@ -1,6 +1,6 @@
 # Data input migration
 
-[简体中文](data-platform-migration.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/data-platform-migration/)
 
 ## Current primary path
 

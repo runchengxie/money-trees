@@ -1,6 +1,6 @@
 # Testing
 
-[简体中文](testing.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/testing/)
 
 The test suite covers data contracts, configuration parsing, model adapters, portfolio weights, backtest metrics, CLI smoke paths, TuShare normalization, factor stores, data status, snapshots and release assets, external Alpha generation, container files, maintenance scripts, and documentation inventories.
 
@@ -57,7 +57,7 @@ uv run pytest -q tests/test_data_status.py tests/test_data_snapshot.py tests/tes
 Run documentation guard tests:
 
 ```bash
-uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py
+uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py tests/test_docs_links.py tests/test_docs_style.py tests/test_legacy_locale_redirects.py
 ```
 
 The documentation guards check test-file inventory, console-script names, README navigation, local Markdown links, selected style rules, core terminology, high-risk CLI parameter coverage, and factor-catalog status consistency. They do not execute every full command example in the README or docs. Commands requiring a TuShare token, DolphinDB server, large data files, or long runtimes must be validated separately using the runbook.
@@ -81,6 +81,7 @@ The documentation guards check test-file inventory, console-script names, README
 | `tests/test_docs_inventory.py` | Whether every `tests/test_*.py` file is listed in this document. |
 | `tests/test_docs_links.py` | Local Markdown links in README and docs, plus README navigation coverage of user documentation. |
 | `tests/test_docs_style.py` | High-risk indirect phrasing, core terminology drift, DolphinDB module facts, and factor-catalog consistency in Chinese docs. |
+| `tests/test_legacy_locale_redirects.py` | Old Chinese documentation URL redirects and safe generated-page handling. |
 | `tests/test_factor_evidence_cli.py` | Public Alpha evidence CLI, file arguments, error paths, and release-field auditing. |
 | `tests/test_factor_inference.py` | Newey–West HAC uncertainty and BY/BH multiple-testing corrections. |
 | `tests/test_factor_evidence_v1.py` | `factor_evidence.v1` contract and public-field boundaries. |

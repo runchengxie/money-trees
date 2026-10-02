@@ -1,6 +1,6 @@
 # Maintenance backlog
 
-[简体中文](maintenance.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/maintenance/)
 
 This document records module boundaries that are worth improving but should not be refactored without a clear need. It is not the primary operations runbook. Before a substantial refactor, write or update the corresponding design note or implementation plan.
 

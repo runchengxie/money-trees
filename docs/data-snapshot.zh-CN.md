@@ -1,6 +1,6 @@
 # 数据快照
 
-[English page](data-snapshot.md)
+[English page](https://runchengxie.github.io/money-trees/data-snapshot/)
 
 `moneytrees-data-snapshot` 用来记录 Money Trees 标准面板的数据版本信息。它只写入 metadata、checksum 和 README，不复制大型 parquet、原始缓存或因子仓库文件。
 

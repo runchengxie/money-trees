@@ -1,6 +1,6 @@
 # 数据入口迁移
 
-[English page](data-platform-migration.md)
+[English page](https://runchengxie.github.io/money-trees/data-platform-migration/)
 
 ## 当前主路径
 

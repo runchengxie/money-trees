@@ -74,14 +74,27 @@ def test_every_mkdocs_navigation_page_has_a_chinese_companion() -> None:
         elif isinstance(value, str) and value.endswith(".md"):
             yield value
 
-    nav_paths = set(markdown_paths(config["nav"]))
-    english_paths = {path for path in nav_paths if not path.endswith(".zh-CN.md")}
-    chinese_paths = {path for path in nav_paths if path.endswith(".zh-CN.md")}
-
-    assert chinese_paths == {path[:-3] + ".zh-CN.md" for path in english_paths}
+    english_paths = set(markdown_paths(config["nav"]))
+    locales = config["plugins"][1]["i18n"]["languages"]
+    assert locales[0]["locale"] == "en" and locales[0]["default"] is True
+    assert locales[1]["locale"] == "zh-CN"
+    assert "navigation.instant" not in config["theme"]["features"]
+    chinese_paths = set(markdown_paths(locales[1]["nav"]))
+    assert chinese_paths == english_paths
     for english_path in english_paths:
         chinese_path = english_path[:-3] + ".zh-CN.md"
         english = (root / "docs" / english_path).read_text(encoding="utf-8")
         chinese = (root / "docs" / chinese_path).read_text(encoding="utf-8")
-        assert chinese_path.rsplit("/", 1)[-1] in english
-        assert english_path.rsplit("/", 1)[-1] in chinese
+        stem = english_path.removesuffix(".md")
+        chinese_url = (
+            f"https://runchengxie.github.io/money-trees/zh-CN/{stem}/"
+            if stem != "index"
+            else "https://runchengxie.github.io/money-trees/zh-CN/"
+        )
+        english_url = (
+            f"https://runchengxie.github.io/money-trees/{stem}/"
+            if stem != "index"
+            else "https://runchengxie.github.io/money-trees/"
+        )
+        assert chinese_url in english
+        assert english_url in chinese

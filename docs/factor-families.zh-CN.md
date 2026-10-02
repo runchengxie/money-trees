@@ -1,6 +1,6 @@
 # 因子家族说明
 
-[English page](factor-families.md)
+[English page](https://runchengxie.github.io/money-trees/factor-families/)
 
 本文说明 Money Trees 当前支持的 A 股日频 Alpha101、Alpha191、Alpha158 和 Alpha360 因子家族：来源、用途、输入字段、项目内生成边界和研究链路。列级清单见 [factor-catalog.md](factor-catalog.md)，数据契约见 [data-contract.md](data-contract.md)，TuShare 拉取示例见 [cookbook.md](cookbook.md)，运行排障见 [runbook.md](runbook.md)。
 
@@ -47,7 +47,7 @@ rel_performance in {-1, 0, 1}
 
 ## 列名和清单
 
-机器可读清单见 [factor-catalog.csv](factor-catalog.csv)，说明文档见 [factor-catalog.md](factor-catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`。Alpha158/360 行给出本地公式，Alpha101/191 行给出 Python 本地公式和两条生成路径。
+机器可读清单见 [factor-catalog.csv](https://runchengxie.github.io/money-trees/factor-catalog.csv)，说明文档见 [factor-catalog.md](factor-catalog.md)。CSV 面向人类阅读，包含 `formula_status`、`formula_source` 和 `formula_or_rule`。Alpha158/360 行给出本地公式，Alpha101/191 行给出 Python 本地公式和两条生成路径。
 
 | 因子/字段组 | 列名规则 | 数量 | 输入口径 | 生成方式 |
 | --- | --- | ---: | --- | --- |

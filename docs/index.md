@@ -1,6 +1,6 @@
 # Money Trees · Alpha 810 Research
 
-[中文页面](index.zh-CN.md)
+[中文页面](https://runchengxie.github.io/money-trees/zh-CN/)
 
 See [documentation language status](language-migration-status.md) for the translated page inventory and remaining scope.
 

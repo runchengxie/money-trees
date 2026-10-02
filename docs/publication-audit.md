@@ -1,6 +1,6 @@
 # Publication audit
 
-[中文页面](publication-audit.zh-CN.md)
+[中文页面](https://runchengxie.github.io/money-trees/zh-CN/publication-audit/)
 
 Before a public snapshot enters `quant-factor-observatory` or GitHub Pages, verify that:
 

@@ -1,6 +1,6 @@
 # 用纯 Python 生成 Alpha101/191
 
-[English page](classic-alphas-python.md)
+[English page](https://runchengxie.github.io/money-trees/classic-alphas-python/)
 
 本文说明如何使用 Money Trees 内置的纯 Python Alpha101/191 生成器。该实现移植自 `wu-alpha191-alpha101` 参考仓库，但把 `rank`、`scale` 改为横截面语义（按交易日分组），滚动算子仍按股票时间序列计算。
 

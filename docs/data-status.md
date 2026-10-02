@@ -1,6 +1,6 @@
 # Data status checks
 
-[简体中文](data-status.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/data-status/)
 
 This guide describes Money Trees data layers, the status-check command, and storage practices. The README links to the entry points; daily troubleshooting, coverage checks, and storage estimates are documented here.
 

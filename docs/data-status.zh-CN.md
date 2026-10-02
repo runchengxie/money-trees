@@ -1,6 +1,6 @@
 # 数据状态检查
 
-[English page](data-status.md)
+[English page](https://runchengxie.github.io/money-trees/data-status/)
 
 本文说明 Money Trees 的数据分层、状态检查命令和存储策略。README 只保留入口链接。日常排障、覆盖确认和空间估算放在这里。
 

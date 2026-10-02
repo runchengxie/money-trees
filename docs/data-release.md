@@ -1,6 +1,6 @@
 # Data release assets
 
-[简体中文](data-release.zh-CN.md)
+[简体中文](https://runchengxie.github.io/money-trees/zh-CN/data-release/)
 
 `moneytrees-data-release` creates data assets suitable for GitHub Releases. It copies the base panel, packages raw-cache and factor-store directories into uncompressed tar shards, and writes a manifest, checksums, and a README.
 
