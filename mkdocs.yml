@@ -31,7 +31,8 @@ theme:
     - navigation.sections
     - content.code.copy
 plugins:
-  - search
+  - search:
+      lang: !ENV [SEARCH_LANG, en]
   - i18n:
       docs_structure: suffix
       build_only_locale: !ENV [BUILD_ONLY_LOCALE]

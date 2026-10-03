@@ -86,6 +86,7 @@ def test_every_mkdocs_navigation_page_has_a_chinese_companion() -> None:
     assert locales[0]["locale"] == "en" and locales[0]["default"] is True
     assert locales[1]["locale"] == "zh-CN"
     assert "navigation.instant" not in config["theme"]["features"]
+    assert config["plugins"][0]["search"]["lang"] == ["SEARCH_LANG", "en"]
     chinese_paths = set(markdown_paths(locales[1]["nav"]))
     assert chinese_paths == english_paths
     for english_path in english_paths:

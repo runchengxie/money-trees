@@ -14,8 +14,13 @@ CONFIG_RE = re.compile(r'<script id="__config" type="application/json">(.*?)</sc
 
 def _check_locale(root: Path, locale: str, title: str) -> None:
     index_path = root / "search" / "search_index.json"
-    entries = json.loads(index_path.read_text(encoding="utf-8"))["docs"]
+    payload = json.loads(index_path.read_text(encoding="utf-8"))
+    entries = payload["docs"]
     assert entries, f"empty search index: {index_path}"
+    assert payload["config"]["lang"] == ["zh" if locale == "zh" else "en"]
+    if locale == "zh":
+        assert (root / "assets/javascripts/lunr/min/lunr.zh.min.js").is_file()
+        assert any("\u200b" in entry["text"] for entry in entries)
     for entry in entries:
         url = urlsplit(entry["location"])
         relative = Path(unquote(url.path))
@@ -34,7 +39,10 @@ def _check_locale(root: Path, locale: str, title: str) -> None:
     config = json.loads(match.group(1))
     search_path = (root / "cli-reference" / config["base"] / "search/search_index.json").resolve()
     assert search_path == index_path.resolve(), search_path
-    assert next(entry for entry in entries if entry["location"] == "cli-reference/")["title"] == title
+    indexed_title = next(entry for entry in entries if entry["location"] == "cli-reference/")[
+        "title"
+    ]
+    assert indexed_title.replace("\u200b", "") == title
 
 
 def main() -> None:

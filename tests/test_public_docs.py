@@ -48,5 +48,7 @@ def test_docs_workflow_builds_strict_mkdocs_site() -> None:
     )
 
     assert "mkdocs build --strict" in workflow
+    assert "SEARCH_LANG=en" in workflow
+    assert "SEARCH_LANG=zh" in workflow
     assert "actions/upload-pages-artifact" in workflow
     assert "actions/deploy-pages" in workflow

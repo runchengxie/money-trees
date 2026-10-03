@@ -2,7 +2,7 @@
 
 [简体中文](https://runchengxie.github.io/money-trees/zh-CN/language-migration-status/)
 
-The MkDocs site defaults to English at the existing root URLs. Chinese pages live under `/zh-CN/`, with the same page slug. Each locale has its own navigation and search index. The language selector opens the matching page. Chinese search currently uses the English Lunr tokenizer, so phrase matching can be limited. Old `*.zh-CN/` URLs redirect to the new Chinese routes. Every page in the configured navigation has a companion.
+The MkDocs site defaults to English at the existing root URLs. Chinese pages live under `/zh-CN/`, with the same page slug. Each locale has its own navigation and search index. The language selector opens the matching page. Chinese search uses Material for MkDocs' `zh` search language and Jieba segmentation. Old `*.zh-CN/` URLs redirect to the new Chinese routes. Every page in the configured navigation has a companion.
 
 ## Configured navigation coverage
 
