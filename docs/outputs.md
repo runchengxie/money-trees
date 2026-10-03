@@ -1,6 +1,6 @@
 # Backtest outputs
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/outputs/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/outputs/)
 
 The output directory is set by `--output-dir` or `output.output_dir`. A normal backtest writes strategy and benchmark NAV, signal diagnostics, metrics, resolved run configuration, and report data.
 

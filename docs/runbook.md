@@ -1,6 +1,6 @@
 # Runbook
 
-[中文页面](https://runchengxie.github.io/money-trees/zh-CN/runbook/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/runbook/)
 
 This runbook covers routine execution, troubleshooting, and archival checks. See the [cookbook](cookbook.md) for common examples.
 

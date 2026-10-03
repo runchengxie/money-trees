@@ -1,6 +1,6 @@
 # Factor families
 
-[中文页面](https://runchengxie.github.io/money-trees/zh-CN/factor-families/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/factor-families/)
 
 Money Trees supports daily A-share Alpha101, Alpha191, Alpha158, and Alpha360 families. This page describes their sources, inputs, generation boundary, and research path. See the [factor column catalog](factor-catalog.md), [data contract](data-contract.md), [TuShare cookbook](cookbook.md), and [runbook](runbook.md) for operational details.
 

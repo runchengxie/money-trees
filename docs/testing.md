@@ -1,6 +1,6 @@
 # Testing
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/testing/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/testing/)
 
 The test suite covers data contracts, configuration parsing, model adapters, portfolio weights, backtest metrics, CLI smoke paths, TuShare normalization, factor stores, data status, snapshots and release assets, external Alpha generation, container files, maintenance scripts, and documentation inventories.
 

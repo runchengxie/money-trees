@@ -1,6 +1,6 @@
 # CLI reference
 
-[中文页面](https://runchengxie.github.io/money-trees/zh-CN/cli-reference/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/cli-reference/)
 
 Examples use the `moneytrees*` commands. The `moneytree*` aliases remain for compatibility. Data production is no longer the long-term path of this repository; use `quant-market-data-platform` for new data and keep `moneytrees-tushare` for migration and historical reproduction.
 

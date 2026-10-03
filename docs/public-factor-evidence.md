@@ -1,6 +1,6 @@
 # Public factor evidence
 
-[中文页面](https://runchengxie.github.io/money-trees/zh-CN/public-factor-evidence/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/public-factor-evidence/)
 
 ## Purpose of public snapshots
 

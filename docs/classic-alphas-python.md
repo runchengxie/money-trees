@@ -1,6 +1,6 @@
 # Generate Alpha101/191 with pure Python
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/classic-alphas-python/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/classic-alphas-python/)
 
 This guide covers the built-in pure-Python Alpha101/191 generators in Money Trees. The implementation was ported from the `wu-alpha191-alpha101` reference repository, but `rank` and `scale` use cross-sectional semantics grouped by trading date. Rolling operators still run over each ticker's time series.
 

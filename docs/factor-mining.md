@@ -1,6 +1,6 @@
 # Factor mining
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/factor-mining/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/factor-mining/)
 
 This guide covers genetic-programming (GP) search for new composite factors built from existing Alpha factors. The feature was ported from `factor_generator.py` in the `wu-alpha191-alpha101` reference repository, adapted to the standard Money Trees `date, ticker` panel, and uses cross-sectional Spearman IC as its fitness signal.
 
