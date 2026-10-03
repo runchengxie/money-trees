@@ -8,6 +8,7 @@ on:
       - "mkdocs.yml"
       - "project_tools/create_legacy_locale_redirects.py"
       - "project_tools/check_locale_search.py"
+      - "project_tools/check_locale_switches.py"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 
@@ -36,6 +37,7 @@ jobs:
         run: |
           BUILD_ONLY_LOCALE=en SEARCH_LANG=en mkdocs build --strict
           BUILD_ONLY_LOCALE=zh-CN SEARCH_LANG=zh mkdocs build --strict --site-dir site/zh-CN
+          python project_tools/check_locale_switches.py site
           python project_tools/create_legacy_locale_redirects.py
           python project_tools/check_locale_search.py
       - uses: actions/upload-pages-artifact@v3

@@ -108,3 +108,18 @@ def test_every_mkdocs_navigation_page_has_a_chinese_companion() -> None:
         )
         assert chinese_url in english
         assert english_url in chinese
+
+
+def test_language_switcher_uses_the_current_page_alternates() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = yaml.load((root / "mkdocs.yml").read_text(encoding="utf-8"), Loader=_MkDocsLoader)
+
+    assert [item["lang"] for item in config["extra"]["alternate"]] == ["en", "zh"]
+    i18n = next(plugin["i18n"] for plugin in config["plugins"] if isinstance(plugin, dict) and "i18n" in plugin)
+    languages = {language["locale"]: language for language in i18n["languages"]}
+    assert languages["en"]["default"] is True
+    assert languages["zh-CN"]["site_url"].endswith("/zh-CN/")
+    workflow = (root / ".github" / "workflows" / "deploy-docs.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "python project_tools/check_locale_switches.py site" in workflow
