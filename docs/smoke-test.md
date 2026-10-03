@@ -1,6 +1,6 @@
 # Smoke test
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/smoke-test/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/smoke-test/)
 
 This guide runs the smallest local backtest to confirm that the main A-share workflow executes. See [data-contract.md](data-contract.md) for the full panel contract and [cookbook.md](cookbook.md) for common research workflows.
 

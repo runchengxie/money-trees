@@ -1,6 +1,6 @@
 # Architecture
 
-[中文页面](https://runchengxie.github.io/money-trees/zh-CN/architecture/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/architecture/)
 
 Money Trees is an A-share classic-alpha computation and aggregated-evidence toolkit. Its long-term boundary is the 810-factor contract, the data contract, and the public evidence export. Full portfolio construction, risk, execution simulation, and formal backtests are owned by `quant-platform` and `quant-backtest-runtime`.
 

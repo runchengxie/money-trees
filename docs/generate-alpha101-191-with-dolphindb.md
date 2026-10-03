@@ -1,6 +1,6 @@
 # Generate Alpha101/191 with DolphinDB
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/generate-alpha101-191-with-dolphindb/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/generate-alpha101-191-with-dolphindb/)
 
 This guide uses DolphinDB as an external producer for Alpha101/191. Money Trees consumes the offline-generated results; it does not call DolphinDB during backtests. The recommended output is a factor store. The older wide-parquet output remains available for compatibility.
 

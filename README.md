@@ -1,6 +1,6 @@
 # Money Trees · Alpha 810 Research
 
-[中文页面](README.zh-CN.md)
+[Chinese version](README.zh-CN.md)
 
 Money Trees is an A-share classic-alpha toolkit for factor computation, validation, and research-evidence production. It covers Alpha101, Alpha191, Alpha158, and Alpha360, with 810 factors in total. The project provides factor-generation entry points, a column-level catalog, a factor store, and baseline evaluation. Full portfolio construction, risk analysis, execution simulation, and backtest jobs belong to `quant-platform` and `quant-backtest-runtime`.
 

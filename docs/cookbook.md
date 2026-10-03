@@ -1,6 +1,6 @@
 # Cookbook
 
-[简体中文](https://runchengxie.github.io/money-trees/zh-CN/cookbook/)
+[Chinese version](https://runchengxie.github.io/money-trees/zh-CN/cookbook/)
 
 This cookbook collects reproducible workflows and focuses on how to use the tools. The [runbook](runbook.md) covers routine operations, recovery, and archive checks.
 

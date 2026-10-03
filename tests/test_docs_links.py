@@ -63,7 +63,7 @@ def test_root_readme_is_english_canonical_with_chinese_companion() -> None:
     chinese = (root / "README.zh-CN.md").read_text(encoding="utf-8")
 
     assert english.startswith("# Money Trees")
-    assert "[中文页面](README.zh-CN.md)" in english
+    assert "[Chinese version](README.zh-CN.md)" in english
     assert "[English page](README.md)" in chinese
 
 
@@ -93,6 +93,8 @@ def test_every_mkdocs_navigation_page_has_a_chinese_companion() -> None:
         chinese_path = english_path[:-3] + ".zh-CN.md"
         english = (root / "docs" / english_path).read_text(encoding="utf-8")
         chinese = (root / "docs" / chinese_path).read_text(encoding="utf-8")
+        assert re.match(r"\[Chinese version\]\(.+\)", english.splitlines()[2])
+        assert re.match(r"\[English(?: page)?\]\(.+\)", chinese.splitlines()[2])
         stem = english_path.removesuffix(".md")
         chinese_url = (
             f"https://runchengxie.github.io/money-trees/zh-CN/{stem}/"
