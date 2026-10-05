@@ -163,6 +163,8 @@ Snapshots record metadata and checksums and refer to, rather than copy, large da
 | --- | --- |
 | `--output-dir` | Required asset directory; accepts `/mnt/d/...` and `D:/...` paths. |
 | `--panel`, `--raw-cache`, `--factor-store` | Optional panel, cache, and factor-store inputs. |
+| `--raw-cache-compression` | `none` or `zstd`; defaults to `none`. Zstandard requires `uv sync --extra release`. |
+| `--raw-cache-compression-level` | Zstandard level 1–22; defaults to 19, with a fixed 27-bit long-distance window. |
 | `--max-asset-size-mb` | Size limit per generated asset; defaults to 1536 MiB. |
 | `--label` | Optional human-readable release label. |
 | `--note` | Repeatable note in `manifest.json` and README. |
@@ -176,7 +178,7 @@ Snapshots record metadata and checksums and refer to, rather than copy, large da
 | `--release-title`, `--clobber` | Title when creating a release and GitHub CLI overwrite option when uploading. |
 | `--format` | `text` or `json`. |
 
-Directory inputs become uncompressed tar partitions. A file over the limit is split into `.partNNNofMMM` parts. By default this command only generates local assets; GitHub access requires explicit `--upload`.
+Directory inputs become tar partitions. Raw-cache partitions can optionally be compressed with Zstandard; factor-store partitions remain uncompressed. A file over the limit is split into `.partNNNofMMM` parts. By default this command only generates local assets; GitHub access requires explicit `--upload`.
 
 ## `moneytrees-parquet-rewrite`
 

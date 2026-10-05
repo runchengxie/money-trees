@@ -73,7 +73,7 @@ The documentation guards check test-file inventory, console-script names, README
 | `tests/test_container_runtime.py` | Dockerfile, `.dockerignore`, DolphinDB compose configuration, and runtime-output isolation. |
 | `tests/test_convert_pickle_to_parquet_script.py` | Deprecated migration of trusted pickle files to parquet and migration notices. |
 | `tests/test_data.py` | `date,ticker` index, label creation, missing-feature filling, non-feature column protection, feature lag, and invalid file formats. |
-| `tests/test_data_release.py` | Release assets, local sharding, uncompressed tar files, GitHub CLI preview, and sensitive-file protection. |
+| `tests/test_data_release.py` | Release assets, raw-cache Zstandard round trips and resume validation, local sharding, GitHub CLI preview, and sensitive-file protection. |
 | `tests/test_data_snapshot.py` | Snapshot metadata, checksums, README, quality summary, and CLI error paths. |
 | `tests/test_data_status.py` | Read-only checks for panels, raw cache, factor stores, and backtest artifacts; JSON output and error/warn modes. |
 | `tests/test_data_platform_migration.py` | Documentation contract for the compatibility download path and the primary `quant-market-data-platform` path. |

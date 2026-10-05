@@ -23,6 +23,7 @@ tushare = ["tushare"]
 external-alphas = ["dolphindb"]
 tuning = ["optuna"]
 research = ["tushare", "xgboost", "dolphindb", "optuna"]
+release = ["zstandard>=0.23"]
 
 [project.scripts]
 moneytree = "moneytree.cli.backtest:main"
@@ -49,7 +50,7 @@ moneytree-factor-evidence = "moneytree.cli.factor_evidence:main"
 moneytrees-factor-evidence = "moneytree.cli.factor_evidence:main"
 
 [dependency-groups]
-dev = ["pytest", "ruff", "optuna"]
+dev = ["pytest", "ruff", "optuna", "zstandard>=0.23"]
 
 [tool.ruff]
 line-length = 100

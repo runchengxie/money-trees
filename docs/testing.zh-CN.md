@@ -73,7 +73,7 @@ uv run pytest -q tests/test_docs_inventory.py tests/test_docs_console_scripts.py
 | `tests/test_container_runtime.py` | Dockerfile、`.dockerignore`、DolphinDB compose 和 runtime 输出隔离。 |
 | `tests/test_convert_pickle_to_parquet_script.py` | 可信 pickle 到 parquet 的 deprecated 兼容迁移脚本和迁移提示。 |
 | `tests/test_data.py` | `date,ticker` 索引、标签生成、特征缺失填充、非特征列保护、特征滞后和文件格式错误。 |
-| `tests/test_data_release.py` | 数据发布资产、本地分片、不压缩 tar、GitHub CLI 命令预览和敏感文件保护。 |
+| `tests/test_data_release.py` | 数据发布资产、原始缓存 Zstandard 往返与续传校验、本地分片、GitHub CLI 命令预览和敏感文件保护。 |
 | `tests/test_data_snapshot.py` | 数据快照 metadata、checksum、README、质量摘要和 CLI 错误路径。 |
 | `tests/test_data_status.py` | 面板、原始缓存、因子仓库、回测产物的只读检查、JSON 输出和 error/warn 模式。 |
 | `tests/test_data_platform_migration.py` | 数据下载兼容入口与 `quant-market-data-platform` 主路径的迁移文档契约。 |
