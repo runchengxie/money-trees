@@ -153,6 +153,8 @@
 | `--output-dir` | 必填，快照元数据输出目录。 |
 | `--raw-cache` | 可选，原始缓存目录或 `manifest.sqlite`。 |
 | `--factor-store` | 可选，因子仓库目录或 `manifest.json`。 |
+| `--raw-cache-compression` | `none` 或 `zstd`，默认 `none`。使用 Zstandard 前需运行 `uv sync --extra release`。 |
+| `--raw-cache-compression-level` | Zstandard 压缩级别 1–22，默认 19；固定使用 27 位长距离窗口。 |
 | `--label` | 可选的人类可读快照标签。 |
 | `--note` | 可重复写入 `dataset_meta.json` 和快照 README 的说明。 |
 | `--format` | 输出 `text` 或 `json`。 |
@@ -183,7 +185,7 @@
 | `--clobber` | 上传时传给 GitHub CLI 的覆盖参数。 |
 | `--format` | 输出 `text` 或 `json`。 |
 
-目录型输入会生成不压缩的 tar 分片。单个超限文件会拆成 `.partNNNofMMM`。命令默认只生成本地资产，只有显式传入 `--upload` 才会联网调用 GitHub CLI。
+目录型输入会生成 tar 分片。原始缓存分片可选用 Zstandard 压缩；因子仓库分片保持不压缩。单个超限文件会拆成 `.partNNNofMMM`。命令默认只生成本地资产，只有显式传入 `--upload` 才会联网调用 GitHub CLI。
 
 ## `moneytrees-parquet-rewrite`
 

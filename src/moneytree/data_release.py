@@ -20,11 +20,13 @@ from moneytree._factor_store_manifest import read_factor_store_manifest
 from moneytree.data_snapshot import _git_metadata, _panel_summary
 from moneytree.metadata import file_metadata, sha256_file
 
-DATA_RELEASE_SCHEMA_VERSION = "1.0"
+DATA_RELEASE_SCHEMA_VERSION = "1.1"
 DATA_RELEASE_KIND = "moneytree_data_release"
 GITHUB_RELEASE_ASSET_LIMIT = 1000
 GITHUB_RELEASE_MAX_ASSET_SIZE_BYTES = 2 * 1024**3
 DEFAULT_RELEASE_MAX_ASSET_SIZE_BYTES = 1536 * 1024**2
+DEFAULT_RAW_CACHE_COMPRESSION_LEVEL = 19
+DEFAULT_RAW_CACHE_ZSTD_WINDOW_LOG = 27
 _METADATA_ASSET_COUNT = 3
 _IO_CHUNK_SIZE = 1024 * 1024
 _WINDOWS_DRIVE_RE = re.compile(r"^([A-Za-z]):[\\/]*(.*)$")
@@ -312,6 +314,24 @@ def _validate_max_asset_size(max_asset_size_bytes: int) -> None:
         raise ValueError("max_asset_size_bytes must be under 2 GiB for GitHub Releases.")
 
 
+def _require_zstandard() -> Any:
+    try:
+        import zstandard
+    except ImportError as exc:
+        raise RuntimeError(
+            "Zstandard raw-cache packaging requires the release extra: "
+            "install with `uv sync --extra release`."
+        ) from exc
+    return zstandard
+
+
+def _validate_raw_cache_compression(compression: str, level: int) -> None:
+    if compression not in {"none", "zstd"}:
+        raise ValueError("raw_cache_compression must be 'none' or 'zstd'.")
+    if not 1 <= level <= 22:
+        raise ValueError("raw_cache_compression_level must be between 1 and 22.")
+
+
 def _ensure_can_write(path: Path, *, overwrite: bool) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"Output already exists: {path}. Use --overwrite to replace it.")
@@ -384,6 +404,35 @@ def _tar_matches_sources(output_path: Path, sources: list[ReleaseSourceFile]) ->
     except Exception:
         return False
     return True
+
+
+def _compressed_tar_matches_sources(
+    output_path: Path,
+    sources: list[ReleaseSourceFile],
+) -> bool:
+    if not output_path.exists() or not output_path.is_file():
+        return False
+    zstandard = _require_zstandard()
+    expected = {source.archive_path: source for source in sources}
+    found: set[str] = set()
+    try:
+        with output_path.open("rb") as compressed:
+            with zstandard.ZstdDecompressor().stream_reader(compressed) as reader:
+                with tarfile.open(fileobj=reader, mode="r|") as archive:
+                    for member in archive:
+                        if not member.isfile():
+                            continue
+                        source = expected.get(member.name)
+                        if source is None or member.size != source.size_bytes:
+                            return False
+                        if _tar_member_hash(archive, member) != sha256_file(source.path):
+                            return False
+                        found.add(member.name)
+                while reader.read(_IO_CHUNK_SIZE):
+                    pass
+        return found == set(expected)
+    except Exception:
+        return False
 
 
 def _source_payload(source: ReleaseSourceFile, *, compute_hash: bool) -> dict[str, Any]:
@@ -692,16 +741,37 @@ def _write_tar_assets(
     overwrite: bool,
     resume: bool,
     progress: DataReleaseProgress,
+    compression: str = "none",
+    compression_level: int = 19,
 ) -> list[dict[str, Any]]:
-    groups, oversized = _tar_groups(sources, max_asset_size_bytes=max_asset_size_bytes)
+    grouping_limit = max_asset_size_bytes
+    if compression == "zstd":
+        grouping_limit = max(
+            1,
+            max_asset_size_bytes - max(max_asset_size_bytes // 100, 16 * 1024),
+        )
+    groups, oversized = _tar_groups(sources, max_asset_size_bytes=grouping_limit)
     records: list[dict[str, Any]] = []
     width = max(3, len(str(len(groups))))
 
     for index, group in enumerate(groups, start=1):
-        output_path = output_dir / f"{_safe_asset_name(role)}_part{index:0{width}d}.tar"
+        if compression == "zstd":
+            output_path = output_dir / (
+                f"{_safe_asset_name(role)}_zstd{compression_level}_part"
+                f"{index:0{width}d}.tar.zst"
+            )
+        else:
+            output_path = output_dir / f"{_safe_asset_name(role)}_part{index:0{width}d}.tar"
         resume_status = "planned" if dry_run else "written"
         if not dry_run:
-            if not overwrite and resume and _tar_matches_sources(output_path, group):
+            matches = False
+            if not overwrite and resume:
+                matches = (
+                    _compressed_tar_matches_sources(output_path, group)
+                    if compression == "zstd"
+                    else _tar_matches_sources(output_path, group)
+                )
+            if not overwrite and resume and matches:
                 progress.advance(
                     sum(source.size_bytes for source in group),
                     message=f"reused {output_path.name}",
@@ -713,15 +783,42 @@ def _write_tar_assets(
                     _remove_existing_output(output_path)
                 _ensure_can_write(output_path, overwrite=overwrite)
                 progress.start(f"writing {output_path.name}")
-                with tarfile.open(output_path, "w") as tar:
-                    for source in group:
-                        _add_tar_file(
-                            tar,
-                            source,
-                            progress=progress,
-                            asset_name=output_path.name,
-                        )
+                if compression == "zstd":
+                    zstandard = _require_zstandard()
+                    parameters = zstandard.ZstdCompressionParameters.from_level(
+                        compression_level,
+                        window_log=DEFAULT_RAW_CACHE_ZSTD_WINDOW_LOG,
+                        enable_ldm=True,
+                        write_checksum=1,
+                        write_content_size=0,
+                    )
+                    compressor = zstandard.ZstdCompressor(compression_params=parameters)
+                    with output_path.open("wb") as compressed:
+                        with compressor.stream_writer(compressed, closefd=False) as writer:
+                            with tarfile.open(fileobj=writer, mode="w|") as tar:
+                                for source in group:
+                                    _add_tar_file(
+                                        tar,
+                                        source,
+                                        progress=progress,
+                                        asset_name=output_path.name,
+                                    )
+                else:
+                    with tarfile.open(output_path, "w") as tar:
+                        for source in group:
+                            _add_tar_file(
+                                tar,
+                                source,
+                                progress=progress,
+                                asset_name=output_path.name,
+                            )
                 actual_size = int(output_path.stat().st_size)
+                if actual_size > max_asset_size_bytes:
+                    _remove_existing_output(output_path)
+                    raise RuntimeError(
+                        f"Generated asset exceeds max_asset_size_bytes: {output_path.name} "
+                        f"({actual_size} > {max_asset_size_bytes})."
+                    )
                 progress.finish_asset(f"wrote {output_path.name}")
         else:
             actual_size = _tar_file_estimate(group)
@@ -734,7 +831,12 @@ def _write_tar_assets(
                 size_bytes=actual_size,
                 compute_hash=not dry_run,
                 extra={
-                    "compression": "none",
+                    "compression": compression,
+                    "compression_level": compression_level if compression == "zstd" else None,
+                    "window_log": (
+                        DEFAULT_RAW_CACHE_ZSTD_WINDOW_LOG if compression == "zstd" else None
+                    ),
+                    "size_is_estimate": bool(dry_run and compression == "zstd"),
                     "contents": [
                         _source_payload(source, compute_hash=not dry_run) for source in group
                     ],
@@ -776,7 +878,15 @@ def _write_readme(path: Path, manifest: dict[str, Any], *, overwrite: bool) -> N
         f"- Asset count: {summary['asset_count']}",
         f"- Total asset bytes: {summary['total_asset_size_bytes']}",
         f"- Max asset size bytes: {manifest['max_asset_size_bytes']}",
-        "- Compression: none for generated tar assets",
+        "- Raw-cache tar compression: "
+        + (
+            "Zstandard level "
+            f"{manifest['packaging']['raw_cache_compression_level']} "
+            f"(window log {manifest['packaging']['raw_cache_zstd_window_log']})"
+            if manifest["packaging"]["raw_cache_compression"] == "zstd"
+            else "none"
+        ),
+        "- Factor-store tar compression: none",
     ]
     if manifest.get("label"):
         lines.append(f"- Label: {manifest['label']}")
@@ -788,7 +898,8 @@ def _write_readme(path: Path, manifest: dict[str, Any], *, overwrite: bool) -> N
             "## Restore",
             "",
             "- Verify downloaded files with `sha256sum -c sha256sums.txt`.",
-            "- Extract `*_partNNN.tar` files with `tar -xf <asset>.tar`.",
+            "- Extract uncompressed `*_partNNN.tar` assets with `tar -xf <asset>.tar`.",
+            "- Extract `*.tar.zst` assets with `zstd -d -c <asset>.tar.zst | tar -xf -`.",
             "- Recombine split files in part order with `cat <name>.part* > <restored-file>`.",
             "",
         ]
@@ -822,6 +933,8 @@ def create_data_release(
     panel: str | Path | None = None,
     raw_cache: str | Path | None = None,
     factor_store: str | Path | None = None,
+    raw_cache_compression: str = "none",
+    raw_cache_compression_level: int = DEFAULT_RAW_CACHE_COMPRESSION_LEVEL,
     max_asset_size_bytes: int = DEFAULT_RELEASE_MAX_ASSET_SIZE_BYTES,
     label: str | None = None,
     notes: list[str] | None = None,
@@ -833,6 +946,11 @@ def create_data_release(
 ) -> DataReleaseResult:
     """Build GitHub Releases-friendly data assets and a release manifest."""
     _validate_max_asset_size(int(max_asset_size_bytes))
+    _validate_raw_cache_compression(raw_cache_compression, int(raw_cache_compression_level))
+    if raw_cache_compression == "zstd":
+        _require_zstandard()
+        if raw_cache is None:
+            raise ValueError("raw_cache_compression requires a raw_cache input.")
     output_path = resolve_release_output_dir(output_dir)
     panel_path = Path(panel) if panel is not None else None
     raw_cache_path = Path(raw_cache) if raw_cache is not None else None
@@ -906,6 +1024,8 @@ def create_data_release(
                 overwrite=overwrite,
                 resume=resume,
                 progress=progress,
+                compression=raw_cache_compression,
+                compression_level=int(raw_cache_compression_level),
             )
         )
     if factor_store_sources:
@@ -940,7 +1060,18 @@ def create_data_release(
         "max_asset_size_bytes": int(max_asset_size_bytes),
         "github_release_asset_limit": GITHUB_RELEASE_ASSET_LIMIT,
         "packaging": {
-            "tar_compression": "none",
+            "tar_compression": "mixed" if raw_cache_compression == "zstd" else "none",
+            "tar_compression_by_role": {
+                "raw_cache": raw_cache_compression,
+                "factor_store": "none",
+            },
+            "raw_cache_compression": raw_cache_compression,
+            "raw_cache_compression_level": (
+                int(raw_cache_compression_level) if raw_cache_compression == "zstd" else None
+            ),
+            "raw_cache_zstd_window_log": (
+                DEFAULT_RAW_CACHE_ZSTD_WINDOW_LOG if raw_cache_compression == "zstd" else None
+            ),
             "oversized_file_strategy": "binary_split_parts",
             "resume": bool(resume),
         },

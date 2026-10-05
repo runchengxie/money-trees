@@ -2,7 +2,7 @@
 
 [English page](https://runchengxie.github.io/money-trees/data-release/)
 
-`moneytrees-data-release` 用来生成适合上传到 GitHub Releases 的数据发布资产。它会复制基础面板，把原始缓存和因子仓库（factor store）整理成不压缩的 tar 分片，并写出元数据清单、校验码和 README。
+`moneytrees-data-release` 用来生成适合上传到 GitHub Releases 的数据发布资产。它会复制基础面板，把原始缓存和因子仓库（factor store）整理成 tar 分片，并写出元数据清单、校验码和 README。原始缓存可选用 Zstandard 压缩；因子仓库分片保持不压缩，因为其中的 Parquet 文件已经压缩。
 
 基础用法：
 
@@ -11,9 +11,18 @@ uv run moneytrees-data-release \
   --panel data/panel/cn/cn_daily_raw.parquet \
   --raw-cache data/raw/tushare \
   --factor-store data/factor_store/cn_daily \
+  --raw-cache-compression zstd \
   --output-dir data/releases/cn_daily_raw \
   --label cn_daily_raw
 ```
+
+启用压缩前，先安装可选依赖：
+
+```bash
+uv sync --extra release
+```
+
+压缩级别为 1–22，默认 19，并使用 27 位长距离窗口，参考 SimFin 的归档方式。若更看重生成速度，可以降低级别。为保持兼容，CLI 默认仍为 `none`。
 
 WSL 环境中可以直接把目标放到 Windows 盘，减少 WSL 文件系统空间占用：
 
@@ -33,7 +42,7 @@ manifest.json
 sha256sums.txt
 README.md
 panel__cn_daily_raw.parquet
-raw_cache_part001.tar
+raw_cache_zstd19_part001.tar.zst
 factor_store_part001.tar
 ```
 
@@ -41,10 +50,12 @@ factor_store_part001.tar
 
 - 单个资产默认控制在 1536 MiB 以下，满足 GitHub Releases 单文件小于 2 GiB 的约束。
 - 基础面板文件小于阈值时直接复制，超过阈值时拆成 `.partNNNofMMM`。
-- 原始缓存目录和因子仓库目录默认写成不压缩 tar 分片，避免对 parquet 进行低收益的二次压缩。
+- 只有传入 `--raw-cache-compression zstd` 时，原始缓存 tar 分片才使用 Zstandard；清单会记录编码方式和级别。
+- 因子仓库分片保持不压缩。其 Parquet 文件已使用 Zstandard，样本测试显示提高级别几乎没有额外收益。
+- 压缩分片会在资产大小上限内预留空间，并在生成后检查实际大小。
 - 命令默认支持可恢复输出复用：重跑同一命令时，已完整生成且校验通过的资产会跳过。半截或校验失败的生成资产会重写。
 - `manifest.json` 记录输入路径、基础面板摘要、资产列表、每个资产的 SHA-256、分片策略和 git commit 信息。
-- `sha256sums.txt` 用于下载后执行 `sha256sum -c sha256sums.txt`。
+- `sha256sums.txt` 用于下载后执行 `sha256sum -c sha256sums.txt`。`.tar.zst` 分片用 `zstd -d -c <asset>.tar.zst | tar -xf -` 解包，普通 tar 分片用 `tar -xf <asset>.tar` 解包。
 
 只预览：
 
@@ -85,4 +96,4 @@ uv run moneytrees-data-release \
   --upload
 ```
 
-恢复时先校验，再按 README 提示解 tar 和拼接 `.part*` 文件。拆分文件是字节级备份分片，拼回原文件后再用 parquet 工具读取。
+恢复时先校验，再按 README 提示解包 `.tar.zst`、普通 tar，并按顺序拼接 `.part*` 文件。拆分文件是字节级备份分片，拼回原文件后再用 parquet 工具读取。

@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from moneytree.data_release import (
+    DEFAULT_RAW_CACHE_COMPRESSION_LEVEL,
     DEFAULT_RELEASE_MAX_ASSET_SIZE_BYTES,
     build_github_release_upload_command,
     create_data_release,
@@ -24,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Build GitHub Releases-friendly Money Trees data release assets. "
-            "Generated tar assets are not compressed."
+            "Raw-cache tar compression is optional; factor-store tar assets remain uncompressed."
         )
     )
     parser.add_argument(
@@ -37,6 +38,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--panel", help="Optional base date,ticker panel parquet or pickle path.")
     parser.add_argument("--raw-cache", help="Optional TuShare raw cache directory or manifest.sqlite path.")
+    parser.add_argument(
+        "--raw-cache-compression",
+        choices=["none", "zstd"],
+        default="none",
+        help="Compression for raw-cache tar shards. Zstandard requires the release extra.",
+    )
+    parser.add_argument(
+        "--raw-cache-compression-level",
+        type=int,
+        default=DEFAULT_RAW_CACHE_COMPRESSION_LEVEL,
+        help="Zstandard level for raw-cache tar shards, from 1 to 22. Default: 19.",
+    )
     parser.add_argument("--factor-store", help="Optional factor-store directory or manifest.json path.")
     parser.add_argument(
         "--max-asset-size-mb",
@@ -128,6 +141,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             panel=Path(args.panel) if args.panel else None,
             raw_cache=Path(args.raw_cache) if args.raw_cache else None,
             factor_store=Path(args.factor_store) if args.factor_store else None,
+            raw_cache_compression=args.raw_cache_compression,
+            raw_cache_compression_level=args.raw_cache_compression_level,
             max_asset_size_bytes=int(args.max_asset_size_mb * 1024 * 1024),
             label=args.label or None,
             notes=list(args.note or ()),
